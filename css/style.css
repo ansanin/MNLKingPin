@@ -4683,3 +4683,106 @@ body.light-mode #customerPage #cartSection button.btn-secondary {
     color: #263238 !important;
     text-shadow: none !important;
 }
+
+/* Keep checkout and order cards inside narrow phone screens. */
+@media (max-width: 600px) {
+    #customerPage .orders-section,
+    #customerPage .purchase-history-section,
+    #customerPage .checkout-section {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        padding: 14px 10px;
+        overflow: hidden;
+    }
+
+    #customerPage #ordersList,
+    #customerPage #purchaseHistoryList,
+    #customerPage #checkoutItemsList {
+        width: 100%;
+        min-width: 0;
+    }
+
+    #customerPage .order-item,
+    #customerPage .checkout-item {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        min-width: 0;
+        overflow: hidden;
+        padding: 12px 10px;
+    }
+
+    #customerPage .order-header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    #customerPage .order-status {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        text-align: right;
+    }
+
+    #customerPage .order-details,
+    #customerPage .order-details p,
+    #customerPage .checkout-item,
+    #customerPage .order-actions,
+    #customerPage .order-payment-proof,
+    #customerPage .order-gcash-qr {
+        max-width: 100%;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    #customerPage .order-tracking {
+        width: 100%;
+        box-sizing: border-box;
+        gap: 2px;
+        padding: 12px 4px;
+        overflow: hidden;
+    }
+
+    #customerPage .tracking-label {
+        max-width: 74px;
+        font-size: .62rem;
+        line-height: 1.15;
+        text-align: center;
+        overflow-wrap: anywhere;
+    }
+
+    #customerPage .tracking-circle {
+        width: 30px;
+        height: 30px;
+        line-height: 30px;
+        font-size: .8rem;
+    }
+
+    #customerPage .checkout-section form,
+    #customerPage .checkout-section .form-row,
+    #customerPage .checkout-section .order-summary {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    #customerPage .checkout-section .form-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #customerPage .checkout-section input,
+    #customerPage .checkout-section select,
+    #customerPage .checkout-section textarea,
+    #customerPage .checkout-section button {
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    #customerPage .order-gcash-qr img,
+    #customerPage .order-payment-proof img {
+        max-width: 100%;
+        height: auto;
+    }
+}
