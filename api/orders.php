@@ -40,15 +40,16 @@ $directory = dirname($storageFile);
 if (!is_dir($directory)) mkdir($directory, 0775, true);
 
 $orders = readOrders($storageFile);
-$alreadySaved = false;
-foreach ($orders as $savedOrder) {
+$orderUpdated = false;
+foreach ($orders as $index => $savedOrder) {
     if ((string) ($savedOrder['id'] ?? '') === (string) $order['id']) {
-        $alreadySaved = true;
+        $orders[$index] = $order;
+        $orderUpdated = true;
         break;
     }
 }
 
-if (!$alreadySaved) $orders[] = $order;
+if (!$orderUpdated) $orders[] = $order;
 
 if (file_put_contents($storageFile, json_encode(['orders' => array_slice($orders, -500)]), LOCK_EX) === false) {
     http_response_code(500);

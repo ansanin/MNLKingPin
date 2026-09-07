@@ -4352,7 +4352,6 @@ function changeOrderStatus(orderId, newStatus) {
     const order = appData.orders.find(o => o.id === orderId);
     if (!order) return;
 
-    const oldStatus = order.status;
     order.status = newStatus;
     
     // Save to localStorage
@@ -4361,6 +4360,11 @@ function changeOrderStatus(orderId, newStatus) {
     if (isOrderInPurchaseHistory(order)) {
         saveOrderToHistory({ ...order });
     }
+
+    saveOrderToSharedServer(order).catch(error => {
+        console.error('Unable to sync order status with shared storage:', error);
+        showStatusUpdateToast('Status changed locally, but shared order sync failed');
+    });
     
     // Add notification for customer
     const statusMessages = {
@@ -4538,7 +4542,9 @@ function closeOrderDetailsModal() {
 // Send Order Notification
 function sendOrderNotification(order, newStatus) {
     const statusMessages = {
+        'pending': 'Your order has been received and is now in the order queue.',
         'processing': 'Your order is now being processed.',
+        'ready-for-delivery': 'Your order is ready for delivery.',
         'completed': 'Great news! Your order has been completed and is ready for delivery.',
         'delivered': 'Your order has been delivered.',
         'cancelled': 'Your order has been cancelled.'
@@ -4562,7 +4568,11 @@ function sendOrderNotification(order, newStatus) {
     // Send email notification to customer
     console.log('📧 Sending order email:', notificationData);
 
-    fetch('/KingPinSystem/api/notification/order-status.php', {
+    const notificationEndpoint = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+        ? 'api/notification/order-status.php'
+        : '/.netlify/functions/order-status';
+
+    fetch(notificationEndpoint, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'

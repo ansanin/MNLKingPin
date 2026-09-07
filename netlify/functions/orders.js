@@ -21,10 +21,13 @@ exports.handler = async function handler(event) {
 
         const order = JSON.parse(event.body || '{}');
         if (!order.id || !order.customerEmail) return jsonResponse(400, { error: 'A valid order is required' });
-        if (!orders.some(savedOrder => String(savedOrder.id) === String(order.id))) {
+        const existingIndex = orders.findIndex(savedOrder => String(savedOrder.id) === String(order.id));
+        if (existingIndex >= 0) {
+            orders[existingIndex] = order;
+        } else {
             orders.push(order);
-            await store.setJSON('orders', orders.slice(-500));
         }
+        await store.setJSON('orders', orders.slice(-500));
         return jsonResponse(200, { ok: true });
     } catch (error) {
         console.error('Netlify orders function error:', error);
