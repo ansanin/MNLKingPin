@@ -998,6 +998,37 @@ function hideAdminLogin() {
     document.getElementById('adminErrorMessage').style.display = 'none';
 }
 
+async function saveEmailSettings(event) {
+    event.preventDefault();
+
+    const message = document.getElementById('emailSettingsMessage');
+    const email = document.getElementById('emailSettingsAddress').value.trim().toLowerCase();
+    const appPassword = document.getElementById('emailSettingsAppPassword').value.replace(/\s+/g, '');
+    const settingsKey = document.getElementById('emailSettingsKey').value;
+
+    message.className = 'message';
+    message.textContent = 'Saving email settings...';
+    message.style.display = 'block';
+
+    try {
+        const response = await fetch('/api/email-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, appPassword, settingsKey })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error || 'Unable to save email settings');
+
+        document.getElementById('emailSettingsAppPassword').value = '';
+        document.getElementById('emailSettingsKey').value = '';
+        message.className = 'message success';
+        message.textContent = '✓ Email settings saved securely.';
+    } catch (error) {
+        message.className = 'message error';
+        message.textContent = error.message;
+    }
+}
+
 // Admin login
 function loginAdmin(e) {
     e.preventDefault();
