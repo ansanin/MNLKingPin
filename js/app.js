@@ -3338,7 +3338,8 @@ function loadCustomerOrders() {
         .filter(order => {
             const matchesUsername = order.customerUsername === currentUserEmail;
             const matchesEmail = order.customerEmail === currentUserEmail;
-            const isActive = !isOrderInPurchaseHistory(order);
+            // Keep delivered orders visible so customers can see tracker step 4.
+            const isActive = order.status !== 'cancelled';
             return (matchesUsername || matchesEmail) && isActive;
         })
         .sort((firstOrder, secondOrder) => Number(secondOrder.id) - Number(firstOrder.id));
