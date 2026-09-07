@@ -4601,11 +4601,7 @@ function sendOrderNotification(order, newStatus) {
     // Send email notification to customer
     console.log('📧 Sending order email:', notificationData);
 
-    const notificationEndpoint = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-        ? 'api/notification/order-status.php'
-        : '/.netlify/functions/order-status';
-
-    fetch(notificationEndpoint, {
+    fetch('api/notification/order-status.php', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
