@@ -467,7 +467,7 @@ function checkSavedSession() {
                 document.getElementById('loginPage').style.display = 'none';
                 document.getElementById('customerPage').style.display = 'none';
                 document.getElementById('adminPage').style.display = 'block';
-                showAdminTab('products');
+                showAdminTab(localStorage.getItem('kingpinAdminTab') || 'products');
                 loadAdminOrders();
                 
                 setTimeout(() => {
@@ -1461,6 +1461,7 @@ async function showAdminDashboard() {
 }
 
 function showAdminTab(tabName) {
+    localStorage.setItem('kingpinAdminTab', tabName);
     document.getElementById('productsTab').style.display = tabName === 'products' ? 'block' : 'none';
     document.getElementById('ordersTab').style.display = tabName === 'orders' ? 'block' : 'none';
     document.getElementById('messagesTab').style.display = tabName === 'messages' ? 'block' : 'none';
@@ -2866,10 +2867,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const customerPage = document.getElementById('customerPage');
     const adminPage = document.getElementById('adminPage');
 
-    // Restore the active dashboard only after a browser refresh.
-    const navigationEntry = performance.getEntriesByType('navigation')[0];
-    const isRefresh = navigationEntry?.type === 'reload';
-    const savedSession = isRefresh ? loadCurrentSession() : null;
+    // Restore the active dashboard whenever a valid session exists.
+    const savedSession = loadCurrentSession();
     const isAdminPortal = new URLSearchParams(window.location.search).get('portal') === 'admin';
 
     if (isAdminPortal) {
