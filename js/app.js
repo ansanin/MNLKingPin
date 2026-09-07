@@ -4649,10 +4649,16 @@ function sendOrderNotification(order, newStatus) {
     notifications.push(notificationData);
     localStorage.setItem('notifications', JSON.stringify(notifications));
 
-    // Send email notification to customer
-    console.log('📧 Sending order email:', notificationData);
+    // Send the email through the PHP/PHPMailer endpoint used by XAMPP.
+    if (!notificationData.customerEmail || notificationData.customerEmail === 'N/A') {
+        console.warn('Order status email skipped: customer email is missing.', notificationData);
+        return;
+    }
 
-    fetch('/KingPinSystem/api/notification/order-status.php', {
+    const emailEndpoint = new URL('api/notification/order-status.php', window.location.href).toString();
+    console.log('📧 Sending order email:', { ...notificationData, emailEndpoint });
+
+    fetch(emailEndpoint, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -4666,6 +4672,10 @@ function sendOrderNotification(order, newStatus) {
     .then(({ ok, result }) => {
         if (!ok) {
             throw new Error(result.error || 'Notification request failed');
+        }
+
+        if (result.success !== true) {
+            throw new Error(result.error || 'Order status email was not sent');
         }
 
         console.log('✅ Order email result:', result);
