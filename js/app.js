@@ -23,6 +23,7 @@ const appData = {
 };
 
 let sharedProductsRequest = null;
+let customerOrdersRefreshTimer = null;
 
 function applyTheme(theme) {
     const isLight = theme === 'light';
@@ -343,6 +344,18 @@ async function refreshCustomerOrdersFromServer() {
     } catch (error) {
         console.warn('Unable to refresh customer orders from shared storage:', error);
     }
+}
+
+function startCustomerOrdersRefresh() {
+    if (customerOrdersRefreshTimer) return;
+
+    customerOrdersRefreshTimer = window.setInterval(async () => {
+        const ordersSection = document.getElementById('ordersSection');
+        if (appData.currentRole !== 'customer' || ordersSection?.style.display !== 'block') return;
+
+        await refreshCustomerOrdersFromServer();
+        loadCustomerOrders();
+    }, 5000);
 }
 
 // Save notifications to localStorage
@@ -1631,6 +1644,7 @@ async function viewOrders() {
     document.getElementById('customerServiceSection').style.display = 'none';
     await refreshCustomerOrdersFromServer();
     loadCustomerOrders();
+    startCustomerOrdersRefresh();
     updateNotificationBadges();
     updateFloatingBackButton();
 }
@@ -5285,6 +5299,14 @@ window.addEventListener('storage', event => {
     if (event.key === 'kingpinGCashQR' && event.newValue) {
         appData.gcashQRCode = event.newValue;
         displayStoreGcashQRCode();
+    }
+});
+
+window.addEventListener('focus', async () => {
+    const ordersSection = document.getElementById('ordersSection');
+    if (appData.currentRole === 'customer' && ordersSection?.style.display === 'block') {
+        await refreshCustomerOrdersFromServer();
+        loadCustomerOrders();
     }
 });
 
