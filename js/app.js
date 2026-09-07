@@ -4379,7 +4379,7 @@ function renderAdminOrders() {
 }
 
 // Change Order Status
-function changeOrderStatus(orderId, newStatus) {
+async function changeOrderStatus(orderId, newStatus) {
     const order = appData.orders.find(o => o.id === orderId);
     if (!order) return;
 
@@ -4392,10 +4392,13 @@ function changeOrderStatus(orderId, newStatus) {
         saveOrderToHistory({ ...order });
     }
 
-    saveOrderToSharedServer(order).catch(error => {
+    let sharedOrderSaved = true;
+    try {
+        await saveOrderToSharedServer(order);
+    } catch (error) {
+        sharedOrderSaved = false;
         console.error('Unable to sync order status with shared storage:', error);
-        showStatusUpdateToast('Status changed locally, but shared order sync failed');
-    });
+    }
     
     // Add notification for customer
     const statusMessages = {
@@ -4434,7 +4437,9 @@ function changeOrderStatus(orderId, newStatus) {
     });
     
     // Show real-time toast notification
-    showStatusUpdateToast(`Order #${orderId} status changed to ${getOrderStatusLabel(newStatus)}`);
+    showStatusUpdateToast(sharedOrderSaved
+        ? `Order #${orderId} status changed to ${getOrderStatusLabel(newStatus)}`
+        : 'Status changed locally, but shared order sync failed');
     
     // Reload orders display for complete accuracy
     loadAdminOrders();
