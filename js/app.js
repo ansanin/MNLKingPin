@@ -4628,7 +4628,7 @@ function sendOrderNotification(order, newStatus) {
     })
     .catch(error => {
         console.error('❌ Order email failed:', error);
-        showStatusUpdateToast('Order updated, but email could not be sent');
+        showStatusUpdateToast(`Order updated, but email could not be sent: ${error.message}`);
     });
 }
 

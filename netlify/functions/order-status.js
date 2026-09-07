@@ -46,7 +46,7 @@ exports.handler = async function handler(event) {
         const smtpPort = Number(savedSettings?.port || process.env.SMTP_PORT || 587);
 
         if (!smtpUser || !smtpPass) {
-            return jsonResponse(503, { error: 'Email service is not configured on the server' });
+            return jsonResponse(503, { error: 'Email service is not configured. Save Gmail settings in Admin Settings first.' });
         }
 
         const transporter = nodemailer.createTransport({
@@ -67,6 +67,13 @@ exports.handler = async function handler(event) {
         return jsonResponse(200, { success: true, message: 'Order status email sent successfully.' });
     } catch (error) {
         console.error('Order status email error:', error.message);
-        return jsonResponse(500, { error: 'Failed to send order status email.' });
+        const errorMessage = String(error.message || '');
+        if (errorMessage.includes('Invalid login') || errorMessage.includes('Username and Password not accepted')) {
+            return jsonResponse(502, { error: 'Gmail rejected the login. Check the Gmail address and App Password.' });
+        }
+        if (errorMessage.includes('getaddrinfo') || errorMessage.includes('ETIMEDOUT') || errorMessage.includes('ECONNREFUSED')) {
+            return jsonResponse(502, { error: 'Unable to connect to the Gmail SMTP server.' });
+        }
+        return jsonResponse(500, { error: 'Email service failed. Check the Gmail App Password and Netlify function logs.' });
     }
 };
