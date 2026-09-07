@@ -2,22 +2,9 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
-const dotenv = require('dotenv');
-const nodemailer = require('nodemailer');
-
-dotenv.config();
 
 const PORT = 8000;
 const PUBLIC_DIR = __dirname;
-
-const mailTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
-    ? nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT || 587),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-    })
-    : null;
 
 function sendJson(res, statusCode, body) {
     res.writeHead(statusCode, { 'Content-Type': 'application/json' });
@@ -108,33 +95,6 @@ async function handleProducts(req, res) {
     }
 }
 
-async function handleOrderStatusNotification(req, res) {
-    try {
-        const notification = await readJsonBody(req);
-        if (!notification.orderId || !notification.message) {
-            return sendJson(res, 400, { error: 'orderId and message are required' });
-        }
-
-        const results = { email: 'disabled' };
-        const subject = `KingPin order #${notification.orderId} update`;
-
-        if (mailTransport && notification.customerEmail) {
-            await mailTransport.sendMail({
-                from: process.env.SMTP_FROM || process.env.SMTP_USER,
-                to: notification.customerEmail,
-                subject,
-                text: notification.message
-            });
-            results.email = 'sent';
-        }
-
-        sendJson(res, 200, { ok: true, results });
-    } catch (error) {
-        console.error('Notification delivery error:', error.message);
-        sendJson(res, 500, { error: 'Notification delivery failed' });
-    }
-}
-
 const server = http.createServer((req, res) => {
     const parsedUrl = url.parse(req.url, true);
 
@@ -146,16 +106,6 @@ const server = http.createServer((req, res) => {
         });
         res.end();
         return;
-    }
-
-    if (req.method === 'POST' && parsedUrl.pathname === '/api/notifications/order-status') {
-        return handleOrderStatusNotification(req, res);
-    }
-
-    if (req.method === 'GET' && parsedUrl.pathname === '/api/notifications/status') {
-        return sendJson(res, 200, {
-            email: Boolean(mailTransport)
-        });
     }
 
     if (parsedUrl.pathname === '/api/gcash-qr') {

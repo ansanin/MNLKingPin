@@ -12,8 +12,6 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@netlify/blobs": "^11.0.3",
-    "dotenv": "^17.4.2",
-    "nodemailer": "^9.0.5"
+    "@netlify/blobs": "^11.0.3"
   }
 }
