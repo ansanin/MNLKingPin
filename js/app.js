@@ -3287,6 +3287,20 @@ function isOrderInPurchaseHistory(order) {
     return ['completed', 'delivered', 'cancelled'].includes(order.status);
 }
 
+function getOrderStatusLabel(status) {
+    const labels = {
+        pending: 'Order Received',
+        'design-approval': 'Order Received',
+        processing: 'In Production',
+        printing: 'In Production',
+        'ready-for-delivery': 'Ready for Delivery',
+        completed: 'Completed / Delivered',
+        delivered: 'Completed / Delivered',
+        cancelled: 'Cancelled'
+    };
+    return labels[status] || String(status || 'Pending').replace(/-/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
 function loadCustomerOrders() {
     const ordersList = document.getElementById('ordersList');
     if (!ordersList) return;
@@ -3362,7 +3376,7 @@ function loadCustomerOrders() {
         orderItem.innerHTML = `
             <div class="order-header">
                 <span class="order-id">Order #${order.id}</span>
-                <span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span>
+                <span class="order-status ${order.status}">${getOrderStatusLabel(order.status)}</span>
             </div>
             <div class="order-details">
                 <p><strong>Customer:</strong> ${order.customerName}</p>
@@ -3429,7 +3443,7 @@ function loadPurchaseHistory() {
         historyItem.innerHTML = `
             <div class="order-header">
                 <span class="order-id">Order #${order.id}</span>
-                <span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span>
+                <span class="order-status ${order.status}">${getOrderStatusLabel(order.status)}</span>
             </div>
             <div class="order-details">
                 <p><strong>Customer:</strong> ${order.customerName}</p>
@@ -4314,17 +4328,16 @@ function renderAdminOrders() {
             </td>
             <td style="max-width: 300px;">${itemsList}</td>
             <td><strong>₱${totalAmount.toFixed(2)}</strong></td>
-            <td><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
+            <td><span class="order-status ${order.status}">${getOrderStatusLabel(order.status)}</span></td>
             <td>${order.date}</td>
             <td>
                 <div><strong>Payment:</strong> ${paymentMethod.toUpperCase()}</div>
                 ${paymentProofHtml}
                 <select class="status-dropdown" onchange="changeOrderStatus(${order.id}, this.value)">
-                    <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Pending</option>
-                    <option value="processing" ${order.status === 'processing' ? 'selected' : ''}>Processing</option>
+                    <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Order Received</option>
+                    <option value="processing" ${order.status === 'processing' ? 'selected' : ''}>In Production</option>
                     <option value="ready-for-delivery" ${order.status === 'ready-for-delivery' ? 'selected' : ''}>Ready for Delivery</option>
-                    <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>Completed</option>
-                    <option value="delivered" ${order.status === 'delivered' ? 'selected' : ''}>Delivered</option>
+                    <option value="delivered" ${order.status === 'completed' || order.status === 'delivered' ? 'selected' : ''}>Completed / Delivered</option>
                     <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
                 </select>
                 <button class="btn btn-small" onclick="viewOrderDetails(${JSON.stringify(order).replace(/"/g, '&quot;')})" style="margin-top: 8px; background: #4caf50; padding: 4px 8px; font-size: 0.85em; width: 100%;">👁️ View</button>
@@ -4386,7 +4399,7 @@ function changeOrderStatus(orderId, newStatus) {
     });
     
     // Show real-time toast notification
-    showStatusUpdateToast(`Order #${orderId} status changed to ${newStatus.toUpperCase()}`);
+    showStatusUpdateToast(`Order #${orderId} status changed to ${getOrderStatusLabel(newStatus)}`);
     
     // Reload orders display for complete accuracy
     loadAdminOrders();
@@ -4405,7 +4418,16 @@ function updateOrderStatus(orderId) {
     if (!order) return;
 
     const statuses = ['pending', 'processing', 'ready-for-delivery', 'delivered'];
-    const currentIndex = statuses.indexOf(order.status);
+    const statusIndex = {
+        pending: 0,
+        'design-approval': 0,
+        processing: 1,
+        printing: 1,
+        'ready-for-delivery': 2,
+        completed: 3,
+        delivered: 3
+    };
+    const currentIndex = statusIndex[order.status] ?? 0;
     const nextStatus = statuses[(currentIndex + 1) % statuses.length];
 
     order.status = nextStatus;
@@ -4422,7 +4444,7 @@ function updateOrderStatus(orderId) {
     sendOrderNotification(order, nextStatus);
     
     loadAdminOrders();
-    alert(`Order #${orderId} status updated to: ${nextStatus.toUpperCase().replace('-', ' ')}\n\nNotification sent to customer`);
+    alert(`Order #${orderId} status updated to: ${getOrderStatusLabel(nextStatus)}\n\nNotification sent to customer`);
 }
 
 // View Order Details Modal
@@ -4477,7 +4499,7 @@ function viewOrderDetails(orderStr) {
                         <strong>Date:</strong> ${order.date}
                     </div>
                     <div>
-                        <strong>Status:</strong> <span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span>
+                        <strong>Status:</strong> <span class="order-status ${order.status}">${getOrderStatusLabel(order.status)}</span>
                     </div>
                     <div>
                         <strong>Total:</strong> ₱${order.totalAmount.toFixed(2)}
@@ -5085,7 +5107,7 @@ function generateStatusReport(orders) {
     Object.entries(statusData).forEach(([status, data]) => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td><span class="order-status ${status}">${status.toUpperCase()}</span></td>
+            <td><span class="order-status ${status}">${getOrderStatusLabel(status)}</span></td>
             <td>${data.count}</td>
             <td>₱${data.revenue.toFixed(2)}</td>
         `;

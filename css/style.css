@@ -2301,6 +2301,13 @@ table tbody tr:hover {
     position: relative;
 }
 
+#customerPage .tracking-circle {
+    background-color: #3a4a5a;
+    border-color: #71808d;
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+}
+
 .tracking-step.active .tracking-circle {
     background-color: #d4af37;
     border-color: #d4af37;
@@ -4449,6 +4456,19 @@ body.light-mode #customerPage .order-tracking,
 body.light-mode #customerPage .order-details {
     background: #f1f4f6 !important;
     border-color: #d0d7dc !important;
+}
+
+body.light-mode #customerPage .tracking-circle {
+    background: #ffffff !important;
+    border-color: #8e9ba5 !important;
+    color: #263238 !important;
+    text-shadow: none;
+}
+
+body.light-mode #customerPage .tracking-step.active .tracking-circle {
+    background: #d7a914 !important;
+    border-color: #b78300 !important;
+    color: #171717 !important;
 }
 
 body.light-mode #customerPage .design-mode-content,
