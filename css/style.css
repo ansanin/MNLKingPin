@@ -1283,6 +1283,11 @@ body.light-mode [style*="color: #a0a0a0"] {
     color: white;
 }
 
+.order-status.ready-for-delivery {
+    background-color: #4285f4;
+    color: white;
+}
+
 .order-status.completed {
     background-color: #52d452;
     color: white;

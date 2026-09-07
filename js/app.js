@@ -3335,18 +3335,26 @@ function loadCustomerOrders() {
             ? `<p style="color: #4caf50;">✓ Proof uploaded</p><img src="${order.gcashPaymentProof}" alt="GCash payment proof">`
             : '<p style="color: #ffb74d;">Proof not uploaded yet</p>';
         
-        // Determine status progress
-        const statuses = ['design-approval', 'printing', 'completed'];
-        const currentStatusIndex = statuses.indexOf(order.status);
+        // Keep old order statuses compatible while showing the customer-friendly four-step flow.
+        const statuses = ['pending', 'processing', 'ready-for-delivery', 'delivered'];
+        const statusProgress = {
+            pending: 0,
+            'design-approval': 0,
+            processing: 1,
+            printing: 1,
+            'ready-for-delivery': 2,
+            completed: 3,
+            delivered: 3
+        };
+        const statusLabels = ['Order Received', 'In Production', 'Ready for Delivery', 'Completed / Delivered'];
+        const currentStatusIndex = statusProgress[order.status] ?? 0;
         
         let statusHtml = '<div class="order-tracking">';
         statuses.forEach((status, index) => {
             const isActive = index <= currentStatusIndex;
-            const statusLabel = status === 'design-approval' ? 'Design Review' : 
-                               status === 'printing' ? 'Printing' : 'Completed';
             statusHtml += `<div class="tracking-step ${isActive ? 'active' : ''}">
                 <div class="tracking-circle">${index + 1}</div>
-                <div class="tracking-label">${statusLabel}</div>
+                <div class="tracking-label">${statusLabels[index]}</div>
             </div>`;
         });
         statusHtml += '</div>';
@@ -4314,6 +4322,7 @@ function renderAdminOrders() {
                 <select class="status-dropdown" onchange="changeOrderStatus(${order.id}, this.value)">
                     <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Pending</option>
                     <option value="processing" ${order.status === 'processing' ? 'selected' : ''}>Processing</option>
+                    <option value="ready-for-delivery" ${order.status === 'ready-for-delivery' ? 'selected' : ''}>Ready for Delivery</option>
                     <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>Completed</option>
                     <option value="delivered" ${order.status === 'delivered' ? 'selected' : ''}>Delivered</option>
                     <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
@@ -4343,6 +4352,7 @@ function changeOrderStatus(orderId, newStatus) {
     // Add notification for customer
     const statusMessages = {
         'processing': `Your order #${orderId} is now being processed`,
+        'ready-for-delivery': `Your order #${orderId} is ready for delivery`,
         'completed': `Your order #${orderId} has been completed and is ready!`,
         'delivered': `Your order #${orderId} has been delivered`,
         'cancelled': `Your order #${orderId} has been cancelled`
@@ -4394,7 +4404,7 @@ function updateOrderStatus(orderId) {
     const order = appData.orders.find(o => o.id === orderId);
     if (!order) return;
 
-    const statuses = ['design-approval', 'printing', 'completed'];
+    const statuses = ['pending', 'processing', 'ready-for-delivery', 'delivered'];
     const currentIndex = statuses.indexOf(order.status);
     const nextStatus = statuses[(currentIndex + 1) % statuses.length];
 
