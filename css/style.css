@@ -4698,6 +4698,71 @@ body.light-mode #orderDetailsModal #orderDetailsContent strong {
     min-width: 760px;
 }
 
+#adminPage #ordersInventory {
+    min-width: 1120px;
+    table-layout: fixed;
+}
+
+#adminPage #ordersInventory th,
+#adminPage #ordersInventory td {
+    vertical-align: top;
+}
+
+#adminPage #ordersInventory th:nth-child(1),
+#adminPage #ordersInventory td:nth-child(1) {
+    width: 145px;
+}
+
+#adminPage #ordersInventory th:nth-child(2),
+#adminPage #ordersInventory td:nth-child(2) {
+    width: 205px;
+}
+
+#adminPage #ordersInventory th:nth-child(3),
+#adminPage #ordersInventory td:nth-child(3) {
+    width: 285px;
+}
+
+#adminPage #ordersInventory th:nth-child(4),
+#adminPage #ordersInventory td:nth-child(4) {
+    width: 125px;
+}
+
+#adminPage #ordersInventory th:nth-child(5),
+#adminPage #ordersInventory td:nth-child(5) {
+    width: 155px;
+}
+
+#adminPage #ordersInventory th:nth-child(6),
+#adminPage #ordersInventory td:nth-child(6) {
+    width: 125px;
+}
+
+#adminPage #ordersInventory th:nth-child(7),
+#adminPage #ordersInventory td:nth-child(7) {
+    width: 180px;
+}
+
+#adminPage #ordersInventory td:nth-child(1),
+#adminPage #ordersInventory td:nth-child(4),
+#adminPage #ordersInventory td:nth-child(5),
+#adminPage #ordersInventory td:nth-child(6),
+#adminPage #ordersInventory td:nth-child(7),
+#adminPage #ordersInventory .order-status,
+#adminPage #ordersInventory .status-dropdown {
+    white-space: nowrap;
+}
+
+#adminPage #ordersInventory td:nth-child(2),
+#adminPage #ordersInventory td:nth-child(3) {
+    overflow-wrap: anywhere;
+}
+
+#adminPage #ordersInventory .status-dropdown {
+    width: 100%;
+    min-width: 160px;
+}
+
 #adminPage .products-table th,
 #adminPage .products-table td {
     white-space: nowrap;
