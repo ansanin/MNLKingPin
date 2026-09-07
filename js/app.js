@@ -672,7 +672,7 @@ function hideCustomerAuth() {
     document.getElementById('customerAuthSection').style.display = 'none';
     document.getElementById('customerLoginForm').style.display = 'block';
     document.getElementById('customerSignupForm').style.display = 'none';
-    document.getElementById('customerLoginFormElement').reset();
+    document.getElementById('customerLoginFormElement')?.reset();
     document.getElementById('customerSignupFormElement').reset();
     document.getElementById('customerLoginErrorMessage').textContent = '';
     document.getElementById('customerSignupErrorMessage').textContent = '';
@@ -899,26 +899,63 @@ function loginCustomer(e) {
     // Load user's saved cart from localStorage
     loadUserCart();
     
-    document.getElementById('customerLoginFormElement').reset();
+    document.getElementById('customerLoginFormElement')?.reset();
     document.getElementById('customerLoginErrorMessage').textContent = '';
     hideCustomerAuth();
     showCustomerDashboard();
 }
 
-// Simple Google Sign-In Handler (Fallback)
+const GOOGLE_CLIENT_ID = '620751674943-strv31pamttvkn3jlftptalegihspstn.apps.googleusercontent.com';
+
+function handleGoogleCredential(response) {
+    try {
+        const payload = JSON.parse(atob(response.credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (!payload.email) throw new Error('Google did not return an email address.');
+        processGmailLogin(payload.email, payload.name || payload.email.split('@')[0]);
+    } catch (error) {
+        console.error('Google sign-in failed:', error);
+        const errorMessage = document.getElementById('customerLoginErrorMessage');
+        if (errorMessage) {
+            errorMessage.textContent = 'Google sign-in failed. Please try again.';
+            errorMessage.style.display = 'block';
+        }
+    }
+}
+
+function initializeGoogleSignIn() {
+    if (!window.google?.accounts?.id) return;
+    google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredential,
+        auto_select: false,
+        cancel_on_tap_outside: true
+    });
+
+    const button = document.getElementById('googleSignInButton');
+    if (button && !button.hasChildNodes()) {
+        google.accounts.id.renderButton(button, {
+            type: 'standard',
+            theme: 'outline',
+            size: 'large',
+            text: 'signin_with',
+            shape: 'rectangular',
+            width: 320
+        });
+    }
+}
+
 function loginWithGmail() {
-    // Show Gmail login modal
-    const gmailEmail = prompt('Enter your Gmail address (example: yourname@gmail.com):', '') || '';
-    
-    if (!gmailEmail.trim()) {
+    if (!window.google?.accounts?.id) {
+        showStatusUpdateToast('Google sign-in is still loading. Please try again.');
         return;
     }
-    
-    processGmailLogin(gmailEmail);
+
+    initializeGoogleSignIn();
+    google.accounts.id.prompt();
 }
 
 // Process Gmail Login
-function processGmailLogin(email) {
+function processGmailLogin(email, googleName = '') {
     const emailLower = email.toLowerCase().trim();
     
     // Validate email format
@@ -932,7 +969,7 @@ function processGmailLogin(email) {
     
     // Extract name from email
     const nameFromEmail = emailLower.split('@')[0].replace(/[._]/g, ' ');
-    const fullName = nameFromEmail.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    const fullName = googleName || nameFromEmail.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     
     // Check if account exists
     if (accounts[emailLower]) {
@@ -945,7 +982,7 @@ function processGmailLogin(email) {
         saveCurrentSession();
         loadUserCart();
         
-        document.getElementById('customerLoginFormElement').reset();
+        document.getElementById('customerLoginFormElement')?.reset();
         document.getElementById('customerLoginErrorMessage').textContent = '';
         hideCustomerAuth();
         showCustomerDashboard();
@@ -973,7 +1010,7 @@ function processGmailLogin(email) {
         appData.cart = [];
         saveUserCart();
         
-        document.getElementById('customerLoginFormElement').reset();
+        document.getElementById('customerLoginFormElement')?.reset();
         document.getElementById('customerLoginErrorMessage').textContent = '';
         hideCustomerAuth();
         showCustomerDashboard();
@@ -1069,7 +1106,7 @@ function logout() {
     updateFloatingBackButton();
 
     if (document.getElementById('customerLoginFormElement')) {
-        document.getElementById('customerLoginFormElement').reset();
+        document.getElementById('customerLoginFormElement')?.reset();
     }
 
     if (typeof showCustomerAuth === 'function') {
@@ -1080,6 +1117,10 @@ function logout() {
 // Update Admin Credentials
 function updateAdminCredentials(e) {
     e.preventDefault();
+
+    if (appData.currentRole !== 'admin') {
+        return;
+    }
     
     const currentPass = document.getElementById('currentPassword').value;
     const newUsername = document.getElementById('newUsername').value || appData.adminCredentials.username;
@@ -1436,6 +1477,11 @@ function showCustomerDashboard() {
 }
 
 async function showAdminDashboard() {
+    if (appData.currentRole !== 'admin') {
+        showCustomerDashboard();
+        return;
+    }
+
     document.getElementById('loginPage').style.display = 'none';
     document.getElementById('customerPage').style.display = 'none';
     document.getElementById('adminPage').style.display = 'block';
@@ -1461,6 +1507,11 @@ async function showAdminDashboard() {
 }
 
 function showAdminTab(tabName) {
+    if (appData.currentRole !== 'admin') {
+        document.getElementById('adminPage').style.display = 'none';
+        return;
+    }
+
     document.getElementById('productsTab').style.display = tabName === 'products' ? 'block' : 'none';
     document.getElementById('ordersTab').style.display = tabName === 'orders' ? 'block' : 'none';
     document.getElementById('messagesTab').style.display = tabName === 'messages' ? 'block' : 'none';
@@ -2897,6 +2948,18 @@ function updateCheckoutDisplay() {
 
 // GCash QR Code Preview Handler
 document.addEventListener('DOMContentLoaded', function() {
+    let googleSetupAttempts = 0;
+    const setupGoogleButton = () => {
+        if (window.google?.accounts?.id) {
+            initializeGoogleSignIn();
+            return;
+        }
+
+        googleSetupAttempts += 1;
+        if (googleSetupAttempts < 20) setTimeout(setupGoogleButton, 500);
+    };
+    setupGoogleButton();
+
     const loginPage = document.getElementById('loginPage');
     const customerPage = document.getElementById('customerPage');
     const adminPage = document.getElementById('adminPage');

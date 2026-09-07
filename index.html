@@ -8,6 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <title>KingPin Custom Ph® CamSur - Jersey Management System</title>
     <link rel="stylesheet" href="css/style.css?v=20260905-lightmode-inner-1">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
     <!-- Login/Authentication Page -->
@@ -35,21 +36,11 @@
                 </div>
                 <div id="customerAuthSection" class="login-auth-section">
                     <div id="customerLoginForm">
-                        <button type="button" class="btn btn-gmail" id="gmailLoginBtn" onclick="loginWithGmail()">
-                            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='20' height='20'%3E%3Cpath fill='%234285F4' d='M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z'/%3E%3Cpath fill='%2334A853' d='M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z'/%3E%3Cpath fill='%23FBBC05' d='M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z'/%3E%3Cpath fill='%23EA4335' d='M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z'/%3E%3C/svg%3E" alt="Google"> Sign in with Gmail
-                        </button>
+                        <div id="googleSignInButton" class="google-sign-in-button"></div>
                         <button type="button" class="btn btn-secondary quick-login-button" id="quickLoginBtn" onclick="quickLogin()" style="display: none;">Quick Login</button>
-                        <form id="customerLoginFormElement" onsubmit="loginCustomer(event)">
-                            <div class="form-group"><label for="customerLoginEmail">✉ &nbsp;Email</label><input type="email" id="customerLoginEmail" placeholder="your@email.com" required></div>
-                            <div class="form-group"><label for="customerLoginPassword">▣ &nbsp;Password</label><div class="password-field"><input type="password" id="customerLoginPassword" placeholder="Enter your password" required autocomplete="current-password"><button type="button" onclick="togglePassword('customerLoginPassword', this)" aria-label="Show password">◉</button></div></div>
-                            <div class="login-options"><label><input type="checkbox" id="rememberCustomer"> <span>Remember me</span></label><button type="button" class="text-button" onclick="forgotPassword()">Forgot password? &nbsp;→</button></div>
-                            <button type="submit" class="btn btn-primary login-submit">→ &nbsp; Login with Email</button>
-                        </form>
-                        <p class="create-account">Don't have an account? <button type="button" class="text-button" onclick="showCustomerSignup()">Create Account &nbsp;→</button></p>
                         <button type="button" class="login-back" onclick="hideCustomerAuth()"><span aria-hidden="true">←</span> Back</button>
                         <div id="customerLoginErrorMessage" class="error-message"></div>
                     </div>
-                    <div id="customerSignupForm" style="display: none;"><h3>Create Customer Account</h3><form id="customerSignupFormElement" onsubmit="signupCustomer(event)"><div class="form-group"><label for="customerSignupUsername">Username</label><input type="text" id="customerSignupUsername" required minlength="3" placeholder="Choose a username" autocomplete="username"></div><div class="form-group"><label for="customerSignupName">Full Name</label><input type="text" id="customerSignupName" required placeholder="John Doe"></div><div class="form-group"><label for="customerSignupEmail">Email</label><input type="email" id="customerSignupEmail" required placeholder="your@gmail.com"></div><div class="form-group"><label for="customerSignupPhone">Phone (optional)</label><input type="tel" id="customerSignupPhone" placeholder="+63 9xx xxx xxxx"></div><div class="form-group"><label for="customerSignupPassword">Password</label><div class="password-field"><input type="password" id="customerSignupPassword" required minlength="6" placeholder="At least 6 characters" autocomplete="new-password"><button type="button" onclick="togglePassword('customerSignupPassword', this)" aria-label="Show password">◉</button></div></div><button type="submit" class="btn btn-primary login-submit">Create Account</button><button type="button" class="btn btn-secondary form-back" onclick="showCustomerLogin()">Back to Login</button></form><div id="customerSignupErrorMessage" class="error-message"></div></div>
                 </div>
                 <div id="adminLoginForm" class="login-auth-section" style="display: none;"><form id="adminForm" onsubmit="loginAdmin(event)"><div class="form-group"><label for="adminUsername">Admin username</label><input type="text" id="adminUsername" placeholder="admin" required></div><div class="form-group"><label for="adminPassword">Password</label><div class="password-field"><input type="password" id="adminPassword" placeholder="Enter your password" required><button type="button" onclick="togglePassword('adminPassword', this)" aria-label="Show password">◉</button></div></div><button type="submit" class="btn btn-primary login-submit">→ &nbsp; Login as Admin</button><button type="button" class="btn btn-secondary form-back" onclick="hideAdminLogin()">← &nbsp; Back</button></form><div id="adminErrorMessage" class="error-message"></div></div>
                 <footer class="login-footer"><svg class="footer-crown" viewBox="0 0 32 22" aria-hidden="true"><path d="M3 18h26M5 17 3 4l8 7 5-9 5 9 8-7-2 13Z"></path></svg><span>© 2025 MNL KingPin CamSur. All rights reserved.</span></footer>
@@ -1254,7 +1245,7 @@
         </div>
     </div>
 
-    <script src="js/app.js?v=20260905-product-photos-2"></script>
+    <script src="js/app.js?v=20260907-google-chooser-2"></script>
     <script src="js/design-interface.js?v=20260901-order-fix"></script>
     <script>
         // Force initialization when page loads
