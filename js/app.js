@@ -23,7 +23,6 @@ const appData = {
 };
 
 let sharedProductsRequest = null;
-let customerOrdersRefreshTimer = null;
 
 function applyTheme(theme) {
     const isLight = theme === 'light';
@@ -334,30 +333,6 @@ async function saveOrderToSharedServer(order) {
     throw new Error('Shared order API unavailable');
 }
 
-async function refreshCustomerOrdersFromServer() {
-    try {
-        const sharedOrders = await fetchSharedOrders();
-        const sharedIds = new Set(sharedOrders.map(order => String(order.id)));
-        const localOnlyOrders = appData.orders.filter(order => !sharedIds.has(String(order.id)));
-        appData.orders = [...sharedOrders, ...localOnlyOrders];
-        saveOrders();
-    } catch (error) {
-        console.warn('Unable to refresh customer orders from shared storage:', error);
-    }
-}
-
-function startCustomerOrdersRefresh() {
-    if (customerOrdersRefreshTimer) return;
-
-    customerOrdersRefreshTimer = window.setInterval(async () => {
-        const ordersSection = document.getElementById('ordersSection');
-        if (appData.currentRole !== 'customer' || ordersSection?.style.display !== 'block') return;
-
-        await refreshCustomerOrdersFromServer();
-        loadCustomerOrders();
-    }, 5000);
-}
-
 // Save notifications to localStorage
 function saveNotifications() {
     localStorage.setItem('kingpinNotification', JSON.stringify(appData.notifications));
@@ -492,7 +467,7 @@ function checkSavedSession() {
                 document.getElementById('loginPage').style.display = 'none';
                 document.getElementById('customerPage').style.display = 'none';
                 document.getElementById('adminPage').style.display = 'block';
-                showAdminTab(localStorage.getItem('kingpinAdminTab') || 'products');
+                showAdminTab('products');
                 loadAdminOrders();
                 
                 setTimeout(() => {
@@ -1486,7 +1461,6 @@ async function showAdminDashboard() {
 }
 
 function showAdminTab(tabName) {
-    localStorage.setItem('kingpinAdminTab', tabName);
     document.getElementById('productsTab').style.display = tabName === 'products' ? 'block' : 'none';
     document.getElementById('ordersTab').style.display = tabName === 'orders' ? 'block' : 'none';
     document.getElementById('messagesTab').style.display = tabName === 'messages' ? 'block' : 'none';
@@ -1629,7 +1603,7 @@ function toggleCart() {
     }
 }
 
-async function viewOrders() {
+function viewOrders() {
     appData.notifications.forEach(notification => {
         if (notification.type === 'customer') {
             notification.read = true;
@@ -1642,9 +1616,21 @@ async function viewOrders() {
     document.getElementById('purchaseHistorySection').style.display = 'none';
     document.getElementById('checkoutSection').style.display = 'none';
     document.getElementById('customerServiceSection').style.display = 'none';
-    await refreshCustomerOrdersFromServer();
     loadCustomerOrders();
-    startCustomerOrdersRefresh();
+    fetchSharedOrders().then(sharedOrders => {
+        const sharedById = new Map(sharedOrders.map(order => [String(order.id), order]));
+        const localIds = new Set(appData.orders.map(order => String(order.id)));
+
+        appData.orders = appData.orders.map(order => sharedById.get(String(order.id)) || order);
+        sharedOrders.forEach(order => {
+            if (!localIds.has(String(order.id))) appData.orders.push(order);
+        });
+
+        saveOrders();
+        loadCustomerOrders();
+    }).catch(error => {
+        console.warn('Using local orders because shared orders could not be loaded:', error);
+    });
     updateNotificationBadges();
     updateFloatingBackButton();
 }
@@ -1912,6 +1898,19 @@ function prepareProductImage(file) {
     });
 }
 
+function getProductImages(product) {
+    const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+    if (images.length === 0 && product.image) images.push(product.image);
+    return images;
+}
+
+function renderImagePreview(container, images) {
+    if (!container) return;
+    container.innerHTML = images.map((image, index) => `
+        <img src="${image}" alt="Product image ${index + 1}" style="width: 72px; height: 72px; object-fit: cover; border-radius: 5px; border: 1px solid #444;">
+    `).join('');
+}
+
 // Save products to localStorage
 async function saveProducts() {
     localStorage.setItem('kingpinProducts', JSON.stringify(appData.products));
@@ -2109,8 +2108,11 @@ function displayProducts(products) {
             'organization': '🏢 Organization'
         };
 
+        const productImages = getProductImages(product);
         productCard.innerHTML = `
-            <img src="${product.image}" alt="${product.name}" class="product-image" loading="eager" fetchpriority="high" decoding="async">
+            <div class="product-image-gallery" aria-label="${product.name} photos">
+                ${productImages.map((image, index) => `<img src="${image}" alt="${product.name} photo ${index + 1}" class="product-image" loading="eager" decoding="async">`).join('')}
+            </div>
             <div class="product-info">
                 <h3>${product.name}</h3>
                 <p style="color: #4a9eff; font-weight: 600; margin-bottom: 8px;">${typeLabels[product.type] || product.type}</p>
@@ -2128,7 +2130,12 @@ function displayProducts(products) {
 // Open Product Modal
 function openProductModal(product) {
     appData.selectedProduct = product;
-    document.getElementById('modalProductImage').src = product.image;
+    const modalGallery = document.getElementById('modalProductGallery');
+    if (modalGallery) {
+        modalGallery.innerHTML = getProductImages(product).map((image, index) => `
+            <img src="${image}" alt="${product.name} photo ${index + 1}" class="modal-product-image">
+        `).join('');
+    }
     document.getElementById('modalProductName').textContent = product.name;
     
     const typeLabels = {
@@ -2894,8 +2901,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const customerPage = document.getElementById('customerPage');
     const adminPage = document.getElementById('adminPage');
 
-    // Restore the active dashboard whenever a valid session exists.
-    const savedSession = loadCurrentSession();
+    // Restore the active dashboard only after a browser refresh.
+    const navigationEntry = performance.getEntriesByType('navigation')[0];
+    const isRefresh = navigationEntry?.type === 'reload';
+    const savedSession = isRefresh ? loadCurrentSession() : null;
     const isAdminPortal = new URLSearchParams(window.location.search).get('portal') === 'admin';
 
     if (isAdminPortal) {
@@ -3170,11 +3179,17 @@ function processCustomerOrder() {
             messageDiv.style.display = 'block';
         }
 
+        showStatusUpdateToast(`✅ Order #${orderData.id} placed successfully! Receipt is ready.`);
         sessionStorage.setItem('kingpinLastOrderSuccess', JSON.stringify({
             orderId: orderData.id,
             message: `✅ Order #${orderData.id} placed successfully! Receipt is ready.`,
             timestamp: Date.now()
         }));
+        if (typeof alert === 'function') {
+            setTimeout(() => {
+                alert(`✅ Your order #${orderData.id} has been placed successfully!`);
+            }, 200);
+        }
 
         document.getElementById('checkoutSection').style.display = 'none';
         document.getElementById('productsSection').style.display = 'block';
@@ -3314,20 +3329,6 @@ function isOrderInPurchaseHistory(order) {
     return ['completed', 'delivered', 'cancelled'].includes(order.status);
 }
 
-function getOrderStatusLabel(status) {
-    const labels = {
-        pending: 'Order Received',
-        'design-approval': 'Order Received',
-        processing: 'In Production',
-        printing: 'In Production',
-        'ready-for-delivery': 'Ready for Delivery',
-        completed: 'Delivered',
-        delivered: 'Delivered',
-        cancelled: 'Cancelled'
-    };
-    return labels[status] || String(status || 'Pending').replace(/-/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
-}
-
 function loadCustomerOrders() {
     const ordersList = document.getElementById('ordersList');
     if (!ordersList) return;
@@ -3338,8 +3339,7 @@ function loadCustomerOrders() {
         .filter(order => {
             const matchesUsername = order.customerUsername === currentUserEmail;
             const matchesEmail = order.customerEmail === currentUserEmail;
-            // Keep delivered orders visible so customers can see tracker step 4.
-            const isActive = order.status !== 'cancelled';
+            const isActive = !isOrderInPurchaseHistory(order);
             return (matchesUsername || matchesEmail) && isActive;
         })
         .sort((firstOrder, secondOrder) => Number(secondOrder.id) - Number(firstOrder.id));
@@ -3377,26 +3377,25 @@ function loadCustomerOrders() {
             ? `<p style="color: #4caf50;">✓ Proof uploaded</p><img src="${order.gcashPaymentProof}" alt="GCash payment proof">`
             : '<p style="color: #ffb74d;">Proof not uploaded yet</p>';
         
-        // Keep old order statuses compatible while showing the customer-friendly four-step flow.
+        // Determine status progress
         const statuses = ['pending', 'processing', 'ready-for-delivery', 'delivered'];
         const statusProgress = {
             pending: 0,
-            'design-approval': 0,
             processing: 1,
-            printing: 1,
-            'ready-for-delivery': 2,
             completed: 3,
-            delivered: 3
+            delivered: 3,
+            'ready-for-delivery': 2
         };
-        const statusLabels = ['Order Received', 'In Production', 'Ready for Delivery', 'Delivered'];
+        const statusLabels = ['Order Received', 'Production', 'Ready for Delivery', 'Delivered'];
         const currentStatusIndex = statusProgress[order.status] ?? 0;
         
         let statusHtml = '<div class="order-tracking">';
         statuses.forEach((status, index) => {
             const isActive = index <= currentStatusIndex;
+            const statusLabel = statusLabels[index];
             statusHtml += `<div class="tracking-step ${isActive ? 'active' : ''}">
                 <div class="tracking-circle">${index + 1}</div>
-                <div class="tracking-label">${statusLabels[index]}</div>
+                <div class="tracking-label">${statusLabel}</div>
             </div>`;
         });
         statusHtml += '</div>';
@@ -3404,7 +3403,7 @@ function loadCustomerOrders() {
         orderItem.innerHTML = `
             <div class="order-header">
                 <span class="order-id">Order #${order.id}</span>
-                <span class="order-status ${order.status}">${getOrderStatusLabel(order.status)}</span>
+                <span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span>
             </div>
             <div class="order-details">
                 <p><strong>Customer:</strong> ${order.customerName}</p>
@@ -3471,7 +3470,7 @@ function loadPurchaseHistory() {
         historyItem.innerHTML = `
             <div class="order-header">
                 <span class="order-id">Order #${order.id}</span>
-                <span class="order-status ${order.status}">${getOrderStatusLabel(order.status)}</span>
+                <span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span>
             </div>
             <div class="order-details">
                 <p><strong>Customer:</strong> ${order.customerName}</p>
@@ -3797,6 +3796,12 @@ function addProductToInventoryTable(product, index) {
 }
 
 // Handle Add Product with Image Upload
+document.getElementById('productImage').addEventListener('change', function(event) {
+    Promise.all(Array.from(event.target.files).map(prepareProductImage))
+        .then(images => renderImagePreview(document.getElementById('productImagePreview'), images))
+        .catch(error => console.error('Unable to preview product images:', error));
+});
+
 document.getElementById('addProductForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const uploadMessage = document.getElementById('uploadMessage');
@@ -3806,13 +3811,13 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
     const price = parseFloat(document.getElementById('productPrice').value);
     const stock = parseInt(document.getElementById('productStock').value);
     const description = document.getElementById('productDescription').value;
-    const imageFile = document.getElementById('productImage').files[0];
+    const imageFiles = Array.from(document.getElementById('productImage').files);
     
     // Get selected colors
     const selectedColorCheckboxes = document.querySelectorAll('input[name="productColors"]:checked');
     const availableColors = Array.from(selectedColorCheckboxes).map(cb => cb.value);
 
-    if (!imageFile) {
+    if (imageFiles.length === 0) {
         uploadMessage.className = 'message error';
         uploadMessage.textContent = 'Please select an image';
         uploadMessage.style.display = 'block';
@@ -3826,7 +3831,7 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
         return;
     }
 
-    prepareProductImage(imageFile).then(image => {
+    Promise.all(imageFiles.map(prepareProductImage)).then(images => {
         const newProduct = {
             id: appData.products.length + 1,
             name: productName,
@@ -3834,7 +3839,8 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
             price: price,
             stock: stock,
             description: description,
-            image,
+            image: images[0],
+            images,
             availableColors: availableColors
         };
 
@@ -3852,6 +3858,7 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
         
         // Reset form
         document.getElementById('addProductForm').reset();
+        document.getElementById('productImagePreview').innerHTML = '';
         
         // Hide message after 2 seconds
         setTimeout(() => {
@@ -4056,7 +4063,7 @@ function openEditProductModal(index) {
     
     // Show current product image preview
     const imagePreview = document.getElementById('editProductImagePreview');
-    imagePreview.src = product.image;
+    renderImagePreview(imagePreview, getProductImages(product));
     
     // Reset file input
     document.getElementById('editProductImage').value = '';
@@ -4076,14 +4083,9 @@ function openEditProductModal(index) {
     // Add file input change listener for image preview
     const fileInput = document.getElementById('editProductImage');
     fileInput.onchange = function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                imagePreview.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        Promise.all(files.map(prepareProductImage)).then(images => renderImagePreview(imagePreview, images));
     };
     
     // Show modal
@@ -4108,7 +4110,7 @@ function saveProductEdit() {
     const price = parseFloat(document.getElementById('editProductPrice').value);
     const stock = parseInt(document.getElementById('editProductStock').value);
     const description = document.getElementById('editProductDescription').value.trim();
-    const imageFile = document.getElementById('editProductImage').files[0];
+    const imageFiles = Array.from(document.getElementById('editProductImage').files);
     
     // Get selected colors
     const selectedColorCheckboxes = document.querySelectorAll('input[name="editProductColors"]:checked');
@@ -4153,15 +4155,16 @@ function saveProductEdit() {
     }
     
     // If an image file is selected, convert it to a compact shared image.
-    if (imageFile) {
-        prepareProductImage(imageFile).then(image => {
+    if (imageFiles.length > 0) {
+        Promise.all(imageFiles.map(prepareProductImage)).then(images => {
             const product = appData.products[currentEditProductIndex];
             product.name = name;
             product.type = type;
             product.price = price;
             product.stock = stock;
             product.description = description;
-            product.image = image;
+            product.image = images[0];
+            product.images = images;
             product.availableColors = availableColors;
             
             // Save to storage
@@ -4356,14 +4359,14 @@ function renderAdminOrders() {
             </td>
             <td style="max-width: 300px;">${itemsList}</td>
             <td><strong>₱${totalAmount.toFixed(2)}</strong></td>
-            <td><span class="order-status ${order.status}">${getOrderStatusLabel(order.status)}</span></td>
+            <td><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
             <td>${order.date}</td>
             <td>
                 <div><strong>Payment:</strong> ${paymentMethod.toUpperCase()}</div>
                 ${paymentProofHtml}
                 <select class="status-dropdown" onchange="changeOrderStatus(${order.id}, this.value)">
                     <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Order Received</option>
-                    <option value="processing" ${order.status === 'processing' ? 'selected' : ''}>In Production</option>
+                    <option value="processing" ${order.status === 'processing' ? 'selected' : ''}>Production</option>
                     <option value="ready-for-delivery" ${order.status === 'ready-for-delivery' ? 'selected' : ''}>Ready for Delivery</option>
                     <option value="delivered" ${order.status === 'completed' || order.status === 'delivered' ? 'selected' : ''}>Delivered</option>
                     <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
@@ -4376,25 +4379,23 @@ function renderAdminOrders() {
 }
 
 // Change Order Status
-async function changeOrderStatus(orderId, newStatus) {
+function changeOrderStatus(orderId, newStatus) {
     const order = appData.orders.find(o => o.id === orderId);
     if (!order) return;
 
+    const oldStatus = order.status;
     order.status = newStatus;
     
     // Save to localStorage
     saveOrders();
 
+    // Share the new status so the customer sees the updated progress.
+    saveOrderToSharedServer(order).catch(error => {
+        console.error('Unable to sync updated order status:', error);
+    });
+
     if (isOrderInPurchaseHistory(order)) {
         saveOrderToHistory({ ...order });
-    }
-
-    let sharedOrderSaved = true;
-    try {
-        await saveOrderToSharedServer(order);
-    } catch (error) {
-        sharedOrderSaved = false;
-        console.error('Unable to sync order status with shared storage:', error);
     }
     
     // Add notification for customer
@@ -4434,9 +4435,7 @@ async function changeOrderStatus(orderId, newStatus) {
     });
     
     // Show real-time toast notification
-    showStatusUpdateToast(sharedOrderSaved
-        ? `Order #${orderId} status changed to ${getOrderStatusLabel(newStatus)}`
-        : 'Status changed locally, but shared order sync failed');
+    showStatusUpdateToast(`Order #${orderId} status changed to ${newStatus.toUpperCase()}`);
     
     // Reload orders display for complete accuracy
     loadAdminOrders();
@@ -4454,17 +4453,8 @@ function updateOrderStatus(orderId) {
     const order = appData.orders.find(o => o.id === orderId);
     if (!order) return;
 
-    const statuses = ['pending', 'processing', 'ready-for-delivery', 'delivered'];
-    const statusIndex = {
-        pending: 0,
-        'design-approval': 0,
-        processing: 1,
-        printing: 1,
-        'ready-for-delivery': 2,
-        completed: 3,
-        delivered: 3
-    };
-    const currentIndex = statusIndex[order.status] ?? 0;
+    const statuses = ['design-approval', 'printing', 'completed'];
+    const currentIndex = statuses.indexOf(order.status);
     const nextStatus = statuses[(currentIndex + 1) % statuses.length];
 
     order.status = nextStatus;
@@ -4481,7 +4471,7 @@ function updateOrderStatus(orderId) {
     sendOrderNotification(order, nextStatus);
     
     loadAdminOrders();
-    alert(`Order #${orderId} status updated to: ${getOrderStatusLabel(nextStatus)}\n\nNotification sent to customer`);
+    alert(`Order #${orderId} status updated to: ${nextStatus.toUpperCase().replace('-', ' ')}\n\nNotification sent to customer`);
 }
 
 // View Order Details Modal
@@ -4536,7 +4526,7 @@ function viewOrderDetails(orderStr) {
                         <strong>Date:</strong> ${order.date}
                     </div>
                     <div>
-                        <strong>Status:</strong> <span class="order-status ${order.status}">${getOrderStatusLabel(order.status)}</span>
+                        <strong>Status:</strong> <span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span>
                     </div>
                     <div>
                         <strong>Total:</strong> ₱${order.totalAmount.toFixed(2)}
@@ -4575,9 +4565,7 @@ function closeOrderDetailsModal() {
 // Send Order Notification
 function sendOrderNotification(order, newStatus) {
     const statusMessages = {
-        'pending': 'Your order has been received and is now in the order queue.',
         'processing': 'Your order is now being processed.',
-        'ready-for-delivery': 'Your order is ready for delivery.',
         'completed': 'Great news! Your order has been completed and is ready for delivery.',
         'delivered': 'Your order has been delivered.',
         'cancelled': 'Your order has been cancelled.'
@@ -4601,7 +4589,7 @@ function sendOrderNotification(order, newStatus) {
     // Send email notification to customer
     console.log('📧 Sending order email:', notificationData);
 
-    fetch('api/notification/order-status.php', {
+    fetch('/KingPinSystem/api/notification/order-status.php', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -4621,7 +4609,7 @@ function sendOrderNotification(order, newStatus) {
     })
     .catch(error => {
         console.error('❌ Order email failed:', error);
-        showStatusUpdateToast(`Order updated, but email could not be sent: ${error.message}`);
+        showStatusUpdateToast('Order updated, but email could not be sent');
     });
 }
 
@@ -5146,7 +5134,7 @@ function generateStatusReport(orders) {
     Object.entries(statusData).forEach(([status, data]) => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td><span class="order-status ${status}">${getOrderStatusLabel(status)}</span></td>
+            <td><span class="order-status ${status}">${status.toUpperCase()}</span></td>
             <td>${data.count}</td>
             <td>₱${data.revenue.toFixed(2)}</td>
         `;
@@ -5296,14 +5284,6 @@ window.addEventListener('storage', event => {
     if (event.key === 'kingpinGCashQR' && event.newValue) {
         appData.gcashQRCode = event.newValue;
         displayStoreGcashQRCode();
-    }
-});
-
-window.addEventListener('focus', async () => {
-    const ordersSection = document.getElementById('ordersSection');
-    if (appData.currentRole === 'customer' && ordersSection?.style.display === 'block') {
-        await refreshCustomerOrdersFromServer();
-        loadCustomerOrders();
     }
 });
 

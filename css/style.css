@@ -745,10 +745,30 @@ body.light-mode [style*="color: #a0a0a0"] {
 }
 
 .product-image {
+    flex: 0 0 100%;
     width: 100%;
     height: 200px;
     object-fit: cover;
     background-color: #1f1f1f;
+}
+
+.product-image-gallery,
+.modal-product-gallery {
+    display: flex;
+    width: 100%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+    scrollbar-color: #d4af37 #1f1f1f;
+}
+
+.product-image-gallery {
+    scroll-behavior: smooth;
+}
+
+.product-image-gallery .product-image,
+.modal-product-image {
+    scroll-snap-align: start;
 }
 
 .product-info {
@@ -1283,11 +1303,6 @@ body.light-mode [style*="color: #a0a0a0"] {
     color: white;
 }
 
-.order-status.ready-for-delivery {
-    background-color: #4285f4;
-    color: white;
-}
-
 .order-status.completed {
     background-color: #52d452;
     color: white;
@@ -1607,6 +1622,20 @@ table tbody tr:hover {
     height: auto;
     border-radius: 8px;
     object-fit: cover;
+}
+
+.modal-product-gallery {
+    gap: 10px;
+    border-radius: 8px;
+}
+
+.modal-product-image {
+    flex: 0 0 100%;
+    width: 100%;
+    max-height: 460px;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #1f1f1f;
 }
 
 .modal-details h2 {
@@ -2299,13 +2328,6 @@ table tbody tr:hover {
     font-weight: bold;
     z-index: 1;
     position: relative;
-}
-
-#customerPage .tracking-circle {
-    background-color: #3a4a5a;
-    border-color: #71808d;
-    color: #ffffff;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, .45);
 }
 
 .tracking-step.active .tracking-circle {
@@ -4405,21 +4427,6 @@ body.light-mode #customerPage #customerSettingsSection .settings-section {
     color: #35434c !important;
 }
 
-body.light-mode #customerPage #checkoutSection .size-chart-helper h4 {
-    color: #765500 !important;
-}
-
-body.light-mode #customerPage #checkoutSection .size-suggestion {
-    background: #fff8df !important;
-    border-left-color: #b78300 !important;
-    color: #35434c !important;
-}
-
-body.light-mode #customerPage #checkoutSection .size-suggestion p,
-body.light-mode #customerPage #checkoutSection .size-suggestion #sizeNotes {
-    color: #42515b !important;
-}
-
 body.light-mode #customerPage #checkoutSection [style*="background: #1f1f1f"],
 body.light-mode #customerPage #checkoutSection [style*="background: #2a2a2a"],
 body.light-mode #customerPage #designSection [style*="background: #1f1f1f"],
@@ -4458,19 +4465,6 @@ body.light-mode #customerPage .order-details {
     border-color: #d0d7dc !important;
 }
 
-body.light-mode #customerPage .tracking-circle {
-    background: #ffffff !important;
-    border-color: #8e9ba5 !important;
-    color: #263238 !important;
-    text-shadow: none;
-}
-
-body.light-mode #customerPage .tracking-step.active .tracking-circle {
-    background: #d7a914 !important;
-    border-color: #b78300 !important;
-    color: #171717 !important;
-}
-
 body.light-mode #customerPage .design-mode-content,
 body.light-mode #customerPage .clothing-design-form,
 body.light-mode #customerPage .preset-card,
@@ -4499,44 +4493,6 @@ body.light-mode #customerPage .message.error {
 
 body.light-mode #productModal .modal-details,
 body.light-mode #editCustomizationModal .modal-content {
-    color: #263238 !important;
-}
-
-body.light-mode #productModal .modal-content {
-    background: #ffffff !important;
-    border-color: #cbd3d9 !important;
-    box-shadow: 0 10px 30px rgba(42, 52, 60, .2) !important;
-}
-
-body.light-mode #productModal .close {
-    color: #52616b !important;
-}
-
-body.light-mode #productModal .close:hover {
-    color: #263238 !important;
-}
-
-body.light-mode #productModal #productRatingsSection {
-    border-top-color: #d0d7dc !important;
-}
-
-body.light-mode #productModal #averageRatingDisplay,
-body.light-mode #productModal #addRatingForm {
-    background: #f1f4f6 !important;
-    color: #35434c !important;
-}
-
-body.light-mode #productModal #individualRatingsList {
-    background: #ffffff !important;
-}
-
-body.light-mode #productModal #modalProductQuantity {
-    background: #ffffff !important;
-    border-color: #aebac3 !important;
-    color: #263238 !important;
-}
-
-body.light-mode #productModal .modal-actions label {
     color: #263238 !important;
 }
 
@@ -4584,110 +4540,6 @@ body.light-mode #editCustomizationModal textarea {
     color: #263238 !important;
 }
 
-/* Keep every admin workspace surface consistent with the light customer theme. */
-body.light-mode #adminPage .products-table,
-body.light-mode #adminPage .orders-table,
-body.light-mode #adminPage .report-section,
-body.light-mode #adminPage .report-card,
-body.light-mode #adminPage .admin-message-item,
-body.light-mode #adminPage .admin-message-details {
-    background: #ffffff !important;
-    border-color: #d0d7dc !important;
-    box-shadow: 0 10px 24px rgba(42, 52, 60, .08) !important;
-    color: #35434c !important;
-}
-
-body.light-mode #adminPage .admin-message-item:hover,
-body.light-mode #adminPage .admin-message-item.read:hover {
-    background: #f1f4f6 !important;
-    border-color: #b78300 !important;
-}
-
-body.light-mode #adminPage .admin-message-item.unread {
-    background: #fff8df !important;
-    border-left-color: #b78300 !important;
-}
-
-body.light-mode #adminPage .admin-message-item-top strong,
-body.light-mode #adminPage .admin-message-details-header h3,
-body.light-mode #adminPage .admin-message-body,
-body.light-mode #adminPage .admin-message-reply p {
-    color: #263238 !important;
-}
-
-body.light-mode #adminPage .admin-message-item-top span,
-body.light-mode #adminPage .admin-message-details-header p,
-body.light-mode #adminPage .admin-message-meta,
-body.light-mode #adminPage .admin-message-preview,
-body.light-mode #adminPage .message-empty-state,
-body.light-mode #adminPage .admin-message-reply span {
-    color: #53616b !important;
-}
-
-body.light-mode #adminPage .admin-message-meta {
-    border-bottom-color: #d0d7dc !important;
-}
-
-body.light-mode #adminPage .admin-message-reply,
-body.light-mode #adminPage .process-findings p {
-    background: #fff8df !important;
-    border-color: #e4c96e !important;
-    color: #35434c !important;
-}
-
-body.light-mode #adminPage .report-section table tbody tr:nth-child(even),
-body.light-mode #adminPage table tbody tr:hover {
-    background: #f1f4f6 !important;
-}
-
-body.light-mode #adminPage .search-input,
-body.light-mode #adminPage .status-dropdown,
-body.light-mode #adminPage .modal-content,
-body.light-mode #adminPage .modal-header,
-body.light-mode #adminPage .modal-footer {
-    background: #ffffff !important;
-    border-color: #d0d7dc !important;
-    color: #263238 !important;
-}
-
-body.light-mode #adminPage [style*="border-top: 2px solid #3a3a3a"] {
-    border-top-color: #d0d7dc !important;
-}
-
-body.light-mode #orderDetailsModal .modal-content {
-    background: #ffffff !important;
-    border-color: #cbd3d9 !important;
-}
-
-body.light-mode #orderDetailsModal #orderDetailsContent {
-    background: #ffffff !important;
-    color: #263238 !important;
-}
-
-body.light-mode #orderDetailsModal #orderDetailsContent [style*="background: #1f1f1f"] {
-    background: #f1f4f6 !important;
-    border-color: #d0d7dc !important;
-}
-
-body.light-mode #orderDetailsModal #orderDetailsContent [style*="color: #f4f4f4"],
-body.light-mode #orderDetailsModal #orderDetailsContent [style*="color: #e8e8e8"],
-body.light-mode #orderDetailsModal #orderDetailsContent [style*="color: #bcbcbc"] {
-    color: #263238 !important;
-}
-
-body.light-mode #orderDetailsModal #orderDetailsContent [style*="border-bottom: 1px solid #444"] {
-    border-bottom-color: #d0d7dc !important;
-}
-
-body.light-mode #orderDetailsModal #orderDetailsContent h2,
-body.light-mode #orderDetailsModal #orderDetailsContent h3 {
-    color: #765500 !important;
-}
-
-body.light-mode #orderDetailsModal #orderDetailsContent strong {
-    color: #765500 !important;
-}
-
 /* Prevent the admin inventory columns from collapsing into each other on phones. */
 #adminPage .products-table {
     overflow-x: auto;
@@ -4696,71 +4548,6 @@ body.light-mode #orderDetailsModal #orderDetailsContent strong {
 
 #adminPage .products-table table {
     min-width: 760px;
-}
-
-#adminPage #ordersInventory {
-    min-width: 980px;
-    table-layout: fixed;
-}
-
-#adminPage #ordersInventory th,
-#adminPage #ordersInventory td {
-    vertical-align: top;
-}
-
-#adminPage #ordersInventory th:nth-child(1),
-#adminPage #ordersInventory td:nth-child(1) {
-    width: 110px;
-}
-
-#adminPage #ordersInventory th:nth-child(2),
-#adminPage #ordersInventory td:nth-child(2) {
-    width: 165px;
-}
-
-#adminPage #ordersInventory th:nth-child(3),
-#adminPage #ordersInventory td:nth-child(3) {
-    width: 225px;
-}
-
-#adminPage #ordersInventory th:nth-child(4),
-#adminPage #ordersInventory td:nth-child(4) {
-    width: 105px;
-}
-
-#adminPage #ordersInventory th:nth-child(5),
-#adminPage #ordersInventory td:nth-child(5) {
-    width: 130px;
-}
-
-#adminPage #ordersInventory th:nth-child(6),
-#adminPage #ordersInventory td:nth-child(6) {
-    width: 95px;
-}
-
-#adminPage #ordersInventory th:nth-child(7),
-#adminPage #ordersInventory td:nth-child(7) {
-    width: 150px;
-}
-
-#adminPage #ordersInventory td:nth-child(1),
-#adminPage #ordersInventory td:nth-child(4),
-#adminPage #ordersInventory td:nth-child(5),
-#adminPage #ordersInventory td:nth-child(6),
-#adminPage #ordersInventory td:nth-child(7),
-#adminPage #ordersInventory .order-status,
-#adminPage #ordersInventory .status-dropdown {
-    white-space: nowrap;
-}
-
-#adminPage #ordersInventory td:nth-child(2),
-#adminPage #ordersInventory td:nth-child(3) {
-    overflow-wrap: anywhere;
-}
-
-#adminPage #ordersInventory .status-dropdown {
-    width: 100%;
-    min-width: 160px;
 }
 
 #adminPage .products-table th,
