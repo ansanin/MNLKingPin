@@ -4629,6 +4629,40 @@ body.light-mode #adminPage [style*="border-top: 2px solid #3a3a3a"] {
     border-top-color: #d0d7dc !important;
 }
 
+body.light-mode #orderDetailsModal .modal-content {
+    background: #ffffff !important;
+    border-color: #cbd3d9 !important;
+}
+
+body.light-mode #orderDetailsModal #orderDetailsContent {
+    background: #ffffff !important;
+    color: #263238 !important;
+}
+
+body.light-mode #orderDetailsModal #orderDetailsContent [style*="background: #1f1f1f"] {
+    background: #f1f4f6 !important;
+    border-color: #d0d7dc !important;
+}
+
+body.light-mode #orderDetailsModal #orderDetailsContent [style*="color: #f4f4f4"],
+body.light-mode #orderDetailsModal #orderDetailsContent [style*="color: #e8e8e8"],
+body.light-mode #orderDetailsModal #orderDetailsContent [style*="color: #bcbcbc"] {
+    color: #263238 !important;
+}
+
+body.light-mode #orderDetailsModal #orderDetailsContent [style*="border-bottom: 1px solid #444"] {
+    border-bottom-color: #d0d7dc !important;
+}
+
+body.light-mode #orderDetailsModal #orderDetailsContent h2,
+body.light-mode #orderDetailsModal #orderDetailsContent h3 {
+    color: #765500 !important;
+}
+
+body.light-mode #orderDetailsModal #orderDetailsContent strong {
+    color: #765500 !important;
+}
+
 /* Prevent the admin inventory columns from collapsing into each other on phones. */
 #adminPage .products-table {
     overflow-x: auto;

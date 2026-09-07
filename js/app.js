@@ -3143,17 +3143,11 @@ function processCustomerOrder() {
             messageDiv.style.display = 'block';
         }
 
-        showStatusUpdateToast(`✅ Order #${orderData.id} placed successfully! Receipt is ready.`);
         sessionStorage.setItem('kingpinLastOrderSuccess', JSON.stringify({
             orderId: orderData.id,
             message: `✅ Order #${orderData.id} placed successfully! Receipt is ready.`,
             timestamp: Date.now()
         }));
-        if (typeof alert === 'function') {
-            setTimeout(() => {
-                alert(`✅ Your order #${orderData.id} has been placed successfully!`);
-            }, 200);
-        }
 
         document.getElementById('checkoutSection').style.display = 'none';
         document.getElementById('productsSection').style.display = 'block';
