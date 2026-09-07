@@ -4699,7 +4699,7 @@ body.light-mode #orderDetailsModal #orderDetailsContent strong {
 }
 
 #adminPage #ordersInventory {
-    min-width: 1120px;
+    min-width: 980px;
     table-layout: fixed;
 }
 
@@ -4710,37 +4710,37 @@ body.light-mode #orderDetailsModal #orderDetailsContent strong {
 
 #adminPage #ordersInventory th:nth-child(1),
 #adminPage #ordersInventory td:nth-child(1) {
-    width: 145px;
+    width: 110px;
 }
 
 #adminPage #ordersInventory th:nth-child(2),
 #adminPage #ordersInventory td:nth-child(2) {
-    width: 205px;
+    width: 165px;
 }
 
 #adminPage #ordersInventory th:nth-child(3),
 #adminPage #ordersInventory td:nth-child(3) {
-    width: 285px;
+    width: 225px;
 }
 
 #adminPage #ordersInventory th:nth-child(4),
 #adminPage #ordersInventory td:nth-child(4) {
-    width: 125px;
+    width: 105px;
 }
 
 #adminPage #ordersInventory th:nth-child(5),
 #adminPage #ordersInventory td:nth-child(5) {
-    width: 155px;
+    width: 130px;
 }
 
 #adminPage #ordersInventory th:nth-child(6),
 #adminPage #ordersInventory td:nth-child(6) {
-    width: 125px;
+    width: 95px;
 }
 
 #adminPage #ordersInventory th:nth-child(7),
 #adminPage #ordersInventory td:nth-child(7) {
-    width: 180px;
+    width: 150px;
 }
 
 #adminPage #ordersInventory td:nth-child(1),
