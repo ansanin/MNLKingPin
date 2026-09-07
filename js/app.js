@@ -333,6 +333,18 @@ async function saveOrderToSharedServer(order) {
     throw new Error('Shared order API unavailable');
 }
 
+async function refreshCustomerOrdersFromServer() {
+    try {
+        const sharedOrders = await fetchSharedOrders();
+        const sharedIds = new Set(sharedOrders.map(order => String(order.id)));
+        const localOnlyOrders = appData.orders.filter(order => !sharedIds.has(String(order.id)));
+        appData.orders = [...sharedOrders, ...localOnlyOrders];
+        saveOrders();
+    } catch (error) {
+        console.warn('Unable to refresh customer orders from shared storage:', error);
+    }
+}
+
 // Save notifications to localStorage
 function saveNotifications() {
     localStorage.setItem('kingpinNotification', JSON.stringify(appData.notifications));
@@ -1604,7 +1616,7 @@ function toggleCart() {
     }
 }
 
-function viewOrders() {
+async function viewOrders() {
     appData.notifications.forEach(notification => {
         if (notification.type === 'customer') {
             notification.read = true;
@@ -1617,6 +1629,7 @@ function viewOrders() {
     document.getElementById('purchaseHistorySection').style.display = 'none';
     document.getElementById('checkoutSection').style.display = 'none';
     document.getElementById('customerServiceSection').style.display = 'none';
+    await refreshCustomerOrdersFromServer();
     loadCustomerOrders();
     updateNotificationBadges();
     updateFloatingBackButton();
