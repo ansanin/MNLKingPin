@@ -4393,6 +4393,21 @@ body.light-mode #customerPage #customerSettingsSection .settings-section {
     color: #35434c !important;
 }
 
+body.light-mode #customerPage #checkoutSection .size-chart-helper h4 {
+    color: #765500 !important;
+}
+
+body.light-mode #customerPage #checkoutSection .size-suggestion {
+    background: #fff8df !important;
+    border-left-color: #b78300 !important;
+    color: #35434c !important;
+}
+
+body.light-mode #customerPage #checkoutSection .size-suggestion p,
+body.light-mode #customerPage #checkoutSection .size-suggestion #sizeNotes {
+    color: #42515b !important;
+}
+
 body.light-mode #customerPage #checkoutSection [style*="background: #1f1f1f"],
 body.light-mode #customerPage #checkoutSection [style*="background: #2a2a2a"],
 body.light-mode #customerPage #designSection [style*="background: #1f1f1f"],
