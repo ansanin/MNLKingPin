@@ -38,9 +38,17 @@
                     <div id="customerLoginForm">
                         <div id="googleSignInButton" class="google-sign-in-button"></div>
                         <button type="button" class="btn btn-secondary quick-login-button" id="quickLoginBtn" onclick="quickLogin()" style="display: none;">Quick Login</button>
+                        <form id="customerLoginFormElement" onsubmit="loginCustomer(event)">
+                            <div class="form-group"><label for="customerLoginEmail">✉ &nbsp;Email</label><input type="email" id="customerLoginEmail" placeholder="your@email.com" required></div>
+                            <div class="form-group"><label for="customerLoginPassword">▣ &nbsp;Password</label><div class="password-field"><input type="password" id="customerLoginPassword" placeholder="Enter your password" required autocomplete="current-password"><button type="button" onclick="togglePassword('customerLoginPassword', this)" aria-label="Show password">◉</button></div></div>
+                            <div class="login-options"><label><input type="checkbox" id="rememberCustomer"> <span>Remember me</span></label><button type="button" class="text-button" onclick="forgotPassword()">Forgot password? &nbsp;→</button></div>
+                            <button type="submit" class="btn btn-primary login-submit">→ &nbsp; Login with Email</button>
+                        </form>
+                        <p class="create-account">Don't have an account? <button type="button" class="text-button" onclick="showCustomerSignup()">Create Account &nbsp;→</button></p>
                         <button type="button" class="login-back" onclick="hideCustomerAuth()"><span aria-hidden="true">←</span> Back</button>
                         <div id="customerLoginErrorMessage" class="error-message"></div>
                     </div>
+                    <div id="customerSignupForm" style="display: none;"><h3>Create Customer Account</h3><form id="customerSignupFormElement" onsubmit="signupCustomer(event)"><div class="form-group"><label for="customerSignupUsername">Username</label><input type="text" id="customerSignupUsername" required minlength="3" placeholder="Choose a username" autocomplete="username"></div><div class="form-group"><label for="customerSignupName">Full Name</label><input type="text" id="customerSignupName" required placeholder="John Doe"></div><div class="form-group"><label for="customerSignupEmail">Email</label><input type="email" id="customerSignupEmail" required placeholder="your@gmail.com"></div><div class="form-group"><label for="customerSignupPhone">Phone (optional)</label><input type="tel" id="customerSignupPhone" placeholder="+63 9xx xxx xxxx"></div><div class="form-group"><label for="customerSignupPassword">Password</label><div class="password-field"><input type="password" id="customerSignupPassword" required minlength="6" placeholder="At least 6 characters" autocomplete="new-password"><button type="button" onclick="togglePassword('customerSignupPassword', this)" aria-label="Show password">◉</button></div></div><button type="submit" class="btn btn-primary login-submit">Create Account</button><button type="button" class="btn btn-secondary form-back" onclick="showCustomerLogin()">Back to Login</button></form><div id="customerSignupErrorMessage" class="error-message"></div></div>
                 </div>
                 <div id="adminLoginForm" class="login-auth-section" style="display: none;"><form id="adminForm" onsubmit="loginAdmin(event)"><div class="form-group"><label for="adminUsername">Admin username</label><input type="text" id="adminUsername" placeholder="admin" required></div><div class="form-group"><label for="adminPassword">Password</label><div class="password-field"><input type="password" id="adminPassword" placeholder="Enter your password" required><button type="button" onclick="togglePassword('adminPassword', this)" aria-label="Show password">◉</button></div></div><button type="submit" class="btn btn-primary login-submit">→ &nbsp; Login as Admin</button><button type="button" class="btn btn-secondary form-back" onclick="hideAdminLogin()">← &nbsp; Back</button></form><div id="adminErrorMessage" class="error-message"></div></div>
                 <footer class="login-footer"><svg class="footer-crown" viewBox="0 0 32 22" aria-hidden="true"><path d="M3 18h26M5 17 3 4l8 7 5-9 5 9 8-7-2 13Z"></path></svg><span>© 2025 MNL KingPin CamSur. All rights reserved.</span></footer>
@@ -1245,7 +1253,7 @@
         </div>
     </div>
 
-    <script src="js/app.js?v=20260907-google-chooser-2"></script>
+    <script src="js/app.js?v=20260907-google-chooser-3"></script>
     <script src="js/design-interface.js?v=20260901-order-fix"></script>
     <script>
         // Force initialization when page loads
