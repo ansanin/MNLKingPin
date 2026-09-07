@@ -4544,6 +4544,76 @@ body.light-mode #editCustomizationModal textarea {
     color: #263238 !important;
 }
 
+/* Keep every admin workspace surface consistent with the light customer theme. */
+body.light-mode #adminPage .products-table,
+body.light-mode #adminPage .orders-table,
+body.light-mode #adminPage .report-section,
+body.light-mode #adminPage .report-card,
+body.light-mode #adminPage .admin-message-item,
+body.light-mode #adminPage .admin-message-details {
+    background: #ffffff !important;
+    border-color: #d0d7dc !important;
+    box-shadow: 0 10px 24px rgba(42, 52, 60, .08) !important;
+    color: #35434c !important;
+}
+
+body.light-mode #adminPage .admin-message-item:hover,
+body.light-mode #adminPage .admin-message-item.read:hover {
+    background: #f1f4f6 !important;
+    border-color: #b78300 !important;
+}
+
+body.light-mode #adminPage .admin-message-item.unread {
+    background: #fff8df !important;
+    border-left-color: #b78300 !important;
+}
+
+body.light-mode #adminPage .admin-message-item-top strong,
+body.light-mode #adminPage .admin-message-details-header h3,
+body.light-mode #adminPage .admin-message-body,
+body.light-mode #adminPage .admin-message-reply p {
+    color: #263238 !important;
+}
+
+body.light-mode #adminPage .admin-message-item-top span,
+body.light-mode #adminPage .admin-message-details-header p,
+body.light-mode #adminPage .admin-message-meta,
+body.light-mode #adminPage .admin-message-preview,
+body.light-mode #adminPage .message-empty-state,
+body.light-mode #adminPage .admin-message-reply span {
+    color: #53616b !important;
+}
+
+body.light-mode #adminPage .admin-message-meta {
+    border-bottom-color: #d0d7dc !important;
+}
+
+body.light-mode #adminPage .admin-message-reply,
+body.light-mode #adminPage .process-findings p {
+    background: #fff8df !important;
+    border-color: #e4c96e !important;
+    color: #35434c !important;
+}
+
+body.light-mode #adminPage .report-section table tbody tr:nth-child(even),
+body.light-mode #adminPage table tbody tr:hover {
+    background: #f1f4f6 !important;
+}
+
+body.light-mode #adminPage .search-input,
+body.light-mode #adminPage .status-dropdown,
+body.light-mode #adminPage .modal-content,
+body.light-mode #adminPage .modal-header,
+body.light-mode #adminPage .modal-footer {
+    background: #ffffff !important;
+    border-color: #d0d7dc !important;
+    color: #263238 !important;
+}
+
+body.light-mode #adminPage [style*="border-top: 2px solid #3a3a3a"] {
+    border-top-color: #d0d7dc !important;
+}
+
 /* Prevent the admin inventory columns from collapsing into each other on phones. */
 #adminPage .products-table {
     overflow-x: auto;
