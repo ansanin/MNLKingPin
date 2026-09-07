@@ -1117,28 +1117,6 @@
                 </div>
 
                 <div class="settings-section">
-                    <h3>📧 Order Email Settings</h3>
-                    <form id="emailSettingsForm" onsubmit="saveEmailSettings(event)">
-                        <div class="form-group">
-                            <label for="emailSettingsAddress">Sender Gmail Address:</label>
-                            <input type="email" id="emailSettingsAddress" placeholder="kingpinshop@gmail.com" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="emailSettingsAppPassword">Gmail App Password:</label>
-                            <input type="password" id="emailSettingsAppPassword" placeholder="16-character App Password" required>
-                            <small>Use a Gmail App Password, not your regular Gmail password.</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="emailSettingsKey">Email Settings Security Key:</label>
-                            <input type="password" id="emailSettingsKey" required>
-                            <small>This key is configured once in Netlify and is never shown to customers.</small>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Save Email Settings</button>
-                    </form>
-                    <div id="emailSettingsMessage" class="message"></div>
-                </div>
-
-                <div class="settings-section">
                     <h3>💳 GCash Payment QR Code</h3>
                     <form id="gcashQRForm" onsubmit="uploadGCashQRCode(event)">
                         <div class="form-group">

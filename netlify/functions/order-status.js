@@ -1,22 +1,4 @@
 const nodemailer = require('nodemailer');
-const crypto = require('crypto');
-const { connectLambda, getStore } = require('@netlify/blobs');
-
-async function loadSavedEmailSettings(event) {
-    connectLambda(event);
-    const encryptionKey = process.env.KINGPIN_EMAIL_SETTINGS_KEY;
-    if (!encryptionKey) return null;
-
-    const store = getStore('kingpin-email-settings');
-    const saved = await store.get('smtp', { type: 'json' });
-    if (!saved?.iv || !saved?.tag || !saved?.data) return null;
-
-    const key = crypto.createHash('sha256').update(encryptionKey).digest();
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(saved.iv, 'hex'));
-    decipher.setAuthTag(Buffer.from(saved.tag, 'hex'));
-    const decrypted = Buffer.concat([decipher.update(Buffer.from(saved.data, 'base64')), decipher.final()]);
-    return JSON.parse(decrypted.toString('utf8'));
-}
 
 function jsonResponse(statusCode, body) {
     return {
@@ -39,14 +21,13 @@ exports.handler = async function handler(event) {
             return jsonResponse(400, { error: 'orderId and customerEmail are required' });
         }
 
-        const savedSettings = await loadSavedEmailSettings(event);
-        const smtpHost = savedSettings?.host || process.env.SMTP_HOST || 'smtp.gmail.com';
-        const smtpUser = savedSettings?.email || process.env.SMTP_USER;
-        const smtpPass = savedSettings?.appPassword || process.env.SMTP_PASS;
-        const smtpPort = Number(savedSettings?.port || process.env.SMTP_PORT || 587);
+        const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+        const smtpUser = process.env.SMTP_USER;
+        const smtpPass = process.env.SMTP_PASS;
+        const smtpPort = Number(process.env.SMTP_PORT || 587);
 
         if (!smtpUser || !smtpPass) {
-            return jsonResponse(503, { error: 'Email service is not configured. Save Gmail settings in Admin Settings first.' });
+            return jsonResponse(503, { error: 'Email service is not configured in Netlify Environment Variables.' });
         }
 
         const transporter = nodemailer.createTransport({
@@ -57,7 +38,7 @@ exports.handler = async function handler(event) {
         });
 
         await transporter.sendMail({
-            from: savedSettings?.email || process.env.SMTP_FROM || smtpUser,
+            from: process.env.SMTP_FROM || smtpUser,
             to: notification.customerEmail,
             subject: `KingPin Order #${notification.orderId} Status Update`,
             text: notification.message,
