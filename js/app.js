@@ -3294,8 +3294,8 @@ function getOrderStatusLabel(status) {
         processing: 'In Production',
         printing: 'In Production',
         'ready-for-delivery': 'Ready for Delivery',
-        completed: 'Completed / Delivered',
-        delivered: 'Completed / Delivered',
+        completed: 'Delivered',
+        delivered: 'Delivered',
         cancelled: 'Cancelled'
     };
     return labels[status] || String(status || 'Pending').replace(/-/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
@@ -3360,7 +3360,7 @@ function loadCustomerOrders() {
             completed: 3,
             delivered: 3
         };
-        const statusLabels = ['Order Received', 'In Production', 'Ready for Delivery', 'Completed / Delivered'];
+        const statusLabels = ['Order Received', 'In Production', 'Ready for Delivery', 'Delivered'];
         const currentStatusIndex = statusProgress[order.status] ?? 0;
         
         let statusHtml = '<div class="order-tracking">';
@@ -4337,7 +4337,7 @@ function renderAdminOrders() {
                     <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Order Received</option>
                     <option value="processing" ${order.status === 'processing' ? 'selected' : ''}>In Production</option>
                     <option value="ready-for-delivery" ${order.status === 'ready-for-delivery' ? 'selected' : ''}>Ready for Delivery</option>
-                    <option value="delivered" ${order.status === 'completed' || order.status === 'delivered' ? 'selected' : ''}>Completed / Delivered</option>
+                    <option value="delivered" ${order.status === 'completed' || order.status === 'delivered' ? 'selected' : ''}>Delivered</option>
                     <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
                 </select>
                 <button class="btn btn-small" onclick="viewOrderDetails(${JSON.stringify(order).replace(/"/g, '&quot;')})" style="margin-top: 8px; background: #4caf50; padding: 4px 8px; font-size: 0.85em; width: 100%;">👁️ View</button>
