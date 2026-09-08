@@ -15,6 +15,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/notification/order-status"
+  to = "/.netlify/functions/order-status"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/admin"
   to = "/admin.html"
   status = 200

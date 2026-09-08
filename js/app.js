@@ -4669,29 +4669,30 @@ function sendOrderNotification(order, newStatus) {
         return;
     }
 
-    const emailEndpoint = new URL('api/notification/order-status.php', window.location.href).toString();
-    console.log('📧 Sending order email:', { ...notificationData, emailEndpoint });
+    const emailEndpoints = [
+        '/.netlify/functions/order-status',
+        new URL('api/notification/order-status.php', window.location.href).toString()
+    ];
 
-    fetch(emailEndpoint, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(notificationData)
-    })
-    .then(response => response.json().then(result => ({
-        ok: response.ok,
-        result: result
-    })))
-    .then(({ ok, result }) => {
-        if (!ok) {
-            throw new Error(result.error || 'Notification request failed');
+    const sendEmail = async () => {
+        for (const emailEndpoint of emailEndpoints) {
+            try {
+                const response = await fetch(emailEndpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(notificationData)
+                });
+                const result = await response.json();
+                if (response.ok && result.success === true) return result;
+            } catch (error) {
+                console.warn(`Unable to send order email through ${emailEndpoint}:`, error);
+            }
         }
+        throw new Error('Order status email was not sent');
+    };
 
-        if (result.success !== true) {
-            throw new Error(result.error || 'Order status email was not sent');
-        }
-
+    sendEmail()
+    .then(result => {
         console.log('✅ Order email result:', result);
     })
     .catch(error => {
