@@ -1,3 +1,5 @@
+const nodemailer = require('nodemailer');
+
 function jsonResponse(statusCode, body) {
     return {
         statusCode,
@@ -10,9 +12,11 @@ exports.handler = async function handler(event) {
     if (event.httpMethod === 'OPTIONS') return jsonResponse(204, {});
     if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'Method not allowed' });
 
-    const apiKey = process.env.RESEND_API_KEY;
-    const fromEmail = process.env.RESEND_FROM_EMAIL;
-    if (!apiKey || !fromEmail) {
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const resendFromEmail = process.env.RESEND_FROM_EMAIL;
+    if ((!smtpUser || !smtpPass) && (!resendApiKey || !resendFromEmail)) {
         return jsonResponse(500, { error: 'Email service is not configured' });
     }
 
@@ -23,26 +27,35 @@ exports.handler = async function handler(event) {
         }
 
         const status = String(data.status || 'updated').replace(/-/g, ' ');
+        const subject = `KingPin Order #${data.orderId} Status Update`;
+        const html = `<h2>KingPin Order Update</h2><p>Your order <strong>#${data.orderId}</strong> has been updated.</p><p><strong>New Status:</strong> ${status}</p><p>${data.message || 'Your order status has been updated.'}</p><p>Thank you for choosing KingPin!</p>`;
+
+        if (smtpUser && smtpPass) {
+            const transporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: { user: smtpUser, pass: smtpPass }
+            });
+            await transporter.sendMail({
+                from: process.env.SMTP_FROM || smtpUser,
+                to: data.customerEmail,
+                subject,
+                html
+            });
+            return jsonResponse(200, { success: true, message: 'Order status email sent successfully' });
+        }
+
         const response = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
-                Authorization: `Bearer ${apiKey}`,
+                Authorization: `Bearer ${resendApiKey}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                from: fromEmail,
-                to: [data.customerEmail],
-                subject: `KingPin Order #${data.orderId} Status Update`,
-                html: `<h2>KingPin Order Update</h2><p>Your order <strong>#${data.orderId}</strong> has been updated.</p><p><strong>New Status:</strong> ${status}</p><p>${data.message || 'Your order status has been updated.'}</p><p>Thank you for choosing KingPin!</p>`
-            })
+            body: JSON.stringify({ from: resendFromEmail, to: [data.customerEmail], subject, html })
         });
-
         if (!response.ok) {
-            const error = await response.text();
-            console.error('Resend email error:', error);
+            console.error('Resend email error:', await response.text());
             return jsonResponse(502, { error: 'Email provider rejected the message' });
         }
-
         return jsonResponse(200, { success: true, message: 'Order status email sent successfully' });
     } catch (error) {
         console.error('Order status email error:', error);
