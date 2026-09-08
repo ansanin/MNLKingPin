@@ -1694,6 +1694,20 @@ function viewPurchaseHistory() {
     document.getElementById('checkoutSection').style.display = 'none';
     document.getElementById('customerServiceSection').style.display = 'none';
     loadPurchaseHistory();
+    fetchSharedOrders().then(sharedOrders => {
+        const sharedById = new Map(sharedOrders.map(order => [String(order.id), order]));
+        const localIds = new Set(appData.orders.map(order => String(order.id)));
+
+        appData.orders = appData.orders.map(order => sharedById.get(String(order.id)) || order);
+        sharedOrders.forEach(order => {
+            if (!localIds.has(String(order.id))) appData.orders.push(order);
+        });
+
+        saveOrders();
+        loadPurchaseHistory();
+    }).catch(error => {
+        console.warn('Using local orders because shared orders could not be loaded:', error);
+    });
     updateFloatingBackButton();
 }
 
