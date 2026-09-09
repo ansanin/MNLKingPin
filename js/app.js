@@ -4610,12 +4610,12 @@ function viewOrderDetails(orderStr) {
                     </div>
                 </div>
                 
-                <div style="background: #1f1f1f; color: #f4f4f4; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #3a3a3a;">
-                    <h3 style="color: #f4f4f4; margin-top: 0; margin-bottom: 10px;">Customer Information</h3>
-                    <div style="margin-bottom: 6px;"><strong style="color: #d4af37;">Name:</strong> ${order.customerName || 'N/A'}</div>
-                    <div style="margin-bottom: 6px;"><strong style="color: #d4af37;">Email:</strong> ${order.customerEmail || 'N/A'}</div>
-                    <div style="margin-bottom: 6px;"><strong style="color: #d4af37;">Phone:</strong> ${order.customerPhone || 'N/A'}</div>
-                    <div><strong style="color: #d4af37;">Address:</strong> ${order.customerAddress || 'N/A'}</div>
+                <div class="admin-order-customer-info">
+                    <h3>Customer Information</h3>
+                    <div class="admin-order-customer-field"><strong>Name:</strong> ${order.customerName || 'N/A'}</div>
+                    <div class="admin-order-customer-field"><strong>Email:</strong> ${order.customerEmail || 'N/A'}</div>
+                    <div class="admin-order-customer-field"><strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
+                    <div class="admin-order-customer-field"><strong>Address:</strong> ${order.customerAddress || 'N/A'}</div>
                 </div>
                 
                 <div>

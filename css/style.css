@@ -4946,3 +4946,42 @@ body.light-mode #adminPage .message {
     border-color: #d0d7dc !important;
     color: #35434c !important;
 }
+
+.admin-order-customer-info {
+    margin-bottom: 20px;
+    padding: 16px;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    background: #1f1f1f;
+    color: #f4f4f4;
+}
+
+.admin-order-customer-info h3 {
+    margin: 0 0 10px;
+    color: #f4f4f4;
+}
+
+.admin-order-customer-field {
+    margin-bottom: 6px;
+    color: #f4f4f4;
+    overflow-wrap: anywhere;
+}
+
+.admin-order-customer-field strong {
+    color: #d4af37;
+}
+
+body.light-mode #orderDetailsModal .admin-order-customer-info {
+    background: #f1f4f6 !important;
+    border-color: #d0d7dc !important;
+    color: #263238 !important;
+}
+
+body.light-mode #orderDetailsModal .admin-order-customer-info h3,
+body.light-mode #orderDetailsModal .admin-order-customer-field {
+    color: #263238 !important;
+}
+
+body.light-mode #orderDetailsModal .admin-order-customer-field strong {
+    color: #765500 !important;
+}
