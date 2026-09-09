@@ -3301,6 +3301,9 @@ body.light-mode .floating-back-button button {
 body.light-mode .floating-back-button button:hover {
     color: #000;
 }
+
+#customerPage .navbar-right .btn,
+#adminPage .navbar-right .btn {
     padding: 8px 12px;
     border: 1px solid rgba(212, 175, 55, 0.28);
     border-radius: 10px;
@@ -4785,4 +4788,161 @@ body.light-mode #customerPage #cartSection button.btn-secondary {
         max-width: 100%;
         height: auto;
     }
+}
+
+/* Keep admin dialogs and management panels readable in light mode. */
+body.light-mode #adminPage .modal-content,
+body.light-mode #orderDetailsModal .modal-content {
+    background: #ffffff !important;
+    border-color: #d2d8dd !important;
+    color: #263238 !important;
+}
+
+body.light-mode #adminPage .modal-header,
+body.light-mode #orderDetailsModal .modal-header,
+body.light-mode #adminPage .modal-footer,
+body.light-mode #orderDetailsModal .modal-footer {
+    background: #f1f4f6 !important;
+    border-color: #d2d8dd !important;
+    color: #263238 !important;
+}
+
+body.light-mode #adminPage .modal-header h2,
+body.light-mode #adminPage .modal-header h3,
+body.light-mode #orderDetailsModal .modal-header h2,
+body.light-mode #orderDetailsModal .modal-header h3,
+body.light-mode #adminPage .modal-body h3,
+body.light-mode #adminPage .modal-body h4,
+body.light-mode #orderDetailsModal .modal-body h3,
+body.light-mode #orderDetailsModal .modal-body h4 {
+    color: #765500 !important;
+}
+
+body.light-mode #adminPage .modal-body,
+body.light-mode #orderDetailsModal .modal-body,
+body.light-mode #adminPage .modal-body p,
+body.light-mode #orderDetailsModal .modal-body p,
+body.light-mode #adminPage .modal-body span,
+body.light-mode #orderDetailsModal .modal-body span,
+body.light-mode #adminPage .modal-body strong,
+body.light-mode #orderDetailsModal .modal-body strong {
+    color: #35434c !important;
+}
+
+body.light-mode #adminPage .modal-body input,
+body.light-mode #adminPage .modal-body select,
+body.light-mode #adminPage .modal-body textarea,
+body.light-mode #orderDetailsModal .modal-body input,
+body.light-mode #orderDetailsModal .modal-body select,
+body.light-mode #orderDetailsModal .modal-body textarea {
+    background: #ffffff !important;
+    border-color: #b8c2cc !important;
+    color: #263238 !important;
+}
+
+body.light-mode #adminPage .modal-body [style*="background: #1f1f1f"],
+body.light-mode #adminPage .modal-body [style*="background: #2a2a2a"],
+body.light-mode #adminPage .modal-body [style*="background: #0a0a0a"],
+body.light-mode #orderDetailsModal .modal-body [style*="background: #1f1f1f"],
+body.light-mode #orderDetailsModal .modal-body [style*="background: #2a2a2a"],
+body.light-mode #orderDetailsModal .modal-body [style*="background: #0a0a0a"] {
+    background: #f1f4f6 !important;
+    border-color: #d0d7dc !important;
+}
+
+body.light-mode #adminPage .modal-footer .btn-secondary,
+body.light-mode #orderDetailsModal .modal-footer .btn-secondary {
+    background: #e8edf0 !important;
+    border-color: #c3ccd3 !important;
+    color: #263238 !important;
+}
+
+body.light-mode #adminPage .admin-message-item,
+body.light-mode #adminPage .admin-message-details {
+    background: linear-gradient(145deg, #ffffff, #f1f4f6) !important;
+    border-color: #d2d8dd !important;
+    color: #35434c !important;
+    box-shadow: 0 10px 24px rgba(42, 52, 60, .08);
+}
+
+body.light-mode #adminPage .admin-message-item:hover,
+body.light-mode #adminPage .admin-message-item.read:hover {
+    background: #f7f9fa !important;
+}
+
+body.light-mode #adminPage .admin-message-item.unread {
+    background: #fff8df !important;
+    border-left-color: #c99416 !important;
+}
+
+body.light-mode #adminPage .admin-message-item-top strong,
+body.light-mode #adminPage .admin-message-details-header h3,
+body.light-mode #adminPage .admin-message-body,
+body.light-mode #adminPage .admin-message-reply p {
+    color: #263238 !important;
+}
+
+body.light-mode #adminPage .admin-message-item-top span,
+body.light-mode #adminPage .admin-message-details-header p,
+body.light-mode #adminPage .admin-message-meta,
+body.light-mode #adminPage .admin-message-reply span,
+body.light-mode #adminPage .message-empty-state {
+    color: #53616b !important;
+}
+
+body.light-mode #adminPage .admin-message-subject {
+    color: #765500 !important;
+}
+
+body.light-mode #adminPage .admin-message-preview {
+    color: #42515b !important;
+}
+
+body.light-mode #adminPage .admin-message-meta {
+    border-bottom-color: #d2d8dd !important;
+}
+
+body.light-mode #adminPage .admin-message-reply {
+    background: #fff8df !important;
+    border-color: #e0c56d !important;
+}
+
+body.light-mode #adminPage .admin-reply-box textarea {
+    background: #ffffff !important;
+    border-color: #b8c2cc !important;
+    color: #263238 !important;
+}
+
+body.light-mode #adminPage .orders-table,
+body.light-mode #adminPage .history-controls,
+body.light-mode #adminPage #historyTab .orders-table,
+body.light-mode #adminPage #customersTab .orders-table {
+    background: #ffffff !important;
+    color: #35434c !important;
+}
+
+body.light-mode #adminPage .orders-table table,
+body.light-mode #adminPage .orders-table tbody tr,
+body.light-mode #adminPage .orders-table tbody td,
+body.light-mode #adminPage .orders-table tbody th {
+    background: #ffffff !important;
+    color: #35434c !important;
+}
+
+body.light-mode #adminPage .orders-table tbody tr:hover {
+    background: #f1f4f6 !important;
+}
+
+body.light-mode #adminPage .price-cell input,
+body.light-mode #adminPage .stock-cell input,
+body.light-mode #adminPage .status-dropdown {
+    background: #ffffff !important;
+    border-color: #b8c2cc !important;
+    color: #263238 !important;
+}
+
+body.light-mode #adminPage .message {
+    background: #f1f4f6 !important;
+    border-color: #d0d7dc !important;
+    color: #35434c !important;
 }
