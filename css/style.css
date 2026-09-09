@@ -494,6 +494,17 @@ body.light-mode [style*="color: #a0a0a0"] {
     text-align: center;
 }
 
+#customerPage .customer-quick-action .notification-badge {
+    top: -5px;
+    right: -4px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 3px;
+    font-size: 0.62rem;
+    line-height: 17px;
+    z-index: 2;
+}
+
 /* Status Dropdown */
 .status-dropdown {
     padding: 8px 12px;
@@ -4117,6 +4128,8 @@ body.light-mode #customerPage .customer-service-footer {
         gap: 6px;
         padding-right: 6px;
         margin-right: 6px;
+        flex: 1 1 auto;
+        min-width: 0;
     }
 
     #customerPage .navbar-emblem-container,
@@ -4150,6 +4163,11 @@ body.light-mode #customerPage .customer-service-footer {
     #customerPage #customerDisplayName,
     #adminPage #adminDisplayName {
         font-size: 11px;
+        min-width: 0;
+        max-width: 112px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     #customerPage .navbar-division,
@@ -4160,6 +4178,8 @@ body.light-mode #customerPage .customer-service-footer {
     #customerPage .navbar-right,
     #adminPage .navbar-right {
         display: flex;
+        width: auto;
+        flex: 0 0 auto;
         align-items: center;
         flex-wrap: nowrap;
         gap: 5px;
@@ -4197,7 +4217,8 @@ body.light-mode #customerPage .customer-service-footer {
         width: 38px !important;
         flex: 0 0 38px;
         padding: 6px 5px;
-        font-size: 13px;
+        font-size: 19px;
+        line-height: 1;
         border: none !important;
         background: transparent !important;
         box-shadow: none !important;
@@ -4208,10 +4229,21 @@ body.light-mode #customerPage .customer-service-footer {
         width: 38px !important;
         flex: 0 0 38px;
         padding: 6px 5px;
-        font-size: 13px;
+        font-size: 19px;
+        line-height: 1;
         border: none !important;
         background: transparent !important;
         box-shadow: none !important;
+    }
+
+    #customerPage .customer-quick-action .notification-badge {
+        top: -4px;
+        right: -4px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 2px;
+        font-size: 9px;
+        line-height: 16px;
     }
 
     #customerPage .nav-menu-toggle,

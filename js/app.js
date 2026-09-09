@@ -1779,7 +1779,12 @@ function viewCustomerNotifications() {
     document.getElementById('checkoutSection').style.display = 'none';
     document.getElementById('customerServiceSection').style.display = 'none';
     saveNavigationState('customer', 'viewCustomerNotifications');
+    appData.notifications.forEach(notification => {
+        if (notification.type === 'customer') notification.read = true;
+    });
+    saveNotifications();
     loadCustomerNotifications();
+    updateNotificationBadges();
     updateFloatingBackButton();
 }
 
