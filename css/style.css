@@ -4188,8 +4188,8 @@ body.light-mode #customerPage .customer-service-footer {
     #customerPage .nav-menu-scroll-wrapper,
     #adminPage .nav-menu-scroll-wrapper {
         width: auto;
-        min-width: 32px;
-        flex: 0 0 32px;
+        min-width: 58px;
+        flex: 0 0 58px;
     }
 
     #customerPage .nav-menu-items,
@@ -4248,19 +4248,20 @@ body.light-mode #customerPage .customer-service-footer {
 
     #customerPage .nav-menu-toggle,
     #adminPage .nav-menu-toggle {
-        min-width: 32px;
-        width: 32px;
-        padding: 6px 0;
+        min-width: 58px;
+        width: 58px;
+        padding: 7px 4px;
         border: none !important;
         background: transparent !important;
         box-shadow: none !important;
-        font-size: 0;
+        font-size: 11px;
+        line-height: 1;
     }
 
     #customerPage .nav-menu-toggle::before,
     #adminPage .nav-menu-toggle::before {
-        margin-right: 0;
-        font-size: 20px;
+        margin-right: 4px;
+        font-size: 16px;
         line-height: 1;
     }
 }
