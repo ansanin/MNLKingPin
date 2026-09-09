@@ -4412,7 +4412,7 @@ function renderAdminOrders() {
     ordersList.innerHTML = '';
 
     const activeOrders = [...appData.orders]
-        .filter(order => order.status !== 'completed' && order.status !== 'delivered')
+        .filter(order => !['completed', 'delivered', 'cancelled'].includes(order.status))
         .sort((firstOrder, secondOrder) => {
             const firstValue = Number(firstOrder.id) || 0;
             const secondValue = Number(secondOrder.id) || 0;
