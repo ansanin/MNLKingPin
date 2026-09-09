@@ -4494,7 +4494,7 @@ function renderAdminOrders() {
 
 // Change Order Status
 async function changeOrderStatus(orderId, newStatus) {
-    const order = appData.orders.find(o => o.id === orderId);
+    const order = appData.orders.find(o => String(o.id) === String(orderId));
     if (!order) return;
 
     const oldStatus = order.status;
