@@ -4933,6 +4933,53 @@ body.light-mode #adminPage .orders-table tbody tr:hover {
     background: #f1f4f6 !important;
 }
 
+body.light-mode #adminPage #historyTab .history-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: transparent !important;
+    color: #263238 !important;
+}
+
+body.light-mode #adminPage #historyTab .history-controls .search-input,
+body.light-mode #adminPage #historyTab .history-controls select,
+body.light-mode #adminPage #historyTab .history-controls input {
+    min-height: 42px;
+    background: #ffffff !important;
+    border: 1px solid #b8c2cc !important;
+    color: #263238 !important;
+}
+
+body.light-mode #adminPage #historyTab .history-controls .search-input::placeholder {
+    color: #697780 !important;
+    opacity: 1;
+}
+
+body.light-mode #adminPage #historyTab .history-controls .btn,
+body.light-mode #adminPage #historyTab .history-controls .btn-secondary {
+    min-height: 42px;
+    background: #e8edf0 !important;
+    border: 1px solid #b8c2cc !important;
+    color: #263238 !important;
+    white-space: nowrap;
+}
+
+body.light-mode #adminPage #historyTab .history-controls .btn:hover,
+body.light-mode #adminPage #historyTab .history-controls .btn-secondary:hover {
+    background: #dce3e8 !important;
+    color: #1e252b !important;
+}
+
+body.light-mode #adminPage #historyTab #historyTable .order-status {
+    color: #263238 !important;
+    border-color: #b8c2cc !important;
+}
+
+body.light-mode #adminPage #historyTab #historyTable td,
+body.light-mode #adminPage #historyTab #historyTable td * {
+    color: #35434c !important;
+}
+
 body.light-mode #adminPage .price-cell input,
 body.light-mode #adminPage .stock-cell input,
 body.light-mode #adminPage .status-dropdown {
