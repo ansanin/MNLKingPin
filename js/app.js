@@ -3358,26 +3358,26 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
     const measurements = order.measurements || {};
 
     document.getElementById('orderDetailsContent').innerHTML = `
-        <div style="display: block; padding: 20px; color: #f4f4f4;">
-            <div style="text-align: center; border-bottom: 2px solid #d4af37; padding-bottom: 15px; margin-bottom: 18px;">
-                <h2 style="color: #d4af37; margin: 0 0 6px;">${isPreview ? 'Order Review' : 'Order Receipt'}</h2>
-                <div style="color: #e8e8e8;">${isPreview ? 'Review before payment' : `Order #${order.id}`}</div>
-                <small style="color: #bcbcbc;">${order.date}</small>
+            <div class="customer-receipt-content">
+            <div class="customer-receipt-heading">
+                <h2>${isPreview ? 'Order Review' : 'Order Receipt'}</h2>
+                <div>${isPreview ? 'Review before payment' : `Order #${order.id}`}</div>
+                <small>${order.date}</small>
             </div>
-            <div style="margin-bottom: 18px; background: #1f1f1f; border: 1px solid #3a3a3a; border-radius: 8px; padding: 16px; color: #f4f4f4;">
-                <h3 style="color: #f4f4f4; margin-top: 0; margin-bottom: 10px;">Customer Information</h3>
-                <div style="margin-bottom: 6px;"><strong style="color: #d4af37;">Name:</strong> ${order.customerName}</div>
-                <div style="margin-bottom: 6px;"><strong style="color: #d4af37;">Email:</strong> ${order.customerEmail}</div>
-                <div style="margin-bottom: 6px;"><strong style="color: #d4af37;">Phone:</strong> ${order.customerPhone}</div>
-                <div><strong style="color: #d4af37;">Delivery Location:</strong> ${order.customerAddress}</div>
+            <div class="customer-receipt-customer">
+                <h3>Customer Information</h3>
+                <div><strong>Name:</strong> ${order.customerName}</div>
+                <div><strong>Email:</strong> ${order.customerEmail}</div>
+                <div><strong>Phone:</strong> ${order.customerPhone}</div>
+                <div><strong>Delivery Location:</strong> ${order.customerAddress}</div>
             </div>
-            <div style="margin-bottom: 18px;"><h3 style="color: #f4f4f4;">Order Items</h3>${itemsHtml}</div>
-            <div style="margin-bottom: 18px; color: #f4f4f4;">
-                <div style="margin-bottom: 6px;"><strong style="color: #d4af37;">Payment Method:</strong> ${order.paymentMethod.toUpperCase()}</div>
-                <div style="margin-bottom: 6px;"><strong style="color: #d4af37;">Payment Status:</strong> ${order.paymentStatus.replace('-', ' ')}</div>
-                <div><strong style="color: #d4af37;">Measurements:</strong> Chest ${measurements.chest}, Waist ${measurements.waist}, Length ${measurements.length} cm</div>
+            <div class="customer-receipt-items"><h3>Order Items</h3>${itemsHtml}</div>
+            <div class="customer-receipt-payment">
+                <div><strong>Payment Method:</strong> ${order.paymentMethod.toUpperCase()}</div>
+                <div><strong>Payment Status:</strong> ${order.paymentStatus.replace('-', ' ')}</div>
+                <div><strong>Measurements:</strong> Chest ${measurements.chest}, Waist ${measurements.waist}, Length ${measurements.length} cm</div>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 1.2em; color: #d4af37; border-top: 2px solid #d4af37; padding-top: 14px;">
+            <div class="customer-receipt-total">
                 <strong>Total</strong><strong>₱${order.totalAmount.toFixed(2)}</strong>
             </div>
         </div>
@@ -3532,7 +3532,7 @@ function loadCustomerOrders() {
             <button type="button" class="btn btn-small view-receipt-button" onclick="viewCustomerReceipt(${order.id})">View Receipt</button>
             ${paymentMethod === 'gcash' && orderGcashQr ? `<div class="order-gcash-qr"><strong>GCash Installment QR:</strong><a href="${orderGcashQr}" target="_blank" rel="noopener">Open payment QR</a><img src="${orderGcashQr}" alt="GCash installment QR code"></div>` : ''}
             ${paymentMethod === 'gcash' ? `<div class="order-payment-proof"><strong>GCash Payment Proof:</strong><p class="half-payment-notice">Required downpayment: ₱${requiredDownpayment.toFixed(2)}</p><label for="gcashDownpayment-${order.id}" style="display:block; margin-top:8px; color:#d4af37; font-weight:600;">Amount to pay:</label><input id="gcashDownpayment-${order.id}" type="number" step="0.01" min="0" value="${requiredDownpayment.toFixed(2)}" onchange="updateOrderDownpayment(${order.id}, this.value)" style="width: 100%; margin-top: 6px; margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #111; color: #fff;" />${gcashProofHtml}<input type="file" accept="image/*" onchange="uploadOrderPaymentProof(${order.id}, this)"></div>` : ''}
-            <div class="order-actions"><strong>Order action:</strong><div class="order-action-buttons"><button type="button" class="btn btn-small" onclick="showOrderRequestReasons(${order.id}, 'cancel')">Cancel / Change of Mind</button><button type="button" class="btn btn-small" onclick="showOrderRequestReasons(${order.id}, 'refund')">Request Refund</button></div><div id="orderReason-${order.id}" class="order-reason-options"></div>${order.requestType ? `<p class="order-request-status">Request: ${order.requestType === 'cancel' ? 'Cancel / Change of Mind' : 'Refund'} (${order.requestStatus || 'pending'})</p>` : ''}</div>
+            <div class="order-actions"><strong>Order action:</strong><div class="order-action-buttons"><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'cancel')">Cancel / Change of Mind</button><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'refund')">Request Refund</button></div><div id="orderReason-${order.id}" class="order-reason-options"></div>${order.requestType ? `<p class="order-request-status">Request: ${order.requestType === 'cancel' ? 'Cancel / Change of Mind' : 'Refund'} (${order.requestStatus || 'pending'})</p>` : ''}</div>
             ${getOrderReviewsSection(order)}
         `;
         ordersList.appendChild(orderItem);

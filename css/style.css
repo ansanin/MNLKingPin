@@ -4267,6 +4267,169 @@ body.light-mode #customerPage .customer-service-footer {
 }
 .view-receipt-button { margin-top: 10px; }
 
+.customer-receipt-content {
+    display: block;
+    padding: 20px;
+    color: #f4f4f4;
+}
+
+.customer-receipt-heading {
+    margin-bottom: 18px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #d4af37;
+    text-align: center;
+}
+
+.customer-receipt-heading h2 {
+    margin: 0 0 6px;
+    color: #d4af37;
+}
+
+.customer-receipt-heading div {
+    color: #e8e8e8;
+}
+
+.customer-receipt-heading small {
+    color: #bcbcbc;
+}
+
+.customer-receipt-customer {
+    margin-bottom: 18px;
+    padding: 16px;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    background: #1f1f1f;
+    color: #f4f4f4;
+}
+
+.customer-receipt-customer h3,
+.customer-receipt-items h3 {
+    margin: 0 0 10px;
+    color: #f4f4f4;
+}
+
+.customer-receipt-customer div,
+.customer-receipt-payment div {
+    margin-bottom: 6px;
+}
+
+.customer-receipt-customer strong,
+.customer-receipt-payment strong {
+    color: #d4af37;
+}
+
+.customer-receipt-items {
+    margin-bottom: 18px;
+    color: #f4f4f4;
+}
+
+.customer-receipt-items > div {
+    color: #f4f4f4;
+}
+
+.customer-receipt-payment {
+    margin-bottom: 18px;
+    color: #f4f4f4;
+}
+
+.customer-receipt-total {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 14px;
+    border-top: 2px solid #d4af37;
+    color: #d4af37;
+    font-size: 1.2em;
+}
+
+.order-action-button,
+.view-receipt-button {
+    border: 1px solid #d4af37 !important;
+    background: #d4af37 !important;
+    color: #171717 !important;
+    font-weight: 700;
+    text-shadow: none !important;
+}
+
+.order-action-button:hover,
+.order-action-button:focus-visible,
+.view-receipt-button:hover,
+.view-receipt-button:focus-visible {
+    background: #f0c94d !important;
+    border-color: #b78300 !important;
+    color: #171717 !important;
+}
+
+body.light-mode #orderDetailsModal .customer-receipt-content {
+    color: #35434c !important;
+}
+
+body.light-mode #orderDetailsModal .customer-receipt-heading h2,
+body.light-mode #orderDetailsModal .customer-receipt-total {
+    color: #765500 !important;
+}
+
+body.light-mode #orderDetailsModal .customer-receipt-heading div,
+body.light-mode #orderDetailsModal .customer-receipt-heading small,
+body.light-mode #orderDetailsModal .customer-receipt-items,
+body.light-mode #orderDetailsModal .customer-receipt-items > div,
+body.light-mode #orderDetailsModal .customer-receipt-payment {
+    color: #35434c !important;
+}
+
+body.light-mode #orderDetailsModal .customer-receipt-customer {
+    background: #f1f4f6 !important;
+    border-color: #d0d7dc !important;
+    color: #35434c !important;
+}
+
+body.light-mode #orderDetailsModal .customer-receipt-customer h3,
+body.light-mode #orderDetailsModal .customer-receipt-items h3 {
+    color: #263238 !important;
+}
+
+body.light-mode #orderDetailsModal .customer-receipt-customer strong,
+body.light-mode #orderDetailsModal .customer-receipt-payment strong {
+    color: #765500 !important;
+}
+
+body.light-mode #customerPage .order-action-button,
+body.light-mode #customerPage .view-receipt-button {
+    background: #d7a914 !important;
+    border-color: #b78300 !important;
+    color: #172027 !important;
+}
+
+body.light-mode #customerPage .order-action-button:hover,
+body.light-mode #customerPage .order-action-button:focus-visible,
+body.light-mode #customerPage .view-receipt-button:hover,
+body.light-mode #customerPage .view-receipt-button:focus-visible {
+    background: #b78300 !important;
+    border-color: #765500 !important;
+    color: #ffffff !important;
+}
+
+@media (max-width: 600px) {
+    #customerPage .order-action-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    #customerPage .order-action-button,
+    #customerPage .view-receipt-button {
+        min-height: 42px;
+        width: 100%;
+        padding: 9px 8px;
+        font-size: .78rem;
+        line-height: 1.15;
+        white-space: normal;
+    }
+
+    #orderDetailsModal .customer-receipt-content {
+        padding: 14px 10px;
+    }
+}
+
 /* Final light-mode overrides for navigation and Customer Service. */
 body.light-mode #customerPage .nav-menu-items,
 body.light-mode #adminPage .nav-menu-items {
