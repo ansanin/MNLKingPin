@@ -214,7 +214,7 @@ function updateNotificationBadges() {
     const unreadMessageCount = serviceMessages.filter(serviceMessage => !serviceMessage.read).length;
     
     const adminOrdersBadge = document.querySelector('[data-notification-badge="admin-orders"]');
-    const customerNotificationBadge = document.querySelector('[data-notification-badge="customer-notifications"]');
+    const customerNotificationBadges = document.querySelectorAll('[data-notification-badge="customer-notifications"], [data-notification-badge="customer-orders"]');
     const adminMessagesBadge = document.querySelector('[data-notification-badge="admin-messages"]');
     
     if (adminOrdersBadge) {
@@ -222,10 +222,10 @@ function updateNotificationBadges() {
         adminOrdersBadge.style.display = adminCount > 0 ? 'inline-block' : 'none';
     }
     
-    if (customerNotificationBadge) {
-        customerNotificationBadge.textContent = customerCount;
-        customerNotificationBadge.style.display = customerCount > 0 ? 'inline-block' : 'none';
-    }
+    customerNotificationBadges.forEach(badge => {
+        badge.textContent = customerCount;
+        badge.style.display = customerCount > 0 ? 'inline-block' : 'none';
+    });
 
     if (adminMessagesBadge) {
         adminMessagesBadge.textContent = unreadMessageCount;

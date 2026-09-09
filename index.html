@@ -68,14 +68,16 @@
                 <span class="navbar-division">MNL KINGPIN / CAMSUR</span>
             </div>
             <div class="navbar-right">
-                <button class="btn btn-secondary customer-cart-button" onclick="toggleCart()" aria-label="Open cart" title="Open cart"><span aria-hidden="true">🛒</span><span id="cartCount" class="cart-count-badge">0</span></button>
+                <div class="customer-quick-actions" aria-label="Customer quick actions">
+                    <button class="btn btn-secondary customer-cart-button" onclick="toggleCart()" aria-label="Open cart" title="Open cart"><span aria-hidden="true">🛒</span><span id="cartCount" class="cart-count-badge">0</span></button>
+                    <button class="btn btn-secondary customer-quick-action" onclick="viewOrders()" aria-label="Open my orders" title="My Orders"><span aria-hidden="true">📦</span><span class="notification-badge" data-notification-badge="customer-orders" style="display:none;">0</span></button>
+                    <button class="btn btn-secondary customer-quick-action" onclick="viewCustomerNotifications()" aria-label="Open notifications" title="Notifications"><span aria-hidden="true">🔔</span><span class="notification-badge" data-notification-badge="customer-notifications" style="display:none;">0</span></button>
+                </div>
                 <div class="nav-menu-scroll-wrapper">
                     <button class="btn btn-secondary nav-menu-toggle" type="button" onclick="toggleNavMenu()">Menu</button>
                     <div id="customerNavMenu" class="nav-menu-items" aria-label="Customer navigation menu">
                         <button class="btn btn-secondary" onclick="toggleDesignInterface()">🎨 Create Design</button>
-                        <button class="btn btn-secondary notification-btn" onclick="viewOrders()">My Orders <span class="notification-badge" data-notification-badge="customer-notifications" style="display:none;">0</span></button>
                         <button class="btn btn-secondary" onclick="viewPurchaseHistory()">Purchase History</button>
-                        <button class="btn btn-secondary" onclick="viewCustomerNotifications()">Notifications</button>
                         <button class="btn btn-secondary" onclick="viewCustomerSettings()">Settings</button>
                         <button class="btn btn-secondary theme-toggle" type="button" onclick="toggleTheme()" aria-label="Switch to light mode"><span class="theme-toggle-icon">☀️</span> <span class="theme-toggle-label">Light Mode</span></button>
                         <button class="btn btn-danger" onclick="logout()">Logout</button>

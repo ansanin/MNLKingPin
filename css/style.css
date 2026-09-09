@@ -544,6 +544,13 @@ body.light-mode [style*="color: #a0a0a0"] {
     width: 100%;
 }
 
+.customer-quick-actions {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 0 auto;
+}
+
 .nav-menu-scroll-wrapper {
     position: static !important;
     display: flex !important;
@@ -611,6 +618,13 @@ body.light-mode [style*="color: #a0a0a0"] {
     position: relative;
     min-width: 52px;
     padding: 10px 14px;
+}
+
+#customerPage .customer-quick-action {
+    position: relative;
+    min-width: 52px;
+    padding: 10px 14px;
+    white-space: nowrap;
 }
 
 #customerPage .cart-count-badge {
@@ -1705,6 +1719,16 @@ table tbody tr:hover {
     #customerPage .customer-cart-button {
         width: auto;
         margin-right: 0;
+    }
+
+    #customerPage .customer-quick-actions {
+        display: flex;
+        width: auto;
+        gap: 5px;
+    }
+
+    #customerPage .customer-quick-actions .btn {
+        width: auto;
     }
 
     .nav-menu-scroll-wrapper {
@@ -4169,6 +4193,17 @@ body.light-mode #customerPage .customer-service-footer {
     }
 
     #customerPage .customer-cart-button {
+        min-width: 38px;
+        width: 38px !important;
+        flex: 0 0 38px;
+        padding: 6px 5px;
+        font-size: 13px;
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+
+    #customerPage .customer-quick-action {
         min-width: 38px;
         width: 38px !important;
         flex: 0 0 38px;
