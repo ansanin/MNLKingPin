@@ -1689,6 +1689,7 @@ function viewOrders() {
     });
     saveNotifications();
     document.getElementById('productsSection').style.display = 'none';
+    document.getElementById('designSection').style.display = 'none';
     document.getElementById('cartSection').style.display = 'none';
     document.getElementById('ordersSection').style.display = 'block';
     document.getElementById('purchaseHistorySection').style.display = 'none';
@@ -1716,6 +1717,7 @@ function viewOrders() {
 
 function viewPurchaseHistory() {
     document.getElementById('productsSection').style.display = 'none';
+    document.getElementById('designSection').style.display = 'none';
     document.getElementById('cartSection').style.display = 'none';
     document.getElementById('ordersSection').style.display = 'none';
     document.getElementById('purchaseHistorySection').style.display = 'block';

@@ -64,6 +64,7 @@ function hideAllSections() {
         'designSection',
         'cartSection',
         'ordersSection',
+        'purchaseHistorySection',
         'notificationsSection',
         'customerSettingsSection',
         'checkoutSection',
