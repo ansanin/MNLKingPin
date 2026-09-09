@@ -574,6 +574,10 @@ body.light-mode [style*="color: #a0a0a0"] {
 }
 
 .nav-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
     flex-shrink: 0;
     white-space: nowrap;
     position: relative;
@@ -4256,6 +4260,8 @@ body.light-mode #customerPage .customer-service-footer {
         box-shadow: none !important;
         font-size: 11px;
         line-height: 1;
+        justify-content: center;
+        text-align: center;
     }
 
     #customerPage .nav-menu-toggle::before,

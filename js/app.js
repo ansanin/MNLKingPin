@@ -465,7 +465,7 @@ function checkSavedSession() {
                 }
                 
                 // Display customer name in navbar
-                const displayName = appData.currentUserProfile ? appData.currentUserProfile.fullName : appData.currentUser;
+                const displayName = appData.currentUserProfile?.username || appData.currentUser;
                 document.getElementById('customerDisplayName').textContent = `Welcome, ${displayName}!`;
                 
                 loadProducts();
@@ -1484,7 +1484,7 @@ function showCustomerDashboard() {
     }
     
     // Display customer name in navbar
-    const displayName = appData.currentUserProfile ? appData.currentUserProfile.fullName : appData.currentUser;
+    const displayName = appData.currentUserProfile?.username || appData.currentUser;
     document.getElementById('customerDisplayName').textContent = `Welcome, ${displayName}!`;
     
     // Update logo display
@@ -1912,7 +1912,7 @@ function saveCustomerSettings(e) {
     appData.currentUserProfile = updatedAccount;
     saveCurrentSession();
     rememberQuickLogin();
-    document.getElementById('customerDisplayName').textContent = `Welcome, ${updatedAccount.fullName}!`;
+    document.getElementById('customerDisplayName').textContent = `Welcome, ${updatedAccount.username}!`;
 
     message.className = 'status-message success';
     message.textContent = 'Account information updated successfully.';
