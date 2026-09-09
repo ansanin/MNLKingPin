@@ -22,6 +22,22 @@ const appData = {
     }
 };
 
+function saveNavigationState(role, view) {
+    localStorage.setItem('kingpinNavigationState', JSON.stringify({ role, view }));
+}
+
+function loadNavigationState() {
+    try {
+        return JSON.parse(localStorage.getItem('kingpinNavigationState') || 'null');
+    } catch (error) {
+        return null;
+    }
+}
+
+function clearNavigationState() {
+    localStorage.removeItem('kingpinNavigationState');
+}
+
 let sharedProductsRequest = null;
 
 function applyTheme(theme) {
@@ -443,6 +459,10 @@ function checkSavedSession() {
                 document.getElementById('ordersSection').style.display = 'none';
                 document.getElementById('notificationsSection').style.display = 'none';
                 document.getElementById('checkoutSection').style.display = 'none';
+                const savedView = loadNavigationState();
+                if (savedView?.role === 'customer' && typeof window[savedView.view] === 'function') {
+                    window[savedView.view]();
+                }
                 
                 // Display customer name in navbar
                 const displayName = appData.currentUserProfile ? appData.currentUserProfile.fullName : appData.currentUser;
@@ -467,7 +487,8 @@ function checkSavedSession() {
                 document.getElementById('loginPage').style.display = 'none';
                 document.getElementById('customerPage').style.display = 'none';
                 document.getElementById('adminPage').style.display = 'block';
-                showAdminTab('products');
+                const savedView = loadNavigationState();
+                showAdminTab(savedView?.role === 'admin' && savedView.view ? savedView.view : 'products');
                 loadAdminOrders();
                 
                 setTimeout(() => {
@@ -1082,6 +1103,7 @@ function logout() {
 
     // Clear all session data before switching the UI
     clearCurrentSession();
+    clearNavigationState();
     localStorage.removeItem('kingpinSession');
     localStorage.removeItem('kingpinCurrentSession');
     localStorage.removeItem('kingpinForceLogin');
@@ -1440,6 +1462,7 @@ function showCustomerDashboard() {
     document.getElementById('purchaseHistorySection').style.display = 'none';
     document.getElementById('checkoutSection').style.display = 'none';
     document.getElementById('customerServiceSection').style.display = 'none';
+    saveNavigationState('customer', 'showCustomerDashboard');
 
     const cachedProducts = localStorage.getItem('kingpinProducts');
     if (cachedProducts) {
@@ -1518,6 +1541,7 @@ function showAdminTab(tabName) {
     document.getElementById('historyTab').style.display = tabName === 'history' ? 'block' : 'none';
     document.getElementById('reportsTab').style.display = tabName === 'reports' ? 'block' : 'none';
     document.getElementById('settingsTab').style.display = tabName === 'settings' ? 'block' : 'none';
+    saveNavigationState('admin', tabName);
     
     // Load data when tabs are clicked
     if (tabName === 'products') {
@@ -1650,7 +1674,10 @@ function toggleCart() {
     document.getElementById('checkoutSection').style.display = 'none';
     
     if (showCart) {
+        saveNavigationState('customer', 'toggleCart');
         updateCartDisplay();
+    } else {
+        saveNavigationState('customer', 'showCustomerDashboard');
     }
 }
 
@@ -1667,6 +1694,7 @@ function viewOrders() {
     document.getElementById('purchaseHistorySection').style.display = 'none';
     document.getElementById('checkoutSection').style.display = 'none';
     document.getElementById('customerServiceSection').style.display = 'none';
+    saveNavigationState('customer', 'viewOrders');
     loadCustomerOrders();
     fetchSharedOrders().then(sharedOrders => {
         const sharedById = new Map(sharedOrders.map(order => [String(order.id), order]));
@@ -1693,6 +1721,7 @@ function viewPurchaseHistory() {
     document.getElementById('purchaseHistorySection').style.display = 'block';
     document.getElementById('checkoutSection').style.display = 'none';
     document.getElementById('customerServiceSection').style.display = 'none';
+    saveNavigationState('customer', 'viewPurchaseHistory');
     loadPurchaseHistory();
     fetchSharedOrders().then(sharedOrders => {
         const sharedById = new Map(sharedOrders.map(order => [String(order.id), order]));
@@ -1749,6 +1778,7 @@ function viewCustomerNotifications() {
     document.getElementById('customerSettingsSection').style.display = 'none';
     document.getElementById('checkoutSection').style.display = 'none';
     document.getElementById('customerServiceSection').style.display = 'none';
+    saveNavigationState('customer', 'viewCustomerNotifications');
     loadCustomerNotifications();
     updateFloatingBackButton();
 }
@@ -1762,6 +1792,7 @@ function viewCustomerService() {
     document.getElementById('customerSettingsSection').style.display = 'none';
     document.getElementById('checkoutSection').style.display = 'none';
     document.getElementById('customerServiceSection').style.display = 'block';
+    saveNavigationState('customer', 'viewCustomerService');
     updateFloatingBackButton();
 
     const orderSelect = document.getElementById('serviceOrderId');
@@ -1821,6 +1852,7 @@ function viewCustomerSettings() {
     document.getElementById('customerSettingsSection').style.display = 'block';
     document.getElementById('checkoutSection').style.display = 'none';
     document.getElementById('customerServiceSection').style.display = 'none';
+    saveNavigationState('customer', 'viewCustomerSettings');
     updateFloatingBackButton();
 
     document.getElementById('settingsUsername').value = profile.username || appData.currentUser;
@@ -1919,6 +1951,7 @@ function checkout() {
     
     document.getElementById('cartSection').style.display = 'none';
     document.getElementById('checkoutSection').style.display = 'block';
+    saveNavigationState('customer', 'checkout');
     document.getElementById('productsSection').style.display = 'none';
     document.getElementById('ordersSection').style.display = 'none';
     document.getElementById('purchaseHistorySection').style.display = 'none';
@@ -2978,10 +3011,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const customerPage = document.getElementById('customerPage');
     const adminPage = document.getElementById('adminPage');
 
-    // Restore the active dashboard only after a browser refresh.
-    const navigationEntry = performance.getEntriesByType('navigation')[0];
-    const isRefresh = navigationEntry?.type === 'reload';
-    const savedSession = isRefresh ? loadCurrentSession() : null;
+    // Restore the active dashboard and view whenever the page is initialized.
+    const savedSession = loadCurrentSession();
     const isAdminPortal = new URLSearchParams(window.location.search).get('portal') === 'admin';
 
     if (isAdminPortal) {
