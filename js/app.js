@@ -3749,7 +3749,7 @@ function submitOrderProductReview(orderId, productId, productName) {
     loadCustomerOrders();
 }
 
-function requestOrderAction(orderId, requestType, reason) {
+async function requestOrderAction(orderId, requestType, reason) {
     if (!requestType) return;
 
     const order = appData.orders.find(item => item.id === orderId);
@@ -3783,6 +3783,12 @@ function requestOrderAction(orderId, requestType, reason) {
         saveOrderToHistory({ ...order }, false);
 
         saveOrders();
+        try {
+            await saveOrderToSharedServer(order);
+            sendOrderNotification(order, 'cancelled');
+        } catch (error) {
+            console.error('Unable to sync customer cancellation:', error);
+        }
         addNotification('admin', `⚠️ Customer cancelled order #${orderId}.`, orderId);
         addNotification('customer', `✓ Your order #${orderId} has been cancelled successfully.`, orderId);
         saveNotifications();

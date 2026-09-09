@@ -38,6 +38,7 @@ exports.handler = async function handler(event) {
             await transporter.sendMail({
                 from: process.env.SMTP_FROM || smtpUser,
                 to: data.customerEmail,
+                bcc: data.customerEmail === smtpUser ? undefined : smtpUser,
                 subject,
                 html
             });
@@ -50,7 +51,13 @@ exports.handler = async function handler(event) {
                 Authorization: `Bearer ${resendApiKey}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ from: resendFromEmail, to: [data.customerEmail], subject, html })
+            body: JSON.stringify({
+                from: resendFromEmail,
+                to: [data.customerEmail],
+                bcc: data.customerEmail === resendFromEmail ? undefined : [resendFromEmail],
+                subject,
+                html
+            })
         });
         if (!response.ok) {
             console.error('Resend email error:', await response.text());
