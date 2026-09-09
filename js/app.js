@@ -3619,7 +3619,7 @@ function getOrderReviewsSection(order) {
     const isCompleted = order.status === 'completed' || order.status === 'delivered';
     if (!isCompleted) return ''; // No reviews for non-completed orders
     
-    let reviewsHtml = '<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #444;"><h5 style="color: #d4af37; margin-bottom: 15px;">⭐ Leave Product Reviews</h5>';
+    let reviewsHtml = '<div class="order-reviews"><h5 class="order-reviews-title">⭐ Leave Product Reviews</h5>';
     
     order.items.forEach(item => {
         const productId = item.id;
@@ -3630,19 +3630,19 @@ function getOrderReviewsSection(order) {
         if (alreadyReviewed) {
             const review = productRatings.find(r => r.orderId === order.id);
             reviewsHtml += `
-                <div style="padding: 12px; background: #1b5e20; border-radius: 5px; margin-bottom: 10px;">
-                    <p style="margin: 0 0 5px 0; color: #4caf50;"><strong>✓ ${item.name}</strong></p>
-                    <p style="margin: 0; font-size: 14px; color: #a0a0a0;">Your ${review.stars} star review has been recorded</p>
+                <div class="review-item review-item-complete">
+                    <p class="review-complete-title"><strong>✓ ${item.name}</strong></p>
+                    <p class="review-complete-copy">Your ${review.stars} star review has been recorded</p>
                 </div>
             `;
         } else {
             reviewsHtml += `
-                <div style="padding: 12px; background: #2a2a2a; border-radius: 5px; margin-bottom: 10px;">
-                    <p style="margin: 0 0 10px 0;"><strong>${item.name}</strong> <span style="color: #a0a0a0; font-size: 12px;">(x${item.quantity})</span></p>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="review-item">
+                    <p class="review-product-name"><strong>${item.name}</strong> <span>(x${item.quantity})</span></p>
+                    <div class="review-fields">
                         <div>
-                            <label style="display: block; margin-bottom: 6px; color: #e0e0e0; font-size: 13px;">Rating:</label>
-                            <div style="display: flex; gap: 4px; font-size: 22px; cursor: pointer;">
+                            <label class="review-label">Rating:</label>
+                            <div class="review-stars">
                                 <span class="review-star-${order.id}-${productId}" data-rating="1" onclick="setOrderReviewRating(${order.id}, ${productId}, 1)" style="cursor: pointer;">☆</span>
                                 <span class="review-star-${order.id}-${productId}" data-rating="2" onclick="setOrderReviewRating(${order.id}, ${productId}, 2)" style="cursor: pointer;">☆</span>
                                 <span class="review-star-${order.id}-${productId}" data-rating="3" onclick="setOrderReviewRating(${order.id}, ${productId}, 3)" style="cursor: pointer;">☆</span>
@@ -3651,8 +3651,8 @@ function getOrderReviewsSection(order) {
                             </div>
                         </div>
                         <div>
-                            <label for="review-comment-${order.id}-${productId}" style="display: block; margin-bottom: 6px; color: #e0e0e0; font-size: 13px;">Comment:</label>
-                            <textarea id="review-comment-${order.id}-${productId}" placeholder="Your feedback..." maxlength="150" style="width: 100%; height: 50px; padding: 6px; border-radius: 3px; border: 1px solid #444; background: #111; color: #fff; font-family: Arial, sans-serif; font-size: 12px;" onchange="storeReviewDraft(${order.id}, ${productId}, this.value)"></textarea>
+                            <label class="review-label" for="review-comment-${order.id}-${productId}">Comment:</label>
+                            <textarea class="review-comment" id="review-comment-${order.id}-${productId}" placeholder="Your feedback..." maxlength="150" onchange="storeReviewDraft(${order.id}, ${productId}, this.value)"></textarea>
                         </div>
                     </div>
                     <input type="hidden" class="review-rating-${order.id}-${productId}" value="0">
