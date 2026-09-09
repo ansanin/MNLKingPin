@@ -4350,10 +4350,11 @@ window.onload = function() {
 }
 
 // Load Admin Orders
-function loadAdminOrders() {
+async function loadAdminOrders() {
     loadOrders();
     renderAdminOrders();
-    fetchSharedOrders().then(sharedOrders => {
+    try {
+        const sharedOrders = await fetchSharedOrders();
         const sharedIds = new Set(sharedOrders.map(order => String(order.id)));
         const localOnlyOrders = appData.orders.filter(order => !sharedIds.has(String(order.id)));
         appData.orders = [...sharedOrders, ...localOnlyOrders];
@@ -4364,9 +4365,9 @@ function loadAdminOrders() {
             });
         });
         renderAdminOrders();
-    }).catch(error => {
+    } catch (error) {
         console.warn('Using local orders because shared orders could not be loaded:', error);
-    });
+    }
 }
 
 function renderAdminOrders() {
@@ -4456,7 +4457,7 @@ function renderAdminOrders() {
 }
 
 // Change Order Status
-function changeOrderStatus(orderId, newStatus) {
+async function changeOrderStatus(orderId, newStatus) {
     const order = appData.orders.find(o => o.id === orderId);
     if (!order) return;
 
@@ -4467,9 +4468,21 @@ function changeOrderStatus(orderId, newStatus) {
     saveOrders();
 
     // Share the new status so the customer sees the updated progress.
-    saveOrderToSharedServer(order).catch(error => {
+    const statusSelect = document.querySelector(`select.status-dropdown[onchange*="changeOrderStatus(${orderId},"]`);
+    if (statusSelect) statusSelect.disabled = true;
+
+    renderAdminOrders();
+
+    try {
+        await saveOrderToSharedServer(order);
+    } catch (error) {
         console.error('Unable to sync updated order status:', error);
-    });
+        order.status = oldStatus;
+        saveOrders();
+        renderAdminOrders();
+        showStatusUpdateToast('Order status could not be saved. Please try again.');
+        return;
+    }
 
     if (isOrderInPurchaseHistory(order)) {
         saveOrderToHistory({ ...order });
@@ -4514,8 +4527,8 @@ function changeOrderStatus(orderId, newStatus) {
     // Show real-time toast notification
     showStatusUpdateToast(`Order #${orderId} status changed to ${newStatus.toUpperCase()}`);
     
-    // Reload orders display for complete accuracy
-    loadAdminOrders();
+    // Refresh only after the shared save completes, preventing stale data from overwriting the new status.
+    await loadAdminOrders();
     
     // Update customer view if they have the Notifications tab open
     setTimeout(() => {
