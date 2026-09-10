@@ -3933,6 +3933,74 @@ body.light-mode #adminPage .form-group small {
     color: #53616b !important;
 }
 
+body.light-mode #customerPage .orders-section,
+body.light-mode #customerPage .order-item,
+body.light-mode #customerPage .order-tracking,
+body.light-mode #customerPage .order-payment-proof,
+body.light-mode #customerPage .order-actions {
+    background: #ffffff !important;
+    border-color: #cbd3d9 !important;
+    color: #263238 !important;
+}
+
+body.light-mode #customerPage .order-details,
+body.light-mode #customerPage .order-details p,
+body.light-mode #customerPage .order-payment-proof strong,
+body.light-mode #customerPage .order-actions strong {
+    color: #35434c !important;
+}
+
+body.light-mode #customerPage .order-total {
+    color: #765500 !important;
+}
+
+body.light-mode #customerPage .tracking-circle {
+    background-color: #e3e9ed;
+    border-color: #b8c2cc;
+    color: #35434c;
+}
+
+body.light-mode #customerPage .tracking-step:not(:last-child)::after {
+    background-color: #cbd3d9;
+}
+
+body.light-mode #customerPage .tracking-step.active:not(:last-child)::after,
+body.light-mode #customerPage .tracking-step.active .tracking-circle {
+    background-color: #d7a914;
+    border-color: #b78300;
+    color: #171717;
+}
+
+body.light-mode #customerPage .tracking-label {
+    color: #53616b !important;
+}
+
+body.light-mode #customerPage .tracking-step.active .tracking-label {
+    color: #765500 !important;
+}
+
+body.light-mode #customerPage .order-payment-proof,
+body.light-mode #customerPage .order-actions,
+body.light-mode #customerPage .order-gcash-qr {
+    border-top-color: #cbd3d9 !important;
+}
+
+body.light-mode #customerPage .order-payment-proof input[type="number"],
+body.light-mode #customerPage .order-payment-proof input[type="file"] {
+    background: #f8fafb !important;
+    border-color: #aeb9c1 !important;
+    color: #263238 !important;
+}
+
+body.light-mode #customerPage .order-payment-proof label,
+body.light-mode #customerPage .order-gcash-qr strong {
+    color: #765500 !important;
+}
+
+body.light-mode #customerPage .order-gcash-qr a {
+    color: #7b5b00 !important;
+}
+
 body.light-mode #customerPage .design-mode-btn.active,
 body.light-mode #customerPage .clothing-type-btn.active,
 body.light-mode #customerPage .tracking-step.active .tracking-circle {
