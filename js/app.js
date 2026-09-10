@@ -2746,7 +2746,11 @@ function updateCartDisplay() {
 
         const cartItem = document.createElement('div');
         cartItem.className = 'cart-item';
+        const imageMarkup = item.image
+            ? `<img class="cart-item-image" src="${item.image}" alt="${item.name}">`
+            : '<div class="cart-item-image cart-item-image-placeholder" aria-hidden="true">KP</div>';
         cartItem.innerHTML = `
+            <div class="cart-item-media">${imageMarkup}</div>
             <div class="cart-item-info">
                 <div class="cart-item-name">${item.name}</div>
                 ${customizationHTML}
@@ -2757,8 +2761,8 @@ function updateCartDisplay() {
                 <input type="number" value="${item.quantity}" onchange="updateCartQuantityDirect(${index}, this.value)" min="1">
                 <button onclick="updateCartQuantity(${index}, 1)" class="btn btn-small">+</button>
             </div>
-            <div style="color: #4a9eff; font-weight: bold;">₱${itemTotal.toFixed(2)}</div>
-            <div style="display: flex; gap: 5px;">
+            <div class="cart-item-total">₱${itemTotal.toFixed(2)}</div>
+            <div class="cart-item-actions">
                 ${item.type === 'custom-design' ? '' : '<button class="cart-item-edit" onclick="openEditCustomizationModal(' + index + ')">Edit Custom</button>'}
                 <button class="cart-item-remove" onclick="removeFromCart(${index})">Remove</button>
             </div>
