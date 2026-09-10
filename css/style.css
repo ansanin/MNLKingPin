@@ -3175,6 +3175,18 @@ table tbody tr:hover {
 .order-gcash-qr { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(212, 175, 55, .35); color: #d4af37; }
 .order-gcash-qr a { color: #d4af37; font-weight: 600; text-decoration: underline; }
 .order-gcash-qr img { display: block; width: 120px; max-height: 120px; object-fit: contain; padding: 4px; border: 1px solid #d4af37; border-radius: 5px; background: #fff; }
+.order-gcash-qr img { cursor: zoom-in; }
+.qr-view-button { margin: 0; }
+.gcash-qr-viewer-modal { position: fixed; inset: 0; z-index: 1000; align-items: center; justify-content: center; padding: 20px; background: rgba(0, 0, 0, .78); }
+.gcash-qr-viewer-content { position: relative; width: min(92vw, 620px); max-height: 92vh; overflow: auto; padding: 28px; border: 1px solid #d4af37; border-radius: 10px; background: #202327; color: #fff; text-align: center; box-shadow: 0 18px 50px rgba(0, 0, 0, .45); }
+.gcash-qr-viewer-content h2 { margin: 0 30px 18px; color: #f4c542; }
+.gcash-qr-viewer-content img { display: block; width: min(78vw, 520px); max-height: 68vh; margin: 0 auto 16px; object-fit: contain; border: 8px solid #fff; border-radius: 6px; background: #fff; }
+.gcash-qr-viewer-content p { margin: 0; color: #d7dde2; }
+.gcash-qr-viewer-close { position: absolute; top: 8px; right: 12px; border: 0; background: transparent; color: #fff; font-size: 30px; line-height: 1; cursor: pointer; }
+body.light-mode #customerPage .gcash-qr-viewer-content { background: #fff; border-color: #b78300; color: #263238; }
+body.light-mode #customerPage .gcash-qr-viewer-content h2 { color: #765500; }
+body.light-mode #customerPage .gcash-qr-viewer-content p { color: #42515b; }
+body.light-mode #customerPage .gcash-qr-viewer-close { color: #263238; }
 .order-payment-proof { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(212, 175, 55, .35); }
 .order-payment-proof input[type="file"] { max-width: 100%; padding: 8px; border: 1px solid #d4af37; border-radius: 5px; background: #1f1f1f; color: #e0e0e0; }
 .order-payment-proof img { display: block; width: 180px; max-height: 180px; object-fit: contain; padding: 4px; border: 1px solid #4caf50; border-radius: 5px; background: #fff; }

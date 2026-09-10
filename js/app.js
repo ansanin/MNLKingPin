@@ -3576,13 +3576,27 @@ function loadCustomerOrders() {
             ${statusHtml}
             <div class="order-total">Total: ₱${order.totalAmount.toFixed(2)}</div>
             <button type="button" class="btn btn-small view-receipt-button" onclick="viewCustomerReceipt(${order.id})">View Receipt</button>
-            ${paymentMethod === 'gcash' && orderGcashQr ? `<div class="order-gcash-qr"><strong>GCash Installment QR:</strong><a href="${orderGcashQr}" target="_blank" rel="noopener">Open payment QR</a><img src="${orderGcashQr}" alt="GCash installment QR code"></div>` : ''}
+            ${paymentMethod === 'gcash' && orderGcashQr ? `<div class="order-gcash-qr"><strong>GCash Installment QR:</strong><button type="button" class="btn btn-small qr-view-button" onclick="openGcashQrViewer('${orderGcashQr}')">View larger</button><img src="${orderGcashQr}" alt="GCash installment QR code" onclick="openGcashQrViewer('${orderGcashQr}')"></div>` : ''}
             ${paymentMethod === 'gcash' ? `<div class="order-payment-proof"><strong>GCash Payment Proof:</strong><p class="half-payment-notice">Required downpayment: ₱${requiredDownpayment.toFixed(2)}</p><label for="gcashDownpayment-${order.id}" style="display:block; margin-top:8px; color:#d4af37; font-weight:600;">Amount to pay:</label><input id="gcashDownpayment-${order.id}" type="number" step="0.01" min="0" value="${requiredDownpayment.toFixed(2)}" onchange="updateOrderDownpayment(${order.id}, this.value)" style="width: 100%; margin-top: 6px; margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #111; color: #fff;" />${gcashProofHtml}<input type="file" accept="image/*" onchange="uploadOrderPaymentProof(${order.id}, this)"></div>` : ''}
             <div class="order-actions"><strong>Order action:</strong><div class="order-action-buttons"><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'cancel')">Cancel / Change of Mind</button><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'refund')">Request Refund</button></div><div id="orderReason-${order.id}" class="order-reason-options"></div>${order.requestType ? `<p class="order-request-status">Request: ${order.requestType === 'cancel' ? 'Cancel / Change of Mind' : 'Refund'} (${order.requestStatus || 'pending'})</p>` : ''}</div>
             ${getOrderReviewsSection(order)}
         `;
         ordersList.appendChild(orderItem);
     });
+}
+
+function openGcashQrViewer(qrSource) {
+    const modal = document.getElementById('gcashQrViewerModal');
+    const image = document.getElementById('gcashQrViewerImage');
+    if (!modal || !image || !qrSource) return;
+
+    image.src = qrSource;
+    modal.style.display = 'flex';
+}
+
+function closeGcashQrViewer() {
+    const modal = document.getElementById('gcashQrViewerModal');
+    if (modal) modal.style.display = 'none';
 }
 
 // Load Purchase History (Completed/Delivered/Cancelled Orders)

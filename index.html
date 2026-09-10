@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>KingPin Custom Ph® CamSur - Jersey Management System</title>
-    <link rel="stylesheet" href="css/style.css?v=20260910-light-orders-1">
+    <link rel="stylesheet" href="css/style.css?v=20260910-qr-viewer-1">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -1255,7 +1255,7 @@
         </div>
     </div>
 
-    <script src="js/app.js?v=20260910-gcash-netlify-1"></script>
+    <script src="js/app.js?v=20260910-qr-viewer-1"></script>
     <script src="js/design-interface.js?v=20260910-navigation-fix-1"></script>
     <script>
         // Force initialization when page loads
@@ -1301,6 +1301,15 @@ if (savedLogo) {
 </script>
 
 <!-- Shared receipt modal for customer checkout and admin order details -->
+<div id="gcashQrViewerModal" class="gcash-qr-viewer-modal" style="display: none;" onclick="if (event.target === this) closeGcashQrViewer()">
+    <div class="gcash-qr-viewer-content" role="dialog" aria-modal="true" aria-labelledby="gcashQrViewerTitle">
+        <button type="button" class="gcash-qr-viewer-close" onclick="closeGcashQrViewer()" aria-label="Close QR viewer">&times;</button>
+        <h2 id="gcashQrViewerTitle">GCash Payment QR</h2>
+        <img id="gcashQrViewerImage" src="" alt="Enlarged GCash payment QR code">
+        <p>Scan this QR code to pay the required downpayment.</p>
+    </div>
+</div>
+
 <div id="orderDetailsModal" class="modal" style="display: none;">
     <div class="modal-content" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
         <div class="modal-header">
