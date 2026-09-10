@@ -1257,26 +1257,36 @@ function uploadGCashQRCode(e) {
         return;
     }
 
-    if (qrFile.size > 3 * 1024 * 1024) {
-        message.className = 'message error';
-        message.textContent = '❌ QR image must be smaller than 3MB.';
-        message.style.display = 'block';
-        return;
-    }
-    
     // Convert image to base64
     const reader = new FileReader();
     reader.onload = async function(e) {
-        appData.gcashQRCode = e.target.result;
+        let qrDataUrl = e.target.result;
+        if (qrFile.size > 1.5 * 1024 * 1024) {
+            try {
+                qrDataUrl = await optimizeGcashQRCode(qrDataUrl);
+            } catch (error) {
+                console.warn('Unable to optimize GCash QR image:', error);
+            }
+        }
+
+        if (qrDataUrl.length > 5 * 1024 * 1024) {
+            message.className = 'message error';
+            message.textContent = '❌ QR image is too large. Please choose a smaller JPG or PNG.';
+            message.style.display = 'block';
+            return;
+        }
+
+        appData.gcashQRCode = qrDataUrl;
         saveGCashQRCode();
-        const sharedSaved = await saveSharedGcashQRCode();
+        const sharedResult = await saveSharedGcashQRCode();
+        const sharedSaved = sharedResult.ok;
         window.dispatchEvent(new CustomEvent('kingpin-gcash-qr-updated'));
         displayGCashQRPreview();
         
         message.className = 'message success';
         message.textContent = sharedSaved
             ? '✓ GCash QR Code updated successfully! It will be shown to all customers on their orders.'
-            : '✓ GCash QR Code saved on this device. Start the server to share it with customers on other devices.';
+            : `⚠️ Saved on this device, but could not sync to the server${sharedResult.error ? `: ${sharedResult.error}` : '.'}`;
         message.style.display = 'block';
         
         // Reset form
@@ -1295,6 +1305,23 @@ function uploadGCashQRCode(e) {
     };
     
     reader.readAsDataURL(qrFile);
+}
+
+function optimizeGcashQRCode(dataUrl) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => {
+            const maxDimension = 1800;
+            const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.width * scale));
+            canvas.height = Math.max(1, Math.round(image.height * scale));
+            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.88));
+        };
+        image.onerror = reject;
+        image.src = dataUrl;
+    });
 }
 
 // Display GCash QR Code preview in settings
@@ -1334,17 +1361,26 @@ async function saveSharedGcashQRCode() {
                     headers: { 'Content-Type': 'application/json' },
                     body: payload
                 });
-                if (!response.ok) continue;
+                if (!response.ok) {
+                    let error = `server returned ${response.status}`;
+                    try {
+                        const result = await response.json();
+                        error = result.error || error;
+                    } catch (parseError) {
+                        // Keep the HTTP status when the response is not JSON.
+                    }
+                    continue;
+                }
                 const result = await response.json();
-                if (result.ok === true) return true;
+                if (result.ok === true) return { ok: true };
             } catch (error) {
                 continue;
             }
         }
-        return false;
+        return { ok: false, error: 'server unavailable' };
     } catch (error) {
         console.warn('Unable to save shared GCash QR code:', error);
-        return false;
+        return { ok: false, error: 'server unavailable' };
     }
 }
 
