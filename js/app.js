@@ -1717,7 +1717,7 @@ function toggleCart() {
     }
 }
 
-function viewOrders() {
+async function viewOrders() {
     appData.notifications.forEach(notification => {
         if (notification.type === 'customer') {
             notification.read = true;
@@ -1732,6 +1732,7 @@ function viewOrders() {
     document.getElementById('checkoutSection').style.display = 'none';
     document.getElementById('customerServiceSection').style.display = 'none';
     saveNavigationState('customer', 'viewOrders');
+    await loadSharedGcashQRCode();
     loadCustomerOrders();
     fetchSharedOrders().then(sharedOrders => {
         const sharedById = new Map(sharedOrders.map(order => [String(order.id), order]));
