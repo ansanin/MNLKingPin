@@ -1851,6 +1851,9 @@ function viewCustomerSettings() {
 
     const accounts = loadCustomerAccounts();
     const profile = appData.currentUserProfile || accounts[appData.currentUser] || {};
+    document.querySelectorAll('#customerPage .customer-container > div').forEach(section => {
+        section.style.display = 'none';
+    });
     document.getElementById('productsSection').style.display = 'none';
     document.getElementById('cartSection').style.display = 'none';
     document.getElementById('ordersSection').style.display = 'none';
