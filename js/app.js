@@ -1354,7 +1354,7 @@ function saveGCashQRCode() {
 async function saveSharedGcashQRCode() {
     try {
         const payload = JSON.stringify({ gcashQRCode: appData.gcashQRCode });
-        for (const endpoint of ['api/gcash-qr.php', 'api/gcash-qr']) {
+        for (const endpoint of ['/.netlify/functions/gcash-qr', 'api/gcash-qr.php', 'api/gcash-qr']) {
             try {
                 const response = await fetch(endpoint, {
                     method: 'POST',
@@ -5415,7 +5415,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function loadSharedGcashQRCode() {
     try {
-        for (const endpoint of ['api/gcash-qr.php', 'api/gcash-qr']) {
+        for (const endpoint of ['/.netlify/functions/gcash-qr', 'api/gcash-qr.php', 'api/gcash-qr']) {
             try {
                 const response = await fetch(endpoint, { cache: 'no-store' });
                 if (!response.ok) continue;
