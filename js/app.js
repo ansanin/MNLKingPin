@@ -1301,48 +1301,45 @@ function uploadShopLogo(e) {
     const logoName = document.getElementById('shopLogoName').value.trim();
     const message = document.getElementById('logoMessage');
     
-    if (!logoFile) {
-        message.className = 'message error';
-        message.textContent = '❌ Please select a logo image';
-        message.style.display = 'block';
-        return;
-    }
-    
     if (!logoName) {
         message.className = 'message error';
         message.textContent = '❌ Please enter shop name';
         message.style.display = 'block';
         return;
     }
-    
-    // Convert image to base64
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        appData.shopLogo = e.target.result;
+
+    const saveBranding = () => {
         appData.shopName = logoName;
         saveShopLogo();
         updateShopLogoDisplay();
         updateLoginLogo();
-        
+
         message.className = 'message success';
-        message.textContent = '✓ Shop logo updated successfully!';
+        message.textContent = logoFile ? '✓ Shop name and logo updated successfully!' : '✓ Shop name updated successfully!';
         message.style.display = 'block';
-        
-        // Reset form
-        document.getElementById('logoUploadForm').reset();
-        
-        // Hide message after 3 seconds
+
+        document.getElementById('shopLogoFile').value = '';
         setTimeout(() => {
             message.style.display = 'none';
         }, 3000);
     };
-    
-    reader.onerror = function(e) {
+
+    if (!logoFile) {
+        saveBranding();
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = event => {
+        appData.shopLogo = event.target.result;
+        saveBranding();
+    };
+    reader.onerror = () => {
         message.className = 'message error';
         message.textContent = '❌ Error reading file. Please try again.';
         message.style.display = 'block';
     };
-    
+
     reader.readAsDataURL(logoFile);
 }
 
@@ -1681,6 +1678,10 @@ function showAdminTab(tabName) {
     document.getElementById('reportsTab').style.display = tabName === 'reports' ? 'block' : 'none';
     document.getElementById('settingsTab').style.display = tabName === 'settings' ? 'block' : 'none';
     saveNavigationState('admin', tabName);
+
+    if (tabName === 'settings') {
+        document.getElementById('shopLogoName').value = appData.shopName || 'KingPin Custom Ph® CamSur';
+    }
     
     // Load data when tabs are clicked
     if (tabName === 'products') {
