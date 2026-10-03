@@ -716,22 +716,82 @@ function showCustomerSignup() {
 }
 
 // Register new customer
+function normalizeCustomerEmail(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
 // Customer accounts storage
 function loadCustomerAccounts() {
-    const stored = localStorage.getItem('kingpinCustomerAccounts');
-    if (stored) {
+    const mergedAccounts = {};
+
+    const readStorage = (key) => {
+        const stored = localStorage.getItem(key);
+        if (!stored) return null;
         try {
             return JSON.parse(stored);
-        } catch (e) {
-            console.error('Error loading customer accounts:', e);
-            return {};
+        } catch (error) {
+            console.error(`Error loading customer accounts from ${key}:`, error);
+            return null;
         }
-    }
-    return {};
+    };
+
+    const addFromObject = (source) => {
+        if (!source || typeof source !== 'object') return;
+
+        Object.entries(source).forEach(([key, value]) => {
+            if (!value || typeof value !== 'object') return;
+            const email = normalizeCustomerEmail(value.email || key);
+            if (!email) return;
+            mergedAccounts[email] = {
+                ...value,
+                email,
+                password: value.password || value.accountPassword || ''
+            };
+        });
+    };
+
+    const addFromArray = (source) => {
+        if (!Array.isArray(source)) return;
+
+        source.forEach(account => {
+            if (!account || typeof account !== 'object') return;
+            const email = normalizeCustomerEmail(account.email || account.username || '');
+            if (!email) return;
+            mergedAccounts[email] = {
+                ...account,
+                email,
+                password: account.password || account.accountPassword || ''
+            };
+        });
+    };
+
+    addFromObject(readStorage('kingpinCustomerAccounts'));
+    addFromObject(readStorage('kingpinCustomers'));
+    addFromArray(readStorage('kingpinCustomers'));
+    addFromArray(readStorage('customerDatabase'));
+
+    return mergedAccounts;
 }
 
 function saveCustomerAccounts(accounts) {
-    localStorage.setItem('kingpinCustomerAccounts', JSON.stringify(accounts));
+    const cleaned = {};
+    Object.entries(accounts || {}).forEach(([key, value]) => {
+        const email = normalizeCustomerEmail(value?.email || key);
+        if (!email) return;
+        cleaned[email] = {
+            ...value,
+            email,
+            password: value?.password || value?.accountPassword || ''
+        };
+    });
+
+    localStorage.setItem('kingpinCustomerAccounts', JSON.stringify(cleaned));
+
+    const legacyList = Object.values(cleaned).map(account => ({
+        ...account,
+        email: normalizeCustomerEmail(account.email)
+    }));
+    localStorage.setItem('kingpinCustomers', JSON.stringify(legacyList));
 }
 
 // Save current session
@@ -813,7 +873,7 @@ function signupCustomer(e) {
     
     const username = document.getElementById('customerSignupUsername').value.trim();
     const fullName = document.getElementById('customerSignupName').value.trim();
-    const email = document.getElementById('customerSignupEmail').value.trim().toLowerCase();
+    const email = normalizeCustomerEmail(document.getElementById('customerSignupEmail').value);
     const phone = document.getElementById('customerSignupPhone').value.trim();
     const password = document.getElementById('customerSignupPassword').value;
     const errorMessage = document.getElementById('customerSignupErrorMessage');
@@ -836,9 +896,10 @@ function signupCustomer(e) {
     
     // Load existing accounts
     const accounts = loadCustomerAccounts();
+    const existingAccount = accounts[email];
     
     // Check if email already exists
-    if (accounts[email]) {
+    if (existingAccount) {
         document.getElementById('customerSignupErrorMessage').textContent = 'This email is already registered. Please login instead.';
         return;
     }
@@ -880,7 +941,7 @@ function signupCustomer(e) {
 function loginCustomer(e) {
     e.preventDefault();
     
-    const email = document.getElementById('customerLoginEmail').value.trim().toLowerCase();
+    const email = normalizeCustomerEmail(document.getElementById('customerLoginEmail').value);
     const password = document.getElementById('customerLoginPassword').value;
     
     if (!email) {
@@ -894,24 +955,33 @@ function loginCustomer(e) {
         return;
     }
     
-    // Load accounts
+    // Load accounts from all supported customer storage formats
     const accounts = loadCustomerAccounts();
+    const account = accounts[email] || Object.values(accounts).find(item => normalizeCustomerEmail(item?.email) === email);
     
     // Check if account exists
-    if (!accounts[email]) {
+    if (!account) {
         document.getElementById('customerLoginErrorMessage').textContent = 'Account not found. Please create an account first.';
         return;
     }
 
-    if (accounts[email].password && accounts[email].password !== password) {
+    const savedPassword = String(account.password || '').trim();
+    const enteredPassword = String(password || '').trim();
+
+    if (savedPassword && savedPassword !== enteredPassword) {
         document.getElementById('customerLoginErrorMessage').textContent = 'Incorrect password.';
+        return;
+    }
+
+    if (!savedPassword && enteredPassword) {
+        document.getElementById('customerLoginErrorMessage').textContent = 'This account uses Google sign-in. Please use Google login or reset the password.';
         return;
     }
     
     // Login successful
     appData.currentUser = email;
     appData.currentRole = 'customer';
-    appData.currentUserProfile = accounts[email];
+    appData.currentUserProfile = account;
     rememberQuickLogin();
     
     // Save session
