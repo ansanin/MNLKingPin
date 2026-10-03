@@ -3132,8 +3132,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const isTeamOrderCheckbox = document.getElementById('isTeamOrder');
     if (isTeamOrderCheckbox) {
+        isTeamOrderCheckbox.checked = true;
         isTeamOrderCheckbox.addEventListener('change', toggleTeamOrderFields);
     }
+
+    const teamPlayersField = document.getElementById('teamPlayers');
+    if (teamPlayersField) {
+        teamPlayersField.value = teamPlayersField.value || '2';
+        teamPlayersField.addEventListener('input', renderTeamSizeRows);
+        teamPlayersField.addEventListener('change', renderTeamSizeRows);
+    }
+
     toggleTeamOrderFields();
 });
 
@@ -3161,11 +3170,19 @@ function renderTeamSizeRows() {
     }
 
     teamSizeRows.innerHTML = '';
+
+    if (playerCount <= 0) {
+        teamSizeRows.innerHTML = '<small style="color: #a0a0a0;">Enter the number of players to generate the size fields.</small>';
+        teamSizesHidden.value = '';
+        return;
+    }
+
     for (let index = 1; index <= playerCount; index += 1) {
         const row = document.createElement('div');
         row.style.display = 'flex';
         row.style.alignItems = 'center';
         row.style.gap = '8px';
+        row.style.marginBottom = '8px';
         row.innerHTML = `
             <label style="min-width: 90px; color: #d4af37; font-weight: 600;">Player ${index}</label>
             <select data-player-index="${index}" style="flex: 1; min-width: 120px;">
@@ -3200,10 +3217,11 @@ function renderTeamSizeRows() {
 function toggleTeamOrderFields() {
     const checkbox = document.getElementById('isTeamOrder');
     const teamOrderSection = document.getElementById('teamOrderSection');
+    const teamPlayersField = document.getElementById('teamPlayers');
     const fields = [
         document.getElementById('teamName'),
         document.getElementById('teamType'),
-        document.getElementById('teamPlayers'),
+        teamPlayersField,
         document.getElementById('teamNotes')
     ];
 
@@ -3217,6 +3235,10 @@ function toggleTeamOrderFields() {
             field.disabled = !isChecked;
         }
     });
+
+    if (teamPlayersField && isChecked && (!teamPlayersField.value || Number(teamPlayersField.value) < 2)) {
+        teamPlayersField.value = '2';
+    }
 
     const teamSizeRows = document.getElementById('teamSizeRows');
     if (teamSizeRows) {
