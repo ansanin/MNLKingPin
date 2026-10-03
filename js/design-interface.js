@@ -128,7 +128,7 @@ function setDesignMode(mode) {
     document.getElementById('uploadDesignMode').style.display = mode === 'upload' ? 'block' : 'none';
 }
 
-// Set Clothing Type (Tops or Bottoms)
+// Set Clothing Type (Top, Bottom, or Both)
 function setClothingType(type) {
     designData.currentClothingType = type;
     
@@ -136,11 +136,16 @@ function setClothingType(type) {
     document.querySelectorAll('.clothing-type-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    document.querySelector(`[data-type="${type}"]`).classList.add('active');
+    const selectedButton = document.querySelector(`[data-type="${type}"]`);
+    if (selectedButton) {
+        selectedButton.classList.add('active');
+    }
     
-    // Show/hide clothing forms
-    document.getElementById('topsDesignForm').style.display = type === 'tops' ? 'block' : 'none';
-    document.getElementById('bottomsDesignForm').style.display = type === 'bottoms' ? 'block' : 'none';
+    const showTops = type === 'tops' || type === 'both';
+    const showBottoms = type === 'bottoms' || type === 'both';
+
+    document.getElementById('topsDesignForm').style.display = showTops ? 'block' : 'none';
+    document.getElementById('bottomsDesignForm').style.display = showBottoms ? 'block' : 'none';
 }
 
 // Add Customized Top to Cart
