@@ -3375,7 +3375,7 @@ function processCustomerOrder() {
             : `✓ New Order #${orderData.id} from ${orderData.customerName}`, orderData.id);
         addNotification('customer', paymentMethod === 'gcash'
             ? `✓ Order #${orderData.id} was placed. Please upload your GCash payment proof in My Orders.`
-            : `✓ Your ${teamOrderInput.isTeamOrder ? 'team ' : ''}order #${orderData.id} was placed successfully. Total: ₱${orderData.totalAmount.toFixed(2)}. Payment: COD.`, orderData.id);
+            : `✓ Your ${teamOrderInput.isTeamOrder ? 'team ' : ''}order #${orderData.id} was placed successfully. Total: ₱${orderData.totalAmount.toFixed(2)}. Payment: Pickup at Shop.`, orderData.id);
         saveNotifications();
         updateNotificationBadges();
         if (document.getElementById('notificationsList')) {
@@ -3386,7 +3386,7 @@ function processCustomerOrder() {
         const messageDiv = document.getElementById('gcashPaymentMessage');
         if (messageDiv) {
             messageDiv.className = 'message success';
-            messageDiv.textContent = '✓ Order placed successfully! Your Order ID: ' + orderData.id + ' - ' + (paymentMethod === 'gcash' ? 'Upload payment proof in My Orders' : 'Cash on Delivery');
+            messageDiv.textContent = '✓ Order placed successfully! Your Order ID: ' + orderData.id + ' - ' + (paymentMethod === 'gcash' ? 'Upload payment proof in My Orders' : 'Pickup at Shop');
             messageDiv.style.display = 'block';
         }
 
