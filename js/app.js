@@ -3538,6 +3538,9 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
         `;
     }).join('');
     const measurements = order.measurements || {};
+    const teamSizesHtml = order.teamOrder && Array.isArray(order.teamOrder.teamSizes) && order.teamOrder.teamSizes.length
+        ? `<div style="margin-top: 12px; padding: 10px; border: 1px solid #d4af37; border-radius: 6px; background: rgba(212, 175, 55, 0.08);"><strong>Team Player Sizes:</strong><br>${order.teamOrder.teamSizes.map(item => `Player ${item.player}: ${item.size}`).join('<br>')}</div>`
+        : '';
 
     document.getElementById('orderDetailsContent').innerHTML = `
             <div class="customer-receipt-content">
@@ -3554,6 +3557,7 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
                 <div><strong>Delivery Location:</strong> ${order.customerAddress}</div>
             </div>
             <div class="customer-receipt-items"><h3>Order Items</h3>${itemsHtml}</div>
+            ${teamSizesHtml ? `<div class="customer-receipt-payment">${teamSizesHtml}</div>` : ''}
             <div class="customer-receipt-payment">
                 <div><strong>Payment Method:</strong> ${order.paymentMethod.toUpperCase()}</div>
                 <div><strong>Payment Status:</strong> ${order.paymentStatus.replace('-', ' ')}</div>
@@ -3668,6 +3672,9 @@ function loadCustomerOrders() {
         const teamOrderBadge = order.teamOrder && order.teamOrder.isTeamOrder
             ? `<p style="margin: 8px 0 0; color: #d4af37; font-weight: 700;">🏆 ${buildTeamOrderLabel(order.teamOrder)}</p>`
             : '';
+        const teamOrderSizes = order.teamOrder && Array.isArray(order.teamOrder.teamSizes) && order.teamOrder.teamSizes.length
+            ? `<p style="margin: 8px 0 0; color: #d4af37;">Team sizes: ${order.teamOrder.teamSizes.map(item => `Player ${item.player}: ${item.size}`).join(' • ')}</p>`
+            : '';
 
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
         const requiredDownpayment = Number(order.gcashDownpaymentAmount ?? ((Number(order.totalAmount || 0) / 2) || 0));
@@ -3711,6 +3718,8 @@ function loadCustomerOrders() {
                 <p><strong>Delivery Address:</strong> ${order.customerAddress}</p>
                 <p><strong>Order Date:</strong> ${order.date}</p>
                 <p><strong>Payment Method:</strong> ${(order.paymentMethod || 'gcash').toUpperCase()}</p>
+                ${teamOrderBadge}
+                ${teamOrderSizes}
                 ${order.measurements ? `<p><strong>Measurements:</strong> Chest: ${order.measurements.chest}cm, Waist: ${order.measurements.waist}cm, Length: ${order.measurements.length}cm</p>` : ''}
             </div>
             ${statusHtml}
@@ -4675,6 +4684,9 @@ function renderAdminOrders() {
         const teamOrderSummary = order.teamOrder && order.teamOrder.isTeamOrder
             ? `<div style="margin-top: 8px; padding: 6px 8px; border-radius: 4px; background: rgba(212, 175, 55, 0.12); color: #f5d76a; font-weight: 700;">🏆 ${buildTeamOrderLabel(order.teamOrder)}</div>`
             : '';
+        const teamSizesText = order.teamOrder && Array.isArray(order.teamOrder.teamSizes) && order.teamOrder.teamSizes.length
+            ? `<div style="margin-top: 6px; color: #e8d37a; font-size: 0.85em;">Team sizes: ${order.teamOrder.teamSizes.map(item => `Player ${item.player}: ${item.size}`).join(' • ')}</div>`
+            : '';
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
         const paymentProofHtml = paymentMethod === 'gcash'
             ? order.gcashPaymentProof
@@ -4691,6 +4703,7 @@ function renderAdminOrders() {
                 <small>📱 ${customerPhone}</small><br>
                 <small>📍 ${customerAddress}</small>
                 ${teamOrderSummary}
+                ${teamSizesText}
             </td>
             <td style="max-width: 300px;">${itemsList}</td>
             <td><strong>₱${totalAmount.toFixed(2)}</strong></td>
