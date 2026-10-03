@@ -4871,8 +4871,12 @@ function renderAdminOrders() {
             if (item.image) {
                 imgHtml = `<img src="${item.image}" alt="${item.name}" style="width: 60px; height: 60px; border-radius: 5px; margin-bottom: 8px;"><br>`;
             }
+
+            const designAttachment = item.designType === 'uploaded'
+                ? '<br><small style="color: #4caf50;">📎 Customer design attached; open View to preview or download.</small>'
+                : '';
             
-            return `${imgHtml}<strong>${item.name}</strong> (Qty: ${item.quantity}) - ₱${(item.price * item.quantity).toFixed(2)}${customStr}`;
+            return `${imgHtml}<strong>${item.name}</strong> (Qty: ${item.quantity}) - ₱${(item.price * item.quantity).toFixed(2)}${customStr}${designAttachment}`;
         }).join('<br><br>');
         
         // Ensure order data exists
@@ -4919,7 +4923,7 @@ function renderAdminOrders() {
                     <option value="delivered" ${order.status === 'completed' || order.status === 'delivered' ? 'selected' : ''}>Delivered</option>
                     <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
                 </select>
-                <button class="btn btn-small" onclick="viewOrderDetails(${JSON.stringify(order).replace(/"/g, '&quot;')})" style="margin-top: 8px; background: #4caf50; padding: 4px 8px; font-size: 0.85em; width: 100%;">👁️ View</button>
+                <button class="btn btn-small" onclick="viewOrderDetails(${Number(order.id) || 0})" style="margin-top: 8px; background: #4caf50; padding: 4px 8px; font-size: 0.85em; width: 100%;">👁️ View</button>
             </td>
         `;
         document.getElementById('adminOrdersList').appendChild(row);
@@ -5037,11 +5041,18 @@ function updateOrderStatus(orderId) {
 // View Order Details Modal
 function viewOrderDetails(orderStr) {
     try {
-        // Handle JSON string (from button onclick)
         let order = orderStr;
         if (typeof orderStr === 'string') {
-            order = JSON.parse(decodeURIComponent(orderStr));
+            try {
+                order = JSON.parse(decodeURIComponent(orderStr));
+            } catch (error) {
+                order = appData.orders.find(savedOrder => String(savedOrder.id) === orderStr);
+            }
+        } else if (typeof orderStr === 'number') {
+            order = appData.orders.find(savedOrder => String(savedOrder.id) === String(orderStr));
         }
+
+        if (!order) throw new Error('Order not found');
         
         // Build the order details HTML
         let itemsHtml = '';
@@ -5059,10 +5070,32 @@ function viewOrderDetails(orderStr) {
                     }
                     customStr += '</small>';
                 }
+
+                let uploadedDesignHtml = '';
+                if (item.designType === 'uploaded' && item.details) {
+                    const details = item.details;
+                    const fileName = String(details.fileName || 'customer-design').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+                    const uploadedFile = String(details.uploadedFile || '');
+                    const isImage = /^data:image\/(png|jpeg|gif|webp);base64,/i.test(uploadedFile);
+                    const isPdf = /^data:application\/pdf;base64,/i.test(uploadedFile);
+                    const fileLink = isImage || isPdf
+                        ? `<a href="${uploadedFile}" download="${fileName}" style="display: inline-block; margin-top: 8px; color: #1769aa; font-weight: 700;">Download ${isPdf ? 'PDF' : 'image'}: ${fileName}</a>`
+                        : '<span style="display: block; margin-top: 8px; color: #a66;">Attachment is unavailable. Ask the customer to upload the design again.</span>';
+                    const preview = isImage
+                        ? `<img src="${uploadedFile}" alt="Customer design: ${fileName}" style="display: block; max-width: 100%; max-height: 420px; object-fit: contain; margin-top: 10px; border: 1px solid #ccc; border-radius: 4px;">`
+                        : '';
+
+                    uploadedDesignHtml = `<div style="margin-top: 12px; padding: 12px; background: #f4f7f5; border: 1px solid #9ab9a2; border-radius: 5px;">
+                        <strong style="color: #28703d;">📤 Customer uploaded design</strong><br>
+                        Item: ${details.itemDescription || 'N/A'} | Type: ${details.clothingType || 'N/A'}<br>
+                        File: ${fileName}${fileLink}${preview}
+                    </div>`;
+                }
                 return `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #eee;">
                     <strong>${item.name}</strong> (Qty: ${item.quantity})<br>
                     Price: ₱${(item.price).toFixed(2)} each = ₱${(item.price * item.quantity).toFixed(2)}
                     ${customStr}
+                    ${uploadedDesignHtml}
                 </div>`;
             }).join('');
         }
