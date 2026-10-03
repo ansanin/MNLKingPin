@@ -16,6 +16,11 @@ const appData = {
     shopLogo: null,
     gcashQRCode: null,
     shopName: 'KingPin Custom Ph® CamSur',
+    websiteFooter: {
+        location: '',
+        facebookUrl: '',
+        instagramUrl: ''
+    },
     adminCredentials: {
         username: 'admin',
         password: 'admin123'
@@ -512,6 +517,7 @@ function initializeData() {
     loadProductsFromStorage();
     loadCustomers();
     loadShopLogo();
+    loadWebsiteFooterSettings();
     loadGCashQRCode();
 }
 
@@ -607,6 +613,96 @@ function loadShopLogo() {
     updateLoginLogo();
 }
 
+function normalizeWebsiteSocialUrl(value) {
+    const rawValue = String(value || '').trim();
+    if (!rawValue) return '';
+
+    try {
+        const url = new URL(/^https?:\/\//i.test(rawValue) ? rawValue : `https://${rawValue}`);
+        return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+    } catch (error) {
+        return '';
+    }
+}
+
+function loadWebsiteFooterSettings() {
+    try {
+        const stored = JSON.parse(localStorage.getItem('kingpinWebsiteFooter') || '{}');
+        appData.websiteFooter = {
+            location: String(stored.location || ''),
+            facebookUrl: normalizeWebsiteSocialUrl(stored.facebookUrl),
+            instagramUrl: normalizeWebsiteSocialUrl(stored.instagramUrl)
+        };
+    } catch (error) {
+        appData.websiteFooter = { location: '', facebookUrl: '', instagramUrl: '' };
+    }
+
+    renderWebsiteFooter();
+    populateWebsiteFooterSettings();
+}
+
+function populateWebsiteFooterSettings() {
+    const locationInput = document.getElementById('websiteFooterLocationInput');
+    const facebookInput = document.getElementById('websiteFooterFacebookInput');
+    const instagramInput = document.getElementById('websiteFooterInstagramInput');
+    if (locationInput) locationInput.value = appData.websiteFooter.location;
+    if (facebookInput) facebookInput.value = appData.websiteFooter.facebookUrl;
+    if (instagramInput) instagramInput.value = appData.websiteFooter.instagramUrl;
+}
+
+function renderWebsiteFooter() {
+    const footer = document.getElementById('websiteFooter');
+    if (!footer) return;
+
+    const shopName = document.getElementById('websiteFooterShopName');
+    const location = document.getElementById('websiteFooterLocation');
+    const facebook = document.getElementById('websiteFooterFacebook');
+    const instagram = document.getElementById('websiteFooterInstagram');
+
+    if (shopName) shopName.textContent = appData.shopName || 'KingPin Custom Ph® CamSur';
+    if (location) {
+        location.textContent = appData.websiteFooter.location;
+        location.hidden = !appData.websiteFooter.location;
+    }
+
+    [[facebook, appData.websiteFooter.facebookUrl], [instagram, appData.websiteFooter.instagramUrl]].forEach(([link, url]) => {
+        if (!link) return;
+        link.hidden = !url;
+        if (url) link.href = url;
+        else link.removeAttribute('href');
+    });
+}
+
+function saveWebsiteFooterSettings(event) {
+    event.preventDefault();
+
+    const message = document.getElementById('websiteFooterMessage');
+    const facebookValue = document.getElementById('websiteFooterFacebookInput').value.trim();
+    const instagramValue = document.getElementById('websiteFooterInstagramInput').value.trim();
+    const facebookUrl = normalizeWebsiteSocialUrl(facebookValue);
+    const instagramUrl = normalizeWebsiteSocialUrl(instagramValue);
+
+    if ((facebookValue && !facebookUrl) || (instagramValue && !instagramUrl)) {
+        message.className = 'message error';
+        message.textContent = 'Please enter valid Facebook and Instagram web links.';
+        message.style.display = 'block';
+        return;
+    }
+
+    appData.websiteFooter = {
+        location: document.getElementById('websiteFooterLocationInput').value.trim(),
+        facebookUrl,
+        instagramUrl
+    };
+    localStorage.setItem('kingpinWebsiteFooter', JSON.stringify(appData.websiteFooter));
+    renderWebsiteFooter();
+
+    message.className = 'message success';
+    message.textContent = 'Website footer settings saved.';
+    message.style.display = 'block';
+    setTimeout(() => { message.style.display = 'none'; }, 3000);
+}
+
 // Update login page logo display
 function updateLoginLogo() {
     const loginLogo = document.getElementById('loginLogo');
@@ -639,6 +735,7 @@ function updateShopLogoDisplay() {
     document.querySelectorAll('.navbar-division').forEach(label => {
         label.textContent = appData.shopName || 'MNL KINGPIN / CAMSUR';
     });
+    renderWebsiteFooter();
     
     // Update customer navbar emblem
     if (customerNavbarLogo) {
@@ -1686,6 +1783,7 @@ function showAdminTab(tabName) {
 
     if (tabName === 'settings') {
         document.getElementById('shopLogoName').value = appData.shopName || 'KingPin Custom Ph® CamSur';
+        populateWebsiteFooterSettings();
     }
     
     // Load data when tabs are clicked

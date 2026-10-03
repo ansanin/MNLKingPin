@@ -721,6 +721,108 @@ body.light-mode [style*="color: #a0a0a0"] {
     padding: 30px 20px;
 }
 
+.website-footer {
+    border-top: 1px solid rgba(212, 175, 55, 0.45);
+    background: #111;
+    color: #e0e0e0;
+}
+
+.website-footer-inner {
+    display: flex;
+    max-width: 1200px;
+    min-height: 88px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin: 0 auto;
+    padding: 18px 20px;
+}
+
+.website-footer-brand {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.website-footer-brand strong {
+    color: #f0c849;
+    overflow-wrap: anywhere;
+}
+
+.website-footer-location {
+    color: #b9c1c7;
+    font-size: 0.92rem;
+}
+
+.website-footer-location:not([hidden])::before {
+    content: 'Location: ';
+    color: #8c969d;
+}
+
+.website-footer-socials {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 10px;
+}
+
+.website-social-link {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border: 1px solid #42484d;
+    border-radius: 50%;
+    background: #202529;
+    transition: transform 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+
+.website-social-link[hidden] {
+    display: none;
+}
+
+.website-social-link:hover {
+    transform: translateY(-2px);
+    border-color: #f0c849;
+}
+
+.website-social-link svg {
+    width: 21px;
+    height: 21px;
+    fill: #fff;
+}
+
+.instagram-link svg {
+    fill: none;
+    stroke: #fff;
+    stroke-width: 1.8;
+}
+
+.instagram-link svg .instagram-dot {
+    fill: #fff;
+    stroke: none;
+}
+
+body.light-mode .website-footer {
+    border-top-color: #c7a52f;
+    background: #202a30;
+    color: #f3f5f6;
+}
+
+body.light-mode .website-footer-location {
+    color: #e0e6e9;
+}
+
+@media (max-width: 560px) {
+    .website-footer-inner {
+        min-height: 0;
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 14px;
+        padding: 20px 16px;
+    }
+}
+
 /* Products Section */
 .products-section {
     margin-bottom: 30px;

@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>KingPin Custom Ph® CamSur - Jersey Management System</title>
-    <link rel="stylesheet" href="css/style.css?v=20261003-checkout-size-panels-1">
+    <link rel="stylesheet" href="css/style.css?v=20261003-website-footer-1">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -646,6 +646,24 @@
                 <button type="button" class="btn btn-secondary" onclick="viewCustomerService()">Contact Customer Service</button>
             </div>
         </div>
+
+    <footer id="websiteFooter" class="website-footer">
+        <div class="website-footer-inner">
+            <div class="website-footer-brand">
+                <strong id="websiteFooterShopName">KingPin Custom Ph® CamSur</strong>
+                <span id="websiteFooterLocation" class="website-footer-location" hidden></span>
+            </div>
+            <nav class="website-footer-socials" aria-label="Shop social media">
+                <a id="websiteFooterFacebook" class="website-social-link facebook-link" href="#" target="_blank" rel="noopener noreferrer" aria-label="Visit our Facebook page" title="Facebook" hidden>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.4 21v-8.2h2.8l.4-3.2h-3.2v-2c0-.9.3-1.6 1.6-1.6h1.7V3.1c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3v2.3H7.2v3.2H10V21z"/></svg>
+                </a>
+                <a id="websiteFooterInstagram" class="website-social-link instagram-link" href="#" target="_blank" rel="noopener noreferrer" aria-label="Visit our Instagram profile" title="Instagram" hidden>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5"/><circle cx="12" cy="12" r="4.1"/><circle class="instagram-dot" cx="17.8" cy="6.5" r="1.1"/></svg>
+                </a>
+            </nav>
+        </div>
+    </footer>
+
     </div>
 
     <!-- Admin Dashboard -->
@@ -1170,6 +1188,28 @@
                     </form>
                     <div id="logoMessage" class="message"></div>
                 </div>
+
+                <div class="settings-section">
+                    <h3>🌐 Website Footer</h3>
+                    <form id="websiteFooterForm" onsubmit="saveWebsiteFooterSettings(event)">
+                        <div class="form-group">
+                            <label for="websiteFooterLocationInput">Shop Location:</label>
+                            <input type="text" id="websiteFooterLocationInput" placeholder="e.g., Naga City, Camarines Sur" autocomplete="street-address">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="websiteFooterFacebookInput">Facebook Page URL:</label>
+                                <input type="text" id="websiteFooterFacebookInput" inputmode="url" placeholder="https://facebook.com/your-page" autocomplete="url">
+                            </div>
+                            <div class="form-group">
+                                <label for="websiteFooterInstagramInput">Instagram Profile URL:</label>
+                                <input type="text" id="websiteFooterInstagramInput" inputmode="url" placeholder="https://instagram.com/your-profile" autocomplete="url">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Save Website Footer</button>
+                    </form>
+                    <div id="websiteFooterMessage" class="message" role="status" aria-live="polite"></div>
+                </div>
                 
                 <div class="settings-section">
                     <h3>Change Admin Credentials</h3>
@@ -1340,7 +1380,7 @@
     </div>
 
     <script src="js/team-order.js?v=20261003-team-order-2"></script>
-    <script src="js/app.js?v=20261003-bottom-size-accordion-1"></script>
+    <script src="js/app.js?v=20261003-website-footer-1"></script>
     <script src="js/design-interface.js?v=20261003-team-order-2"></script>
     <script>
         // Force initialization when page loads
