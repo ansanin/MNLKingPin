@@ -3137,6 +3137,66 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleTeamOrderFields();
 });
 
+function renderTeamSizeRows() {
+    const teamPlayersField = document.getElementById('teamPlayers');
+    const teamSizeRows = document.getElementById('teamSizeRows');
+    const teamSizesHidden = document.getElementById('teamSizes');
+    if (!teamPlayersField || !teamSizeRows || !teamSizesHidden) return;
+
+    const playerCount = Math.max(0, Number(teamPlayersField.value) || 0);
+    const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
+    const existingValues = {};
+
+    try {
+        const parsed = JSON.parse(teamSizesHidden.value || '[]');
+        if (Array.isArray(parsed)) {
+            parsed.forEach(item => {
+                if (item && Number(item.player) > 0) {
+                    existingValues[Number(item.player)] = String(item.size || '');
+                }
+            });
+        }
+    } catch (error) {
+        // Ignore malformed values and rebuild the inputs.
+    }
+
+    teamSizeRows.innerHTML = '';
+    for (let index = 1; index <= playerCount; index += 1) {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '8px';
+        row.innerHTML = `
+            <label style="min-width: 90px; color: #d4af37; font-weight: 600;">Player ${index}</label>
+            <select data-player-index="${index}" style="flex: 1; min-width: 120px;">
+                <option value="">-- Select size --</option>
+                ${sizeOptions.map(option => `<option value="${option}" ${existingValues[index] === option ? 'selected' : ''}>${option}</option>`).join('')}
+            </select>
+        `;
+        teamSizeRows.appendChild(row);
+    }
+
+    const rows = teamSizeRows.querySelectorAll('select[data-player-index]');
+    rows.forEach(select => {
+        select.addEventListener('change', () => {
+            const selectedSizes = Array.from(teamSizeRows.querySelectorAll('select[data-player-index]')).map(item => ({
+                player: Number(item.dataset.playerIndex),
+                size: item.value
+            })).filter(item => item.player > 0 && item.size);
+            teamSizesHidden.value = JSON.stringify(selectedSizes);
+        });
+    });
+
+    teamSizesHidden.value = JSON.stringify(
+        Array.from(teamSizeRows.querySelectorAll('select[data-player-index]'))
+            .map(select => ({
+                player: Number(select.dataset.playerIndex),
+                size: select.value
+            }))
+            .filter(item => item.player > 0 && item.size)
+    );
+}
+
 function toggleTeamOrderFields() {
     const checkbox = document.getElementById('isTeamOrder');
     const teamOrderSection = document.getElementById('teamOrderSection');
@@ -3144,7 +3204,6 @@ function toggleTeamOrderFields() {
         document.getElementById('teamName'),
         document.getElementById('teamType'),
         document.getElementById('teamPlayers'),
-        document.getElementById('teamSizes'),
         document.getElementById('teamNotes')
     ];
 
@@ -3158,6 +3217,15 @@ function toggleTeamOrderFields() {
             field.disabled = !isChecked;
         }
     });
+
+    const teamSizeRows = document.getElementById('teamSizeRows');
+    if (teamSizeRows) {
+        teamSizeRows.style.opacity = isChecked ? '1' : '0.5';
+    }
+
+    if (isChecked) {
+        renderTeamSizeRows();
+    }
 }
 
 function placeCustomerOrder(event) {
@@ -3211,12 +3279,13 @@ function processCustomerOrder() {
     const checkoutSize = document.getElementById('checkoutSize') ? document.getElementById('checkoutSize').value.trim() : '';
     const checkoutColor = document.getElementById('checkoutColor') ? document.getElementById('checkoutColor').value.trim() : '';
     const paymentMethod = document.getElementById('paymentMethod').value;
+    const teamSizeValues = document.getElementById('teamSizes') ? document.getElementById('teamSizes').value : '';
     const teamOrderInput = normalizeTeamOrderInput({
         isTeamOrder: document.getElementById('isTeamOrder') ? document.getElementById('isTeamOrder').checked : false,
         teamName: document.getElementById('teamName') ? document.getElementById('teamName').value : '',
         teamType: document.getElementById('teamType') ? document.getElementById('teamType').value : '',
         totalPlayers: document.getElementById('teamPlayers') ? document.getElementById('teamPlayers').value : 0,
-        teamSizes: document.getElementById('teamSizes') ? document.getElementById('teamSizes').value : '',
+        teamSizes: teamSizeValues,
         teamNotes: document.getElementById('teamNotes') ? document.getElementById('teamNotes').value : ''
     });
     
@@ -3284,6 +3353,18 @@ function processCustomerOrder() {
 
     if (teamOrderInput.isTeamOrder && !teamOrderInput.teamName) {
         alert('Please enter your team name for the team order.');
+        sessionStorage.removeItem('kingpinOrderProcessing');
+        const placeOrderButtonReset = document.getElementById('placeCustomerOrderButton');
+        if (placeOrderButtonReset) {
+            placeOrderButtonReset.disabled = false;
+            placeOrderButtonReset.style.opacity = '1';
+            placeOrderButtonReset.style.cursor = 'pointer';
+        }
+        return;
+    }
+
+    if (teamOrderInput.isTeamOrder && teamOrderInput.totalPlayers > 0 && teamOrderInput.teamSizes.length === 0) {
+        alert('Please select a size for each player in this team order.');
         sessionStorage.removeItem('kingpinOrderProcessing');
         const placeOrderButtonReset = document.getElementById('placeCustomerOrderButton');
         if (placeOrderButtonReset) {

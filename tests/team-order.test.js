@@ -5,8 +5,13 @@ const teamInput = {
   isTeamOrder: true,
   teamName: 'Team Alpha',
   teamType: 'Basketball',
-  totalPlayers: 12,
-  teamSizes: '1: M, 2: L, 3: XL, 4: S',
+  totalPlayers: 4,
+  teamSizes: [
+    { player: 1, size: 'M' },
+    { player: 2, size: 'L' },
+    { player: 3, size: 'XL' },
+    { player: 4, size: 'S' }
+  ],
   teamNotes: 'Need matching jersey numbers.'
 };
 
@@ -14,9 +19,14 @@ const normalized = normalizeTeamOrderInput(teamInput);
 assert.strictEqual(normalized.isTeamOrder, true);
 assert.strictEqual(normalized.teamName, 'Team Alpha');
 assert.strictEqual(normalized.teamType, 'Basketball');
-assert.strictEqual(normalized.totalPlayers, 12);
-assert.strictEqual(normalized.teamSizes, '1: M, 2: L, 3: XL, 4: S');
-assert.strictEqual(buildTeamOrderLabel(normalized), 'Team Alpha • Basketball • 12 players • sizes: 1: M, 2: L, 3: XL, 4: S');
+assert.strictEqual(normalized.totalPlayers, 4);
+assert.deepStrictEqual(normalized.teamSizes, [
+  { player: 1, size: 'M' },
+  { player: 2, size: 'L' },
+  { player: 3, size: 'XL' },
+  { player: 4, size: 'S' }
+]);
+assert.strictEqual(buildTeamOrderLabel(normalized), 'Team Alpha • Basketball • 4 players • sizes: 1:M, 2:L, 3:XL, 4:S');
 
 const regularOrder = normalizeTeamOrderInput({ isTeamOrder: false });
 assert.strictEqual(normalized.isTeamOrder, true);

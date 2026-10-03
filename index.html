@@ -517,11 +517,12 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="teamPlayers">Number of Players:</label>
-                                <input type="number" id="teamPlayers" min="2" placeholder="e.g., 12">
+                                <input type="number" id="teamPlayers" min="2" placeholder="e.g., 12" onchange="renderTeamSizeRows()">
                             </div>
                             <div class="form-group">
                                 <label for="teamSizes">Player Sizes:</label>
-                                <textarea id="teamSizes" rows="3" placeholder="Example: 1: M, 2: L, 3: XL, 4: S, 5: M"></textarea>
+                                <input type="hidden" id="teamSizes">
+                                <div id="teamSizeRows" style="display: grid; gap: 8px; margin-top: 8px;"></div>
                             </div>
                         </div>
 
