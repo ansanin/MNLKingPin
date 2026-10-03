@@ -297,6 +297,7 @@ function saveOrders() {
             price: item.price,
             customization: {
                 size: item.customization?.size || '',
+                bottomSize: item.customization?.bottomSize || '',
                 color: item.customization?.color || '',
                 name: item.customization?.name || '',
                 number: item.customization?.number || ''
@@ -2891,6 +2892,28 @@ function updateCartCount() {
 }
 
 // Update Cart Display
+function toggleCheckoutInfoPanel(panelId, toggleButton) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    const shouldOpen = panel.hidden;
+    document.querySelectorAll('.checkout-info-panel').forEach(otherPanel => {
+        otherPanel.hidden = true;
+    });
+    document.querySelectorAll('.checkout-info-toggle').forEach(button => {
+        button.setAttribute('aria-expanded', 'false');
+        const icon = button.querySelector('.checkout-info-chevron');
+        if (icon) icon.textContent = '+';
+    });
+
+    if (shouldOpen) {
+        panel.hidden = false;
+        toggleButton.setAttribute('aria-expanded', 'true');
+        const icon = toggleButton.querySelector('.checkout-info-chevron');
+        if (icon) icon.textContent = '−';
+    }
+}
+
 function getUploadedDesignTypeLabel(type) {
     const labels = {
         tops: 'Top/Shirt (Upper)',
@@ -2958,6 +2981,7 @@ function updateCartDisplay() {
             // Standard product customization
             customizationHTML = '<div class="cart-customization">';
             if (item.customization.size) customizationHTML += `<span>📏 Size: <strong>${item.customization.size}</strong></span>`;
+            if (item.customization.bottomSize) customizationHTML += `<span>📏 Bottom Size: <strong>${item.customization.bottomSize}</strong></span>`;
             if (item.customization.color) customizationHTML += `<span>🎨 Color: <strong>${item.customization.color}</strong></span>`;
             if (item.customization.name) customizationHTML += `<span>👤 Name: <strong>${item.customization.name}</strong></span>`;
             if (item.customization.number) customizationHTML += `<span>🔢 #<strong>${item.customization.number}</strong></span>`;
@@ -3203,6 +3227,7 @@ function updateCheckoutDisplay() {
             // Standard product customization
             customHTML = '<div style="color: #d4af37; font-size: 0.9em; margin-top: 5px;">';
             if (item.customization.size) customHTML += `📏 Size: <strong>${item.customization.size}</strong><br>`;
+            if (item.customization.bottomSize) customHTML += `📏 Bottom Size: <strong>${item.customization.bottomSize}</strong><br>`;
             if (item.customization.color) customHTML += `🎨 Color: <strong>${item.customization.color}</strong><br>`;
             if (item.customization.name) customHTML += `👤 Name: <strong>${item.customization.name}</strong><br>`;
             if (item.customization.number) customHTML += `🔢 Number: <strong>#${item.customization.number}</strong>`;
@@ -3482,6 +3507,7 @@ function processCustomerOrder() {
     const checkoutName = document.getElementById('checkoutName') ? document.getElementById('checkoutName').value.trim() : '';
     const checkoutNumber = document.getElementById('checkoutNumber') ? document.getElementById('checkoutNumber').value.trim() : '';
     const checkoutSize = document.getElementById('checkoutSize') ? document.getElementById('checkoutSize').value.trim() : '';
+    const checkoutBottomSize = document.getElementById('checkoutBottomSize') ? document.getElementById('checkoutBottomSize').value.trim() : '';
     const checkoutColor = document.getElementById('checkoutColor') ? document.getElementById('checkoutColor').value.trim() : '';
     const paymentMethod = document.getElementById('paymentMethod').value;
     const teamSizeValues = document.getElementById('teamSizes') ? document.getElementById('teamSizes').value : '';
@@ -3503,6 +3529,7 @@ function processCustomerOrder() {
         checkoutName,
         checkoutNumber,
         checkoutSize,
+        checkoutBottomSize,
         checkoutColor,
         teamOrderInput,
         cartLength: appData.cart.length
@@ -3590,6 +3617,7 @@ function processCustomerOrder() {
                 name: checkoutName || item.customization?.name || '',
                 number: checkoutNumber || item.customization?.number || '',
                 size: teamSizeSummary || checkoutSize || item.customization?.size || '',
+                bottomSize: checkoutBottomSize || item.customization?.bottomSize || '',
                 color: checkoutColor || item.customization?.color || ''
             };
 
@@ -3735,10 +3763,11 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
         const nameText = customization.name ? ` / ${customization.name}` : '';
         const numberText = customization.number ? ` #${customization.number}` : '';
         const colorText = color && color !== 'Not specified' ? ` / Color: ${color}` : '';
+        const sizeText = `${customization.size ? ` / Top Size: ${customization.size}` : ''}${customization.bottomSize ? ` / Bottom Size: ${customization.bottomSize}` : ''}`;
 
         return `
             <div style="display: flex; justify-content: space-between; gap: 15px; padding: 8px 0; border-bottom: 1px solid #444;">
-                <span>${item.name} × ${item.quantity}${nameText}${numberText}${colorText}</span>
+            <span>${item.name} × ${item.quantity}${sizeText}${nameText}${numberText}${colorText}</span>
                 <strong>₱${(item.price * item.quantity).toFixed(2)}</strong>
             </div>
         `;
@@ -3860,9 +3889,10 @@ function loadCustomerOrders() {
             let customStr = '';
             if (item.customization) {
                 customStr = ' [';
-                if (item.customization.size) customStr += `${item.customization.size}`;
+                if (item.customization.size) customStr += `Top: ${item.customization.size}`;
+                if (item.customization.bottomSize) customStr += `${item.customization.size ? ', ' : ''}Bottom: ${item.customization.bottomSize}`;
                 if (item.customization.name || item.customization.number) {
-                    if (item.customization.size) customStr += ', ';
+                    if (item.customization.size || item.customization.bottomSize) customStr += ', ';
                     if (item.customization.name) customStr += `${item.customization.name}`;
                     if (item.customization.name && item.customization.number) customStr += ' ';
                     if (item.customization.number) customStr += `#${item.customization.number}`;
@@ -3980,9 +4010,10 @@ function loadPurchaseHistory() {
             let customStr = '';
             if (item.customization) {
                 customStr = ' [';
-                if (item.customization.size) customStr += `${item.customization.size}`;
+                if (item.customization.size) customStr += `Top: ${item.customization.size}`;
+                if (item.customization.bottomSize) customStr += `${item.customization.size ? ', ' : ''}Bottom: ${item.customization.bottomSize}`;
                 if (item.customization.name || item.customization.number) {
-                    if (item.customization.size) customStr += ', ';
+                    if (item.customization.size || item.customization.bottomSize) customStr += ', ';
                     if (item.customization.name) customStr += `${item.customization.name}`;
                     if (item.customization.name && item.customization.number) customStr += ' ';
                     if (item.customization.number) customStr += `#${item.customization.number}`;
@@ -5071,8 +5102,9 @@ function viewOrderDetails(orderStr) {
                 if (item.customization) {
                     customStr = '<br><small style="color: #888;">';
                     if (item.customization.size) customStr += `📏 Size: ${item.customization.size}`;
+                    if (item.customization.bottomSize) customStr += `${item.customization.size ? ' | ' : ''}📏 Bottom Size: ${item.customization.bottomSize}`;
                     if (item.customization.name || item.customization.number) {
-                        if (item.customization.size) customStr += ' | ';
+                        if (item.customization.size || item.customization.bottomSize) customStr += ' | ';
                         if (item.customization.name) customStr += `👤 Name: ${item.customization.name}`;
                         if (item.customization.name && item.customization.number) customStr += ' ';
                         if (item.customization.number) customStr += `🔢 #${item.customization.number}`;

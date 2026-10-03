@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>KingPin Custom Ph® CamSur - Jersey Management System</title>
-    <link rel="stylesheet" href="css/style.css?v=20260910-qr-viewer-1">
+    <link rel="stylesheet" href="css/style.css?v=20261003-checkout-size-panels-1">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -523,71 +523,96 @@
                         </div>
                     </div>
 
-                    <!-- Measurements & Size Chart -->
-                    <div class="measurements-section">
-                        <h3>Measurements & Size Information</h3>
-                        <p class="info-text">📏 Please provide your measurements for accurate sizing</p>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="chestMeasurement">Chest (cm):</label>
-                                <input type="number" id="chestMeasurement" placeholder="e.g., 90" min="0">
+                    <!-- Collapsible measurement and size information -->
+                    <section class="checkout-info-section measurements-section">
+                        <button type="button" class="checkout-info-toggle" aria-expanded="false" aria-controls="checkoutMeasurementsPanel" onclick="toggleCheckoutInfoPanel('checkoutMeasurementsPanel', this)">
+                            <span>📏 Measurements</span><span class="checkout-info-chevron" aria-hidden="true">+</span>
+                        </button>
+                        <div id="checkoutMeasurementsPanel" class="checkout-info-panel" hidden>
+                            <p class="info-text">Provide measurements in centimeters for accurate sizing.</p>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="chestMeasurement">Chest (cm):</label>
+                                    <input type="number" id="chestMeasurement" placeholder="e.g., 90" min="0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="waistMeasurement">Waist (cm):</label>
+                                    <input type="number" id="waistMeasurement" placeholder="e.g., 75" min="0">
+                                </div>
                             </div>
                             <div class="form-group">
-                                <label for="waistMeasurement">Waist (cm):</label>
-                                <input type="number" id="waistMeasurement" placeholder="e.g., 75" min="0">
+                                <label for="lengthMeasurement">Length/Height (cm):</label>
+                                <input type="number" id="lengthMeasurement" placeholder="e.g., 170" min="0">
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label for="lengthMeasurement">Length/Height (cm):</label>
-                            <input type="number" id="lengthMeasurement" placeholder="e.g., 170" min="0">
-                        </div>
+                    </section>
 
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="checkoutSize">Order Size:</label>
-                                <select id="checkoutSize">
-                                    <option value="">-- Select Size --</option>
-                                    <option value="XS">XS</option>
-                                    <option value="S">S</option>
-                                    <option value="M">M</option>
-                                    <option value="L">L</option>
-                                    <option value="XL">XL</option>
-                                    <option value="2XL">2XL</option>
-                                    <option value="3XL">3XL</option>
-                                </select>
+                    <section class="checkout-info-section measurements-section">
+                        <button type="button" class="checkout-info-toggle" aria-expanded="false" aria-controls="checkoutSizingPanel" onclick="toggleCheckoutInfoPanel('checkoutSizingPanel', this)">
+                            <span>👕 Size Information</span><span class="checkout-info-chevron" aria-hidden="true">+</span>
+                        </button>
+                        <div id="checkoutSizingPanel" class="checkout-info-panel" hidden>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="checkoutSize">Top / Upper Size:</label>
+                                    <select id="checkoutSize">
+                                        <option value="">-- Select Size --</option>
+                                        <option value="XS">XS</option>
+                                        <option value="S">S</option>
+                                        <option value="M">M</option>
+                                        <option value="L">L</option>
+                                        <option value="XL">XL</option>
+                                        <option value="2XL">2XL</option>
+                                        <option value="3XL">3XL</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="checkoutBottomSize">Bottom / Lower Size:</label>
+                                    <select id="checkoutBottomSize">
+                                        <option value="">-- Select if ordering bottoms --</option>
+                                        <option value="XS">XS</option>
+                                        <option value="S">S</option>
+                                        <option value="M">M</option>
+                                        <option value="L">L</option>
+                                        <option value="XL">XL</option>
+                                        <option value="2XL">2XL</option>
+                                        <option value="3XL">3XL</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label for="checkoutColor">Order Color:</label>
-                                <select id="checkoutColor">
-                                    <option value="">-- Select Color --</option>
-                                    <option value="Red">Red</option>
-                                    <option value="Blue">Blue</option>
-                                    <option value="Black">Black</option>
-                                    <option value="White">White</option>
-                                    <option value="Yellow">Yellow</option>
-                                    <option value="Green">Green</option>
-                                    <option value="Orange">Orange</option>
-                                    <option value="Purple">Purple</option>
-                                    <option value="Gray">Gray</option>
-                                    <option value="Navy">Navy Blue</option>
-                                    <option value="Maroon">Maroon</option>
-                                    <option value="Pink">Pink</option>
-                                    <option value="Cyan">Cyan</option>
-                                    <option value="Gold">Gold</option>
-                                    <option value="Silver">Silver</option>
-                                </select>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="checkoutColor">Order Color:</label>
+                                    <select id="checkoutColor">
+                                        <option value="">-- Select Color --</option>
+                                        <option value="Red">Red</option>
+                                        <option value="Blue">Blue</option>
+                                        <option value="Black">Black</option>
+                                        <option value="White">White</option>
+                                        <option value="Yellow">Yellow</option>
+                                        <option value="Green">Green</option>
+                                        <option value="Orange">Orange</option>
+                                        <option value="Purple">Purple</option>
+                                        <option value="Gray">Gray</option>
+                                        <option value="Navy">Navy Blue</option>
+                                        <option value="Maroon">Maroon</option>
+                                        <option value="Pink">Pink</option>
+                                        <option value="Cyan">Cyan</option>
+                                        <option value="Gold">Gold</option>
+                                        <option value="Silver">Silver</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="size-chart-helper">
+                                <h4>Size Chart Helper</h4>
+                                <div id="suggestedSize" class="size-suggestion" style="display: none;">
+                                    <p><strong>Suggested Size:</strong> <span id="suggestedSizeText"></span></p>
+                                    <p id="sizeNotes" style="color: #a0a0a0; font-size: 0.9em;"></p>
+                                </div>
+                                <button type="button" class="btn btn-secondary" onclick="calculateSuggestedSize()">Get Size Suggestion</button>
                             </div>
                         </div>
-                        
-                        <div class="size-chart-helper">
-                            <h4>Size Chart Helper</h4>
-                            <div id="suggestedSize" class="size-suggestion" style="display: none;">
-                                <p><strong>Suggested Size:</strong> <span id="suggestedSizeText"></span></p>
-                                <p id="sizeNotes" style="color: #a0a0a0; font-size: 0.9em;"></p>
-                            </div>
-                            <button type="button" class="btn btn-secondary" onclick="calculateSuggestedSize()">Get Size Suggestion</button>
-                        </div>
-                    </div>
+                    </section>
 
                     <!-- Payment Method Section -->
                     <div class="measurements-section" style="border: 2px solid #d4af37; background: rgba(212, 175, 55, 0.1); padding: 20px; border-radius: 5px;">
@@ -1311,7 +1336,7 @@
     </div>
 
     <script src="js/team-order.js?v=20261003-team-order-2"></script>
-    <script src="js/app.js?v=20261003-upload-both-type-1"></script>
+    <script src="js/app.js?v=20261003-bottom-size-accordion-1"></script>
     <script src="js/design-interface.js?v=20261003-team-order-2"></script>
     <script>
         // Force initialization when page loads
