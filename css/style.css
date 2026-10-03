@@ -5729,3 +5729,126 @@ body.light-mode #customerPage .cart-item-image-placeholder {
         flex-wrap: wrap;
     }
 }
+
+.shop-site-footer {
+    display: flex;
+    width: min(100% - 32px, 1200px);
+    min-height: 76px;
+    margin: 28px auto 0;
+    padding: 16px 20px;
+    align-items: center;
+    gap: 12px 24px;
+    border-top: 1px solid rgba(212, 175, 55, .55);
+    background: #111416;
+    color: #e5e8e9;
+}
+
+.footer-shop-name {
+    color: #f1c84a;
+    font-size: .95rem;
+}
+
+.footer-shop-location {
+    flex: 1 1 auto;
+    color: #bdc3c6;
+    overflow-wrap: anywhere;
+}
+
+.footer-shop-location:not([hidden])::before {
+    content: 'Location: ';
+    color: #879195;
+}
+
+.footer-social-links {
+    display: flex;
+    margin-left: auto;
+    gap: 10px;
+}
+
+.footer-social-link {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border: 1px solid #596166;
+    border-radius: 50%;
+    color: #f1c84a;
+    transition: background-color .18s ease, color .18s ease, border-color .18s ease;
+}
+
+.footer-social-link:hover,
+.footer-social-link:focus-visible {
+    border-color: #f1c84a;
+    background: #f1c84a;
+    color: #17191a;
+}
+
+.footer-social-link svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.footer-social-link[data-footer-social="instagram"] svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+}
+
+.footer-social-link[data-footer-social="instagram"] .instagram-flash {
+    fill: currentColor;
+    stroke: none;
+}
+
+.footer-social-link[hidden],
+.footer-shop-location[hidden] {
+    display: none;
+}
+
+body.light-mode .shop-site-footer {
+    border-top-color: #caa329;
+    background: #e9edf0;
+    color: #263238;
+}
+
+body.light-mode .footer-shop-name {
+    color: #765500;
+}
+
+body.light-mode .footer-shop-location {
+    color: #3f4e57;
+}
+
+body.light-mode .footer-shop-location:not([hidden])::before {
+    color: #6b777e;
+}
+
+body.light-mode .footer-social-link {
+    border-color: #aeb9bf;
+    color: #765500;
+}
+
+body.light-mode .footer-social-link:hover,
+body.light-mode .footer-social-link:focus-visible {
+    border-color: #765500;
+    background: #765500;
+    color: #ffffff;
+}
+
+@media (max-width: 600px) {
+    .shop-site-footer {
+        width: 100%;
+        margin-top: 20px;
+        padding: 16px;
+        flex-wrap: wrap;
+    }
+
+    .footer-shop-location {
+        flex-basis: 100%;
+        order: 1;
+    }
+
+    .footer-social-links {
+        margin-left: auto;
+    }
+}
