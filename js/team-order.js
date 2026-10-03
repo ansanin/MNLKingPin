@@ -14,13 +14,15 @@
         const teamType = String(source.teamType || '').trim();
         const totalPlayers = Number(source.totalPlayers);
         const teamNotes = String(source.teamNotes || '').trim();
+        const teamSizes = String(source.teamSizes || '').trim();
 
         return {
             isTeamOrder,
             teamName,
             teamType,
             totalPlayers: Number.isFinite(totalPlayers) && totalPlayers > 0 ? totalPlayers : 0,
-            teamNotes
+            teamNotes,
+            teamSizes
         };
     }
 
@@ -34,8 +36,9 @@
         const teamName = normalized.teamName || 'Team order';
         const teamType = normalized.teamType ? ` • ${normalized.teamType}` : '';
         const playerCount = normalized.totalPlayers > 0 ? ` • ${normalized.totalPlayers} players` : '';
+        const teamSizes = normalized.teamSizes ? ` • sizes: ${normalized.teamSizes}` : '';
 
-        return `${teamName}${teamType}${playerCount}`;
+        return `${teamName}${teamType}${playerCount}${teamSizes}`;
     }
 
     const api = {

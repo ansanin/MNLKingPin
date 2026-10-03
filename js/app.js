@@ -3144,6 +3144,7 @@ function toggleTeamOrderFields() {
         document.getElementById('teamName'),
         document.getElementById('teamType'),
         document.getElementById('teamPlayers'),
+        document.getElementById('teamSizes'),
         document.getElementById('teamNotes')
     ];
 
@@ -3215,6 +3216,7 @@ function processCustomerOrder() {
         teamName: document.getElementById('teamName') ? document.getElementById('teamName').value : '',
         teamType: document.getElementById('teamType') ? document.getElementById('teamType').value : '',
         totalPlayers: document.getElementById('teamPlayers') ? document.getElementById('teamPlayers').value : 0,
+        teamSizes: document.getElementById('teamSizes') ? document.getElementById('teamSizes').value : '',
         teamNotes: document.getElementById('teamNotes') ? document.getElementById('teamNotes').value : ''
     });
     
