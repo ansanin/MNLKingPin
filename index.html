@@ -436,8 +436,11 @@
                         </div>
                     </div>
                     
-                    <div class="measurements-section">
-                        <h3>Customer & Delivery Information</h3>
+                    <section class="checkout-info-section measurements-section">
+                        <button type="button" class="checkout-info-toggle" aria-expanded="false" aria-controls="checkoutCustomerPanel" onclick="toggleCheckoutInfoPanel('checkoutCustomerPanel', this)">
+                            <span>👤 Customer & Delivery Information</span><span class="checkout-info-chevron" aria-hidden="true">+</span>
+                        </button>
+                        <div id="checkoutCustomerPanel" class="checkout-info-panel" hidden>
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="customerName">Full Name:</label>
@@ -471,7 +474,8 @@
                                 <small style="color: #a0a0a0;">e.g., 23, 10 (0-99)</small>
                             </div>
                         </div>
-                    </div>
+                        </div>
+                    </section>
 
                     <div class="measurements-section" style="border: 1px dashed #d4af37; background: rgba(212, 175, 55, 0.04);">
                         <div class="form-row" style="align-items: center; margin-bottom: 0;">
