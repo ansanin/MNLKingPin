@@ -1,7 +1,7 @@
 const { connectLambda, getStore } = require('@netlify/blobs');
 
 const footerKey = 'shop-footer';
-const emptySettings = { location: '', facebookUrl: '', instagramUrl: '' };
+const emptySettings = { location: '', contactNumber: '', facebookUrl: '', instagramUrl: '' };
 
 function jsonResponse(statusCode, body) {
     return {
@@ -23,6 +23,15 @@ function normalizeFooterUrl(value) {
     }
 }
 
+function normalizeShopContactNumber(value) {
+    const contactNumber = String(value || '').trim();
+    if (!contactNumber) return '';
+    if (!/^\+?[\d\s().-]+$/.test(contactNumber)) return null;
+
+    const digits = contactNumber.replace(/\D/g, '');
+    return digits.length >= 7 && digits.length <= 15 ? contactNumber : null;
+}
+
 exports.handler = async function handler(event) {
     connectLambda(event);
     if (event.httpMethod === 'OPTIONS') return jsonResponse(204, {});
@@ -38,12 +47,13 @@ exports.handler = async function handler(event) {
         const payload = JSON.parse(event.body || '{}');
         const facebookUrl = normalizeFooterUrl(payload.facebookUrl);
         const instagramUrl = normalizeFooterUrl(payload.instagramUrl);
+        const contactNumber = normalizeShopContactNumber(payload.contactNumber);
         const location = String(payload.location || '').trim();
-        if (facebookUrl === null || instagramUrl === null || location.length > 300) {
-            return jsonResponse(400, { error: 'Enter valid web links and a location under 300 characters' });
+        if (facebookUrl === null || instagramUrl === null || contactNumber === null || location.length > 300) {
+            return jsonResponse(400, { error: 'Enter valid web links, contact number, and location' });
         }
 
-        const footerSettings = { location, facebookUrl, instagramUrl };
+        const footerSettings = { location, contactNumber, facebookUrl, instagramUrl };
         await store.setJSON(footerKey, footerSettings);
         return jsonResponse(200, { ok: true, footerSettings });
     } catch (error) {

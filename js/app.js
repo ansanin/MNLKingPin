@@ -18,6 +18,7 @@ const appData = {
     shopName: 'KingPin Custom Ph® CamSur',
     footerSettings: {
         location: '',
+        contactNumber: '',
         facebookUrl: '',
         instagramUrl: ''
     },
@@ -625,11 +626,21 @@ function normalizeFooterUrl(value) {
     }
 }
 
+function normalizeShopContactNumber(value) {
+    const contactNumber = String(value || '').trim();
+    if (!contactNumber) return '';
+    if (!/^\+?[\d\s().-]+$/.test(contactNumber)) return null;
+
+    const digits = contactNumber.replace(/\D/g, '');
+    return digits.length >= 7 && digits.length <= 15 ? contactNumber : null;
+}
+
 async function loadShopFooterSettings() {
     try {
         const saved = JSON.parse(localStorage.getItem('kingpinShopFooter') || '{}');
         appData.footerSettings = {
             location: String(saved.location || ''),
+            contactNumber: normalizeShopContactNumber(saved.contactNumber) || '',
             facebookUrl: normalizeFooterUrl(saved.facebookUrl),
             instagramUrl: normalizeFooterUrl(saved.instagramUrl)
         };
@@ -647,6 +658,7 @@ async function loadShopFooterSettings() {
 
             appData.footerSettings = {
                 location: String(result.footerSettings.location || ''),
+                contactNumber: normalizeShopContactNumber(result.footerSettings.contactNumber) || '',
                 facebookUrl: normalizeFooterUrl(result.footerSettings.facebookUrl),
                 instagramUrl: normalizeFooterUrl(result.footerSettings.instagramUrl)
             };
@@ -669,17 +681,19 @@ async function saveShopFooterSettings(event) {
     const instagramValue = document.getElementById('shopInstagramUrl').value.trim();
     const facebookUrl = normalizeFooterUrl(facebookValue);
     const instagramUrl = normalizeFooterUrl(instagramValue);
+    const contactNumber = normalizeShopContactNumber(document.getElementById('shopFooterContactNumber').value);
     const message = document.getElementById('shopFooterMessage');
 
-    if ((facebookValue && !facebookUrl) || (instagramValue && !instagramUrl)) {
+    if ((facebookValue && !facebookUrl) || (instagramValue && !instagramUrl) || contactNumber === null) {
         message.className = 'message error';
-        message.textContent = 'Enter valid Facebook and Instagram web links, starting with a domain or https://.';
+        message.textContent = 'Enter valid Facebook/Instagram links and a contact number with 7 to 15 digits.';
         message.style.display = 'block';
         return;
     }
 
     appData.footerSettings = {
         location: document.getElementById('shopFooterLocation').value.trim(),
+        contactNumber,
         facebookUrl,
         instagramUrl
     };
@@ -718,6 +732,7 @@ async function saveShopFooterSettings(event) {
 
 function populateShopFooterSettings() {
     document.getElementById('shopFooterLocation').value = appData.footerSettings.location;
+    document.getElementById('shopFooterContactNumber').value = appData.footerSettings.contactNumber;
     document.getElementById('shopFacebookUrl').value = appData.footerSettings.facebookUrl;
     document.getElementById('shopInstagramUrl').value = appData.footerSettings.instagramUrl;
 }
@@ -730,6 +745,15 @@ function updateShopFooter() {
         if (location) {
             location.textContent = appData.footerSettings.location;
             location.hidden = !appData.footerSettings.location;
+        }
+        const contact = footer.querySelector('[data-footer-contact]');
+        const contactText = footer.querySelector('.footer-shop-contact-number');
+        const contactNumber = appData.footerSettings.contactNumber;
+        if (contact && contactText) {
+            contactText.textContent = contactNumber;
+            contact.hidden = !contactNumber;
+            contact.href = contactNumber ? `tel:${contactNumber.replace(/[^\d+]/g, '')}` : '#';
+            contact.setAttribute('aria-label', contactNumber ? `Call shop at ${contactNumber}` : 'Shop contact number');
         }
 
         footer.querySelectorAll('[data-footer-social]').forEach(link => {

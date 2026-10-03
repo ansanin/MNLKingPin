@@ -5759,6 +5759,26 @@ body.light-mode #customerPage .cart-item-image-placeholder {
     color: #879195;
 }
 
+.footer-shop-contact {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    gap: 7px;
+    color: #bdc3c6;
+    text-decoration: none;
+}
+
+.footer-shop-contact:hover,
+.footer-shop-contact:focus-visible {
+    color: #f1c84a;
+}
+
+.footer-shop-contact svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
 .footer-social-links {
     display: flex;
     margin-left: auto;
@@ -5821,6 +5841,15 @@ body.light-mode .footer-shop-location {
 
 body.light-mode .footer-shop-location:not([hidden])::before {
     color: #6b777e;
+}
+
+body.light-mode .footer-shop-contact {
+    color: #3f4e57;
+}
+
+body.light-mode .footer-shop-contact:hover,
+body.light-mode .footer-shop-contact:focus-visible {
+    color: #765500;
 }
 
 body.light-mode .footer-social-link {
