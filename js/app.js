@@ -3973,7 +3973,18 @@ function uploadOrderPaymentProof(orderId, input) {
         saveOrders();
         addNotification('customer', `✓ Payment proof uploaded for order #${order.id}.`, order.id);
         saveNotifications();
-        loadCustomerOrders();
+
+        const paymentProofContainer = input.closest('.order-payment-proof');
+        if (paymentProofContainer) {
+            paymentProofContainer.innerHTML = `
+                <strong>GCash Payment Proof:</strong>
+                <p style="color: #4caf50;">✓ Proof uploaded</p>
+                <img src="${event.target.result}" alt="GCash payment proof" style="max-width: 200px; height: auto; border-radius: 6px; margin-top: 8px; border: 1px solid #4caf50;">
+            `;
+        } else {
+            loadCustomerOrders();
+        }
+
         showStatusUpdateToast(`✓ Payment proof uploaded for order #${order.id}.`);
     };
     reader.readAsDataURL(file);
