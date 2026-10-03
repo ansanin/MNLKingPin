@@ -2152,6 +2152,18 @@ function getProductImages(product) {
     return images;
 }
 
+function getProductGalleryImages(product) {
+    const images = getProductImages(product).map((src, index) => ({
+        src,
+        alt: `${product.name} photo ${index + 1}`,
+        isSizeChart: false
+    }));
+    if (product.sizeChartImage) {
+        images.push({ src: product.sizeChartImage, alt: `${product.name} size chart`, isSizeChart: true });
+    }
+    return images;
+}
+
 function renderImagePreview(container, images) {
     if (!container) return;
     container.innerHTML = images.map((image, index) => `
@@ -2356,10 +2368,10 @@ function displayProducts(products) {
             'organization': '🏢 Organization'
         };
 
-        const productImages = getProductImages(product);
+        const productImages = getProductGalleryImages(product);
         productCard.innerHTML = `
             <div class="product-image-gallery" aria-label="${product.name} photos">
-                ${productImages.map((image, index) => `<img src="${image}" alt="${product.name} photo ${index + 1}" class="product-image" loading="eager" decoding="async">`).join('')}
+                ${productImages.map(image => `<img src="${image.src}" alt="${image.alt}" class="product-image${image.isSizeChart ? ' size-chart-product-image' : ''}" loading="eager" decoding="async">`).join('')}
             </div>
             <div class="product-info">
                 <h3>${product.name}</h3>
@@ -2380,8 +2392,8 @@ function openProductModal(product) {
     appData.selectedProduct = product;
     const modalGallery = document.getElementById('modalProductGallery');
     if (modalGallery) {
-        modalGallery.innerHTML = getProductImages(product).map((image, index) => `
-            <img src="${image}" alt="${product.name} photo ${index + 1}" class="modal-product-image">
+        modalGallery.innerHTML = getProductGalleryImages(product).map(image => `
+            <img src="${image.src}" alt="${image.alt}" class="modal-product-image">
         `).join('');
     }
     document.getElementById('modalProductName').textContent = product.name;
@@ -4267,6 +4279,18 @@ document.getElementById('productImage').addEventListener('change', function(even
         .catch(error => console.error('Unable to preview product images:', error));
 });
 
+document.getElementById('productSizeChartImage').addEventListener('change', function(event) {
+    const file = event.target.files[0];
+    const preview = document.getElementById('productSizeChartPreview');
+    if (!file) {
+        preview.innerHTML = '';
+        return;
+    }
+    prepareProductImage(file)
+        .then(image => renderImagePreview(preview, [image]))
+        .catch(error => console.error('Unable to preview the size chart:', error));
+});
+
 document.getElementById('addProductForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const uploadMessage = document.getElementById('uploadMessage');
@@ -4277,6 +4301,7 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
     const stock = parseInt(document.getElementById('productStock').value);
     const description = document.getElementById('productDescription').value;
     const imageFiles = Array.from(document.getElementById('productImage').files);
+    const sizeChartFile = document.getElementById('productSizeChartImage').files[0];
     
     // Get selected colors
     const selectedColorCheckboxes = document.querySelectorAll('input[name="productColors"]:checked');
@@ -4296,7 +4321,10 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
         return;
     }
 
-    Promise.all(imageFiles.map(prepareProductImage)).then(images => {
+    Promise.all([
+        Promise.all(imageFiles.map(prepareProductImage)),
+        sizeChartFile ? prepareProductImage(sizeChartFile) : Promise.resolve(null)
+    ]).then(([images, sizeChartImage]) => {
         const newProduct = {
             id: appData.products.length + 1,
             name: productName,
@@ -4306,6 +4334,7 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
             description: description,
             image: images[0],
             images,
+            sizeChartImage,
             availableColors: availableColors
         };
 
@@ -4324,6 +4353,7 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
         // Reset form
         document.getElementById('addProductForm').reset();
         document.getElementById('productImagePreview').innerHTML = '';
+        document.getElementById('productSizeChartPreview').innerHTML = '';
         
         // Hide message after 2 seconds
         setTimeout(() => {
@@ -4529,9 +4559,12 @@ function openEditProductModal(index) {
     // Show current product image preview
     const imagePreview = document.getElementById('editProductImagePreview');
     renderImagePreview(imagePreview, getProductImages(product));
+    renderImagePreview(document.getElementById('editProductSizeChartPreview'), product.sizeChartImage ? [product.sizeChartImage] : []);
     
     // Reset file input
     document.getElementById('editProductImage').value = '';
+    document.getElementById('editProductSizeChartImage').value = '';
+    document.getElementById('removeProductSizeChart').checked = false;
     
     // Clear message
     const messageDiv = document.getElementById('editProductMessage');
@@ -4551,6 +4584,14 @@ function openEditProductModal(index) {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
         Promise.all(files.map(prepareProductImage)).then(images => renderImagePreview(imagePreview, images));
+    };
+
+    const sizeChartInput = document.getElementById('editProductSizeChartImage');
+    sizeChartInput.onchange = function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        prepareProductImage(file).then(image => renderImagePreview(document.getElementById('editProductSizeChartPreview'), [image]));
+        document.getElementById('removeProductSizeChart').checked = false;
     };
     
     // Show modal
@@ -4576,6 +4617,8 @@ function saveProductEdit() {
     const stock = parseInt(document.getElementById('editProductStock').value);
     const description = document.getElementById('editProductDescription').value.trim();
     const imageFiles = Array.from(document.getElementById('editProductImage').files);
+    const sizeChartFile = document.getElementById('editProductSizeChartImage').files[0];
+    const removeSizeChart = document.getElementById('removeProductSizeChart').checked;
     
     // Get selected colors
     const selectedColorCheckboxes = document.querySelectorAll('input[name="editProductColors"]:checked');
@@ -4619,65 +4662,37 @@ function saveProductEdit() {
         return;
     }
     
-    // If an image file is selected, convert it to a compact shared image.
-    if (imageFiles.length > 0) {
-        Promise.all(imageFiles.map(prepareProductImage)).then(images => {
-            const product = appData.products[currentEditProductIndex];
-            product.name = name;
-            product.type = type;
-            product.price = price;
-            product.stock = stock;
-            product.description = description;
-            product.image = images[0];
-            product.images = images;
-            product.availableColors = availableColors;
-            
-            // Save to storage
-            saveProductsWithoutBlocking();
-            
-            // Show success message
-            messageDiv.className = 'message success';
-            messageDiv.textContent = '✓ Product updated successfully!';
-            messageDiv.style.display = 'block';
-            
-            // Reload inventory table
-            loadAdminInventoryProducts();
-            
-            // Close modal after 1.5 seconds
-            setTimeout(() => {
-                closeEditProductModal();
-            }, 1500);
-        }).catch(error => {
-            messageDiv.className = 'message error';
-            messageDiv.textContent = error.message;
-            messageDiv.style.display = 'block';
-        });
-    } else {
-        // Update product without changing image
-        const product = appData.products[currentEditProductIndex];
+    const product = appData.products[currentEditProductIndex];
+    const imagesPromise = imageFiles.length > 0
+        ? Promise.all(imageFiles.map(prepareProductImage))
+        : Promise.resolve(getProductImages(product));
+    const sizeChartPromise = sizeChartFile
+        ? prepareProductImage(sizeChartFile)
+        : Promise.resolve(removeSizeChart ? null : product.sizeChartImage || null);
+
+    Promise.all([imagesPromise, sizeChartPromise]).then(([images, sizeChartImage]) => {
         product.name = name;
         product.type = type;
         product.price = price;
         product.stock = stock;
         product.description = description;
+        product.image = images[0];
+        product.images = images;
+        product.sizeChartImage = sizeChartImage;
         product.availableColors = availableColors;
-        
-        // Save to storage
+
         saveProductsWithoutBlocking();
-        
-        // Show success message
         messageDiv.className = 'message success';
         messageDiv.textContent = '✓ Product updated successfully!';
         messageDiv.style.display = 'block';
-        
-        // Reload inventory table
         loadAdminInventoryProducts();
-        
-        // Close modal after 1.5 seconds
-        setTimeout(() => {
-            closeEditProductModal();
-        }, 1500);
-    }
+
+        setTimeout(() => closeEditProductModal(), 1500);
+    }).catch(error => {
+        messageDiv.className = 'message error';
+        messageDiv.textContent = error.message;
+        messageDiv.style.display = 'block';
+    });
 }
 
 // Toggle Product Stock (Mark as Out of Stock / Restock)

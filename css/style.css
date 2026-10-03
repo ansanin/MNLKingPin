@@ -781,6 +781,11 @@ body.light-mode [style*="color: #a0a0a0"] {
     background-color: #1f1f1f;
 }
 
+.product-image.size-chart-product-image {
+    object-fit: contain;
+    background-color: #fff;
+}
+
 .product-image-gallery,
 .modal-product-gallery {
     display: flex;

@@ -750,6 +750,13 @@
                             <small>Supported formats: JPG, PNG, GIF - Select multiple images</small>
                             <div id="productImagePreview" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;"></div>
                         </div>
+
+                        <div class="form-group">
+                            <label for="productSizeChartImage">Size Chart Photo (Optional):</label>
+                            <input type="file" id="productSizeChartImage" accept="image/*">
+                            <small>Customers can swipe right in the product photos to view this chart.</small>
+                            <div id="productSizeChartPreview" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;"></div>
+                        </div>
                         
                         <button type="submit" class="btn btn-primary">Add Product</button>
                     </form>
@@ -907,6 +914,13 @@
                                     <small style="color: #a0a0a0; display: block; margin-top: 5px;">Supported formats: JPG, PNG, GIF - Select multiple images to replace all</small>
                                     <div id="editProductImagePreview" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;"></div>
                                 </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="editProductSizeChartImage">Change Size Chart Photo (optional):</label>
+                                <input type="file" id="editProductSizeChartImage" accept="image/*">
+                                <small style="color: #a0a0a0; display: block; margin-top: 5px;">Choose a new chart to replace the current one, or mark it for removal.</small>
+                                <div id="editProductSizeChartPreview" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;"></div>
+                                <label style="display: flex; align-items: center; gap: 8px; margin-top: 10px;"><input type="checkbox" id="removeProductSizeChart"> Remove current size chart</label>
                             </div>
                             <div id="editProductMessage" class="message"></div>
                         </div>
