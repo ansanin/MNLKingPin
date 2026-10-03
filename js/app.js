@@ -694,7 +694,7 @@ function hideCustomerAuth() {
     document.getElementById('customerLoginForm').style.display = 'block';
     document.getElementById('customerSignupForm').style.display = 'none';
     document.getElementById('customerLoginFormElement')?.reset();
-    document.getElementById('customerSignupFormElement').reset();
+    document.getElementById('customerSignupFormElement')?.reset();
     document.getElementById('customerLoginErrorMessage').textContent = '';
     document.getElementById('customerSignupErrorMessage').textContent = '';
 }
@@ -943,6 +943,11 @@ function signupCustomer(e) {
     }
     hideCustomerAuth();
     showCustomerDashboard();
+}
+
+const customerLoginFormElement = document.getElementById('customerLoginFormElement');
+if (customerLoginFormElement) {
+    customerLoginFormElement.addEventListener('submit', loginCustomer);
 }
 
 const customerSignupFormElement = document.getElementById('customerSignupFormElement');
