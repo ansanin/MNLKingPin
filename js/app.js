@@ -869,7 +869,9 @@ function clearCurrentSession() {
 
 // Sign up customer
 function signupCustomer(e) {
-    e.preventDefault();
+    if (e && typeof e.preventDefault === 'function') {
+        e.preventDefault();
+    }
     
     const username = document.getElementById('customerSignupUsername').value.trim();
     const fullName = document.getElementById('customerSignupName').value.trim();
@@ -880,7 +882,11 @@ function signupCustomer(e) {
     
     // Validate inputs
     if (!username || !fullName || !email || !password) {
-        errorMessage.textContent = 'Username, name, email, and password are required.';
+        if (errorMessage) {
+            errorMessage.textContent = 'Username, name, email, and password are required.';
+            errorMessage.style.display = 'block';
+        }
+        alert('Please fill in all the required account details before creating an account.');
         return;
     }
 
@@ -931,10 +937,17 @@ function signupCustomer(e) {
     saveUserCart();
     
     // Clear form and hide auth
-    document.getElementById('customerSignupFormElement').reset();
-    document.getElementById('customerSignupErrorMessage').textContent = '';
+    document.getElementById('customerSignupFormElement')?.reset();
+    if (document.getElementById('customerSignupErrorMessage')) {
+        document.getElementById('customerSignupErrorMessage').textContent = '';
+    }
     hideCustomerAuth();
     showCustomerDashboard();
+}
+
+const customerSignupFormElement = document.getElementById('customerSignupFormElement');
+if (customerSignupFormElement) {
+    customerSignupFormElement.addEventListener('submit', signupCustomer);
 }
 
 // Login customer
