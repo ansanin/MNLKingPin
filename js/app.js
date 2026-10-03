@@ -2891,6 +2891,15 @@ function updateCartCount() {
 }
 
 // Update Cart Display
+function getUploadedDesignTypeLabel(type) {
+    const labels = {
+        tops: 'Top/Shirt (Upper)',
+        bottoms: 'Bottoms/Shorts (Lower)',
+        both: 'Top + Bottom Set (Upper + Lower)'
+    };
+    return labels[type] || type || 'N/A';
+}
+
 function updateCartDisplay() {
     const cartItems = document.getElementById('cartItems');
     const cartTotal = document.getElementById('cartTotal');
@@ -2940,7 +2949,7 @@ function updateCartDisplay() {
             } else if (item.designType === 'uploaded') {
                 // Uploaded design
                 customizationHTML += `<span>📤 Uploaded Design</span>`;
-                customizationHTML += `<span>Type: <strong>${details.clothingType}</strong></span>`;
+                customizationHTML += `<span>Type: <strong>${getUploadedDesignTypeLabel(details.clothingType)}</strong></span>`;
                 customizationHTML += `<span>Item: <strong>${details.itemDescription}</strong></span>`;
                 customizationHTML += `<span>File: <strong>${details.fileName}</strong></span>`;
             }
@@ -3186,7 +3195,7 @@ function updateCheckoutDisplay() {
             } else if (item.designType === 'uploaded') {
                 customHTML += '<strong style="color: #d4af37;">Uploaded Custom Design:</strong><br>';
                 customHTML += `<span style="display: block; margin: 5px 0;">📤 <strong>${details.itemDescription}</strong></span>`;
-                customHTML += `<span style="display: block; margin: 5px 0;">Type: <strong>${details.clothingType}</strong></span>`;
+                customHTML += `<span style="display: block; margin: 5px 0;">Type: <strong>${getUploadedDesignTypeLabel(details.clothingType)}</strong></span>`;
                 customHTML += `<span style="display: block; margin: 5px 0;">File: <strong>${details.fileName}</strong></span>`;
             }
             customHTML += '</div>';
@@ -5087,7 +5096,7 @@ function viewOrderDetails(orderStr) {
 
                     uploadedDesignHtml = `<div style="margin-top: 12px; padding: 12px; background: #f4f7f5; border: 1px solid #9ab9a2; border-radius: 5px;">
                         <strong style="color: #28703d;">📤 Customer uploaded design</strong><br>
-                        Item: ${details.itemDescription || 'N/A'} | Type: ${details.clothingType || 'N/A'}<br>
+                        Item: ${details.itemDescription || 'N/A'} | Type: ${getUploadedDesignTypeLabel(details.clothingType)}<br>
                         File: ${fileName}${fileLink}${preview}
                     </div>`;
                 }
