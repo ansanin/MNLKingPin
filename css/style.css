@@ -732,7 +732,7 @@ body.light-mode [style*="color: #a0a0a0"] {
     max-width: 1200px;
     min-height: 88px;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 20px;
     margin: 0 auto;
     padding: 18px 20px;
@@ -5789,7 +5789,7 @@ body.light-mode #customerPage .cart-item-image-placeholder {
 
 .footer-social-links {
     display: flex;
-    margin-left: auto;
+    margin-left: 0;
     gap: 10px;
 }
 
