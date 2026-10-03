@@ -482,6 +482,50 @@
                         </div>
                     </div>
 
+                    <div class="measurements-section" style="border: 1px dashed #d4af37; background: rgba(212, 175, 55, 0.04);">
+                        <div class="form-row" style="align-items: center; margin-bottom: 0;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="isTeamOrder" style="color: #d4af37; font-weight: 700;">This is a team order</label>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0; display: flex; justify-content: flex-end;">
+                                <input type="checkbox" id="isTeamOrder" onchange="toggleTeamOrderFields()" style="width: 20px; height: 20px; accent-color: #d4af37;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="teamOrderSection" class="measurements-section" style="display: none; border: 1px solid #d4af37; background: rgba(212, 175, 55, 0.05);">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="teamName">Team Name:</label>
+                                <input type="text" id="teamName" placeholder="e.g., Team Alpha">
+                            </div>
+                            <div class="form-group">
+                                <label for="teamType">Team Category:</label>
+                                <select id="teamType">
+                                    <option value="">-- Select category --</option>
+                                    <option value="Basketball">Basketball</option>
+                                    <option value="Volleyball">Volleyball</option>
+                                    <option value="Football">Football</option>
+                                    <option value="Esports">Esports</option>
+                                    <option value="School Team">School Team</option>
+                                    <option value="Club Team">Club Team</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="teamPlayers">Number of Players:</label>
+                                <input type="number" id="teamPlayers" min="2" placeholder="e.g., 12">
+                            </div>
+                            <div class="form-group">
+                                <label for="teamNotes">Team Notes:</label>
+                                <textarea id="teamNotes" rows="3" placeholder="Add required size, design, or delivery notes for the team order..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Measurements & Size Chart -->
                     <div class="measurements-section">
                         <h3>Measurements & Size Information</h3>
@@ -1255,8 +1299,9 @@
         </div>
     </div>
 
-    <script src="js/app.js?v=20260910-qr-viewer-1"></script>
-    <script src="js/design-interface.js?v=20260910-navigation-fix-1"></script>
+    <script src="js/team-order.js?v=20261003-team-order-1"></script>
+    <script src="js/app.js?v=20261003-team-order-1"></script>
+    <script src="js/design-interface.js?v=20261003-team-order-1"></script>
     <script>
         // Force initialization when page loads
         document.addEventListener('DOMContentLoaded', () => {

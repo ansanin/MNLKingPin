@@ -3129,7 +3129,35 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    const isTeamOrderCheckbox = document.getElementById('isTeamOrder');
+    if (isTeamOrderCheckbox) {
+        isTeamOrderCheckbox.addEventListener('change', toggleTeamOrderFields);
+    }
+    toggleTeamOrderFields();
 });
+
+function toggleTeamOrderFields() {
+    const checkbox = document.getElementById('isTeamOrder');
+    const teamOrderSection = document.getElementById('teamOrderSection');
+    const fields = [
+        document.getElementById('teamName'),
+        document.getElementById('teamType'),
+        document.getElementById('teamPlayers'),
+        document.getElementById('teamNotes')
+    ];
+
+    const isChecked = Boolean(checkbox && checkbox.checked);
+    if (teamOrderSection) {
+        teamOrderSection.style.display = isChecked ? 'block' : 'none';
+    }
+
+    fields.forEach(field => {
+        if (field) {
+            field.disabled = !isChecked;
+        }
+    });
+}
 
 function placeCustomerOrder(event) {
     if (event) event.preventDefault();
@@ -3182,6 +3210,13 @@ function processCustomerOrder() {
     const checkoutSize = document.getElementById('checkoutSize') ? document.getElementById('checkoutSize').value.trim() : '';
     const checkoutColor = document.getElementById('checkoutColor') ? document.getElementById('checkoutColor').value.trim() : '';
     const paymentMethod = document.getElementById('paymentMethod').value;
+    const teamOrderInput = normalizeTeamOrderInput({
+        isTeamOrder: document.getElementById('isTeamOrder') ? document.getElementById('isTeamOrder').checked : false,
+        teamName: document.getElementById('teamName') ? document.getElementById('teamName').value : '',
+        teamType: document.getElementById('teamType') ? document.getElementById('teamType').value : '',
+        totalPlayers: document.getElementById('teamPlayers') ? document.getElementById('teamPlayers').value : 0,
+        teamNotes: document.getElementById('teamNotes') ? document.getElementById('teamNotes').value : ''
+    });
     
     console.log('Order processing started', {
         customerName,
@@ -3193,6 +3228,7 @@ function processCustomerOrder() {
         checkoutNumber,
         checkoutSize,
         checkoutColor,
+        teamOrderInput,
         cartLength: appData.cart.length
     });
     
@@ -3243,6 +3279,18 @@ function processCustomerOrder() {
         }
         return;
     }
+
+    if (teamOrderInput.isTeamOrder && !teamOrderInput.teamName) {
+        alert('Please enter your team name for the team order.');
+        sessionStorage.removeItem('kingpinOrderProcessing');
+        const placeOrderButtonReset = document.getElementById('placeCustomerOrderButton');
+        if (placeOrderButtonReset) {
+            placeOrderButtonReset.disabled = false;
+            placeOrderButtonReset.style.opacity = '1';
+            placeOrderButtonReset.style.cursor = 'pointer';
+        }
+        return;
+    }
     
     try {
         const totalAmount = appData.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -3277,6 +3325,8 @@ function processCustomerOrder() {
                 waist: document.getElementById('waistMeasurement').value || 'Not provided',
                 length: document.getElementById('lengthMeasurement').value || 'Not provided'
             },
+            teamOrder: teamOrderInput,
+            teamOrderLabel: buildTeamOrderLabel(teamOrderInput),
             status: 'pending',
             paymentMethod: paymentMethod,
             paymentStatus: paymentMethod === 'gcash' ? 'awaiting-proof' : 'pending',
@@ -3320,10 +3370,12 @@ function processCustomerOrder() {
         clearUserCart();
         
         // Add notification for admin with payment info
-        addNotification('admin', `✓ New Order #${orderData.id} from ${orderData.customerName}`, orderData.id);
+        addNotification('admin', teamOrderInput.isTeamOrder
+            ? `✓ New Team Order #${orderData.id} from ${orderData.customerName} (${buildTeamOrderLabel(teamOrderInput)})`
+            : `✓ New Order #${orderData.id} from ${orderData.customerName}`, orderData.id);
         addNotification('customer', paymentMethod === 'gcash'
             ? `✓ Order #${orderData.id} was placed. Please upload your GCash payment proof in My Orders.`
-            : `✓ Your order #${orderData.id} was placed successfully. Total: ₱${orderData.totalAmount.toFixed(2)}. Payment: COD.`, orderData.id);
+            : `✓ Your ${teamOrderInput.isTeamOrder ? 'team ' : ''}order #${orderData.id} was placed successfully. Total: ₱${orderData.totalAmount.toFixed(2)}. Payment: COD.`, orderData.id);
         saveNotifications();
         updateNotificationBadges();
         if (document.getElementById('notificationsList')) {
@@ -3363,6 +3415,7 @@ function processCustomerOrder() {
         
         // Clear form
         document.getElementById('checkoutForm').reset();
+        toggleTeamOrderFields();
         updateCartCount();
         loadOrders();
         loadProducts();
@@ -3528,6 +3581,10 @@ function loadCustomerOrders() {
         
         const orderItem = document.createElement('div');
         orderItem.className = 'order-item';
+
+        const teamOrderBadge = order.teamOrder && order.teamOrder.isTeamOrder
+            ? `<p style="margin: 8px 0 0; color: #d4af37; font-weight: 700;">🏆 ${buildTeamOrderLabel(order.teamOrder)}</p>`
+            : '';
 
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
         const requiredDownpayment = Number(order.gcashDownpaymentAmount ?? ((Number(order.totalAmount || 0) / 2) || 0));
@@ -4521,6 +4578,9 @@ function renderAdminOrders() {
         const customerPhone = order.customerPhone || 'N/A';
         const customerAddress = order.customerAddress || 'N/A';
         const totalAmount = order.totalAmount || 0;
+        const teamOrderSummary = order.teamOrder && order.teamOrder.isTeamOrder
+            ? `<div style="margin-top: 8px; padding: 6px 8px; border-radius: 4px; background: rgba(212, 175, 55, 0.12); color: #f5d76a; font-weight: 700;">🏆 ${buildTeamOrderLabel(order.teamOrder)}</div>`
+            : '';
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
         const paymentProofHtml = paymentMethod === 'gcash'
             ? order.gcashPaymentProof
@@ -4536,6 +4596,7 @@ function renderAdminOrders() {
                 <small>📧 ${customerEmail}</small><br>
                 <small>📱 ${customerPhone}</small><br>
                 <small>📍 ${customerAddress}</small>
+                ${teamOrderSummary}
             </td>
             <td style="max-width: 300px;">${itemsList}</td>
             <td><strong>₱${totalAmount.toFixed(2)}</strong></td>
