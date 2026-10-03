@@ -634,6 +634,10 @@ function updateLoginLogo() {
 function updateShopLogoDisplay() {
     const customerNavbarLogo = document.getElementById('customerNavbarLogo');
     const adminNavbarLogo = document.getElementById('adminNavbarLogo');
+
+    document.querySelectorAll('.navbar-division').forEach(label => {
+        label.textContent = appData.shopName || 'MNL KINGPIN / CAMSUR';
+    });
     
     // Update customer navbar emblem
     if (customerNavbarLogo) {
