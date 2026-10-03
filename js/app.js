@@ -961,7 +961,12 @@ function loginCustomer(e) {
     
     // Check if account exists
     if (!account) {
-        document.getElementById('customerLoginErrorMessage').textContent = 'Account not found. Please create an account first.';
+        const errorMessage = document.getElementById('customerLoginErrorMessage');
+        if (errorMessage) {
+            errorMessage.textContent = 'Account not found. Please create an account first.';
+            errorMessage.style.display = 'block';
+        }
+        alert('This email is not yet registered. Please create an account before logging in.');
         return;
     }
 
@@ -969,12 +974,22 @@ function loginCustomer(e) {
     const enteredPassword = String(password || '').trim();
 
     if (savedPassword && savedPassword !== enteredPassword) {
-        document.getElementById('customerLoginErrorMessage').textContent = 'Incorrect password.';
+        const errorMessage = document.getElementById('customerLoginErrorMessage');
+        if (errorMessage) {
+            errorMessage.textContent = 'Incorrect password.';
+            errorMessage.style.display = 'block';
+        }
+        alert('Incorrect password. Please check your login details and try again.');
         return;
     }
 
     if (!savedPassword && enteredPassword) {
-        document.getElementById('customerLoginErrorMessage').textContent = 'This account uses Google sign-in. Please use Google login or reset the password.';
+        const errorMessage = document.getElementById('customerLoginErrorMessage');
+        if (errorMessage) {
+            errorMessage.textContent = 'This account uses Google sign-in. Please use Google login or reset the password.';
+            errorMessage.style.display = 'block';
+        }
+        alert('This account was created using Google sign-in. Please use Google login instead.');
         return;
     }
     
