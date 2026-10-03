@@ -2164,6 +2164,60 @@ function getProductGalleryImages(product) {
     return images;
 }
 
+let activeProductGalleryDrag = null;
+
+document.addEventListener('pointerdown', event => {
+    const gallery = event.target.closest('.product-image-gallery, .modal-product-gallery');
+    if (!gallery || event.button !== 0) return;
+
+    activeProductGalleryDrag = {
+        gallery,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startScrollLeft: gallery.scrollLeft,
+        dragged: false
+    };
+    gallery.setPointerCapture(event.pointerId);
+});
+
+document.addEventListener('pointermove', event => {
+    const drag = activeProductGalleryDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const distance = event.clientX - drag.startX;
+    if (!drag.dragged && Math.abs(distance) > 6) {
+        drag.dragged = true;
+        drag.gallery.dataset.dragged = 'true';
+    }
+    if (drag.dragged) {
+        event.preventDefault();
+        drag.gallery.scrollLeft = drag.startScrollLeft - distance;
+    }
+});
+
+function finishProductGalleryDrag(event) {
+    if (!activeProductGalleryDrag || activeProductGalleryDrag.pointerId !== event.pointerId) return;
+    const gallery = activeProductGalleryDrag.gallery;
+    const wasDragged = activeProductGalleryDrag.dragged;
+    activeProductGalleryDrag = null;
+    if (wasDragged) {
+        setTimeout(() => {
+            delete gallery.dataset.dragged;
+        }, 500);
+    }
+}
+
+document.addEventListener('pointerup', finishProductGalleryDrag);
+document.addEventListener('pointercancel', finishProductGalleryDrag);
+document.addEventListener('click', event => {
+    const gallery = event.target.closest('.product-image-gallery, .modal-product-gallery');
+    if (gallery?.dataset.dragged === 'true') {
+        event.preventDefault();
+        event.stopPropagation();
+        delete gallery.dataset.dragged;
+    }
+}, true);
+
 function renderImagePreview(container, images) {
     if (!container) return;
     container.innerHTML = images.map((image, index) => `

@@ -798,6 +798,20 @@ body.light-mode [style*="color: #a0a0a0"] {
 
 .product-image-gallery {
     scroll-behavior: smooth;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.product-image-gallery:active,
+.modal-product-gallery:active {
+    cursor: grabbing;
+}
+
+.product-image-gallery img,
+.modal-product-gallery img {
+    -webkit-user-drag: none;
+    user-select: none;
 }
 
 .product-image-gallery .product-image,
