@@ -102,28 +102,30 @@ function toggleDesignInterface() {
 
 // Initialize Design Interface
 function initializeDesignInterface() {
-    loadPresets();
     setupFileUploadPreview();
 }
 
 // Set Design Mode
 function setDesignMode(mode) {
+    const allowedModes = ['customize', 'upload'];
+    if (!allowedModes.includes(mode)) {
+        return;
+    }
+
     designData.currentDesignMode = mode;
     
     // Update button states
     document.querySelectorAll('.design-mode-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    document.querySelector(`[data-mode="${mode}"]`).classList.add('active');
+    const selectedBtn = document.querySelector(`[data-mode="${mode}"]`);
+    if (selectedBtn) {
+        selectedBtn.classList.add('active');
+    }
     
     // Show/hide mode contents
     document.getElementById('customizeDesignMode').style.display = mode === 'customize' ? 'block' : 'none';
-    document.getElementById('presetsDesignMode').style.display = mode === 'presets' ? 'block' : 'none';
     document.getElementById('uploadDesignMode').style.display = mode === 'upload' ? 'block' : 'none';
-    
-    if (mode === 'presets') {
-        loadPresets();
-    }
 }
 
 // Set Clothing Type (Tops or Bottoms)
@@ -139,60 +141,6 @@ function setClothingType(type) {
     // Show/hide clothing forms
     document.getElementById('topsDesignForm').style.display = type === 'tops' ? 'block' : 'none';
     document.getElementById('bottomsDesignForm').style.display = type === 'bottoms' ? 'block' : 'none';
-}
-
-// Load Preset Designs
-function loadPresets() {
-    const presetsGrid = document.getElementById('presetsGrid');
-    presetsGrid.innerHTML = '';
-    
-    designData.presets.forEach(preset => {
-        const presetCard = document.createElement('div');
-        presetCard.className = 'preset-card';
-        presetCard.innerHTML = `
-            <div class="preset-color" style="background-color: ${getColorCode(preset.color)}; height: 150px; border-radius: 5px 5px 0 0;"></div>
-            <div class="preset-info" style="padding: 15px; background: #1f1f1f; border-radius: 0 0 5px 5px;">
-                <h4 style="color: #d4af37; margin-bottom: 5px;">${preset.name}</h4>
-                <p style="color: #a0a0a0; font-size: 0.9em; margin-bottom: 10px;">${preset.description}</p>
-                <p style="color: #d4af37; font-weight: 600; margin-bottom: 10px;">₱${preset.price}</p>
-                <button type="button" class="btn btn-primary" onclick="selectPreset(${preset.id})" style="width: 100%;">Select Design</button>
-            </div>
-        `;
-        presetsGrid.appendChild(presetCard);
-    });
-}
-
-// Select Preset Design
-function selectPreset(presetId) {
-    const preset = designData.presets.find(p => p.id === presetId);
-    if (!preset) return;
-    
-    const cartItem = {
-        id: Date.now(),
-        name: preset.name,
-        type: 'custom-design',
-        design: preset,
-        quantity: 1,
-        price: preset.price,
-        designType: 'preset',
-        details: {
-            name: preset.name,
-            color: preset.color,
-            category: preset.category,
-            description: preset.description
-        }
-    };
-    
-    appData.cart.push(cartItem);
-    saveUserCart();
-    updateCartCount();
-    
-    showStatusUpdateToast(`✓ ${preset.name} added to cart!`);
-    
-    // Switch back to shop
-    document.getElementById('designSection').style.display = 'none';
-    document.getElementById('productsSection').style.display = 'block';
-    updateCartDisplay();
 }
 
 // Add Customized Top to Cart

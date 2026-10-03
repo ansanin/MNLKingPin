@@ -76,7 +76,7 @@
                 <div class="nav-menu-scroll-wrapper">
                     <button class="btn btn-secondary nav-menu-toggle" type="button" onclick="toggleNavMenu()">Menu</button>
                     <div id="customerNavMenu" class="nav-menu-items" aria-label="Customer navigation menu">
-                        <button class="btn btn-secondary" onclick="toggleDesignInterface()">🎨 Create Design</button>
+                        <button class="btn btn-secondary" onclick="toggleDesignInterface()">🎨 Design Studio</button>
                         <button class="btn btn-secondary" onclick="viewPurchaseHistory()">Purchase History</button>
                         <button class="btn btn-secondary" onclick="viewCustomerSettings()">Settings</button>
                         <button class="btn btn-secondary theme-toggle" type="button" onclick="toggleTheme()" aria-label="Switch to light mode"><span class="theme-toggle-icon">☀️</span> <span class="theme-toggle-label">Light Mode</span></button>
@@ -120,9 +120,6 @@
                     <div class="design-mode-buttons">
                         <button class="design-mode-btn active" onclick="setDesignMode('customize')" data-mode="customize">
                             ✏️ Customize Design
-                        </button>
-                        <button class="design-mode-btn" onclick="setDesignMode('presets')" data-mode="presets">
-                            📋 Select Presets
                         </button>
                         <button class="design-mode-btn" onclick="setDesignMode('upload')" data-mode="upload">
                             📤 Upload Design
@@ -288,16 +285,6 @@
                         </div>
 
                         <button type="button" class="btn btn-secondary" onclick="addBottomsToCart()">Add Bottoms to Cart</button>
-                    </div>
-                </div>
-
-                <!-- Preset Designs Mode -->
-                <div id="presetsDesignMode" class="design-mode-content" style="display: none;">
-                    <h3>Select From Preset Designs</h3>
-                    <p style="color: #a0a0a0; margin-bottom: 20px;">Choose from our professionally designed templates</p>
-                    
-                    <div class="presets-grid" id="presetsGrid">
-                        <!-- Preset templates will be populated here -->
                     </div>
                 </div>
 
