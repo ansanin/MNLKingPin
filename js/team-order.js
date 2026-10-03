@@ -63,6 +63,15 @@
         };
     }
 
+    function buildTeamSizeSummary(teamSizes) {
+        const normalized = parseTeamSizes(teamSizes);
+        if (!normalized.length) {
+            return '';
+        }
+
+        return normalized.map(item => `Player ${item.player}: ${item.size}`).join(' • ');
+    }
+
     function buildTeamOrderLabel(input) {
         const normalized = normalizeTeamOrderInput(input);
 
@@ -83,11 +92,13 @@
     const api = {
         normalizeTeamOrderInput,
         buildTeamOrderLabel,
+        buildTeamSizeSummary,
         parseTeamSizes
     };
 
     global.normalizeTeamOrderInput = api.normalizeTeamOrderInput;
     global.buildTeamOrderLabel = api.buildTeamOrderLabel;
+    global.buildTeamSizeSummary = api.buildTeamSizeSummary;
 
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;

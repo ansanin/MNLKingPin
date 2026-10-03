@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { normalizeTeamOrderInput, buildTeamOrderLabel } = require('../js/team-order.js');
+const { normalizeTeamOrderInput, buildTeamOrderLabel, buildTeamSizeSummary } = require('../js/team-order.js');
 
 const teamInput = {
   isTeamOrder: true,
@@ -27,6 +27,7 @@ assert.deepStrictEqual(normalized.teamSizes, [
   { player: 4, size: 'S' }
 ]);
 assert.strictEqual(buildTeamOrderLabel(normalized), 'Team Alpha • Basketball • 4 players • sizes: 1:M, 2:L, 3:XL, 4:S');
+assert.strictEqual(buildTeamSizeSummary(normalized.teamSizes), 'Player 1: M • Player 2: L • Player 3: XL • Player 4: S');
 
 const regularOrder = normalizeTeamOrderInput({ isTeamOrder: false });
 assert.strictEqual(normalized.isTeamOrder, true);

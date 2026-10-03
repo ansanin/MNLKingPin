@@ -3401,11 +3401,12 @@ function processCustomerOrder() {
         const totalAmount = appData.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         const downpaymentAmount = paymentMethod === 'gcash' ? Number(totalAmount) / 2 : 0;
         const normalizedCart = appData.cart.map(item => {
+            const teamSizeSummary = teamOrderInput.isTeamOrder ? buildTeamSizeSummary(teamOrderInput.teamSizes) : '';
             const nextCustomization = {
                 ...(item.customization || {}),
                 name: checkoutName || item.customization?.name || '',
                 number: checkoutNumber || item.customization?.number || '',
-                size: checkoutSize || item.customization?.size || '',
+                size: teamSizeSummary || checkoutSize || item.customization?.size || '',
                 color: checkoutColor || item.customization?.color || ''
             };
 
