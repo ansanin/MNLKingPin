@@ -1086,26 +1086,13 @@ function signupCustomer(e) {
     accounts[email] = newAccount;
     saveCustomerAccounts(accounts);
     
-    // Auto login
-    appData.currentUser = email;
-    appData.currentRole = 'customer';
-    appData.currentUserProfile = newAccount;
-    rememberQuickLogin();
-    
-    // Save session
-    saveCurrentSession();
-    
-    // Initialize empty cart
-    appData.cart = [];
-    saveUserCart();
-    
-    // Clear form and hide auth
+    // Return to login without creating an authenticated session.
     document.getElementById('customerSignupFormElement')?.reset();
     if (document.getElementById('customerSignupErrorMessage')) {
         document.getElementById('customerSignupErrorMessage').textContent = '';
     }
-    hideCustomerAuth();
-    showCustomerDashboard();
+    showCustomerLogin();
+    showStatusUpdateToast('Account created successfully. Please log in.');
 }
 
 const customerLoginFormElement = document.getElementById('customerLoginFormElement');
@@ -4429,6 +4416,28 @@ function updateOrderDownpayment(orderId, amountValue) {
     loadCustomerOrders();
 }
 
+async function compressPaymentProof(file) {
+    const image = await createImageBitmap(file);
+    const maxDimension = 1600;
+    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    image.close();
+
+    let quality = 0.82;
+    let proof = canvas.toDataURL('image/jpeg', quality);
+    while (proof.length > 1200000 && quality > 0.52) {
+        quality -= 0.1;
+        proof = canvas.toDataURL('image/jpeg', quality);
+    }
+    if (proof.length > 1200000) {
+        throw new Error('The proof image is too large to save. Please upload a smaller image.');
+    }
+    return proof;
+}
+
 function uploadOrderPaymentProof(orderId, input) {
     const file = input.files[0];
     if (!file) return;
@@ -4446,8 +4455,7 @@ function uploadOrderPaymentProof(orderId, input) {
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = function(event) {
+    compressPaymentProof(file).then(async proof => {
         const order = appData.orders.find(item => item.id === orderId);
         if (!order || normalizePaymentMethod(order.paymentMethod) !== 'gcash') return;
 
@@ -4456,26 +4464,49 @@ function uploadOrderPaymentProof(orderId, input) {
             order.gcashDownpaymentAmount = Number(order.totalAmount || 0) / 2;
         }
 
-        order.gcashPaymentProof = event.target.result;
+        order.gcashPaymentProof = proof;
         order.paymentStatus = 'downpayment-received';
-        saveOrders();
+        let sharedSaveSucceeded = false;
+        try {
+            await saveOrderToSharedServer(order);
+            sharedSaveSucceeded = true;
+        } catch (error) {
+            console.error('Payment proof was not shared with admin:', error);
+        }
+        try {
+            saveOrders();
+        } catch (error) {
+            console.warn('Payment proof could not be saved in local storage:', error);
+        }
         addNotification('customer', `✓ Payment proof uploaded for order #${order.id}.`, order.id);
         saveNotifications();
 
         const paymentProofContainer = input.closest('.order-payment-proof');
         if (paymentProofContainer) {
+            const proofStatus = sharedSaveSucceeded
+                ? '<p style="color: #4caf50;">✓ Proof uploaded</p>'
+                : '<p style="color: #ffb74d;">Proof not synced with admin. Select the image again to retry.</p>';
+            const retryInput = sharedSaveSucceeded
+                ? ''
+                : `<input type="file" accept="image/*" onchange="uploadOrderPaymentProof(${order.id}, this)">`;
             paymentProofContainer.innerHTML = `
                 <strong>GCash Payment Proof:</strong>
-                <p style="color: #4caf50;">✓ Proof uploaded</p>
-                <img src="${event.target.result}" alt="GCash payment proof" style="max-width: 200px; height: auto; border-radius: 6px; margin-top: 8px; border: 1px solid #4caf50;">
+                ${proofStatus}
+                <img src="${proof}" alt="GCash payment proof" style="max-width: 200px; height: auto; border-radius: 6px; margin-top: 8px; border: 1px solid #4caf50;">
+                ${retryInput}
             `;
         } else {
             loadCustomerOrders();
         }
 
-        showStatusUpdateToast(`✓ Payment proof uploaded for order #${order.id}.`);
-    };
-    reader.readAsDataURL(file);
+        showStatusUpdateToast(sharedSaveSucceeded
+            ? `✓ Payment proof uploaded for order #${order.id}.`
+            : `Proof could not sync with admin. Please try again.`);
+    }).catch(error => {
+        console.error('Unable to process GCash payment proof:', error);
+        alert(error.message || 'Unable to process the payment proof. Please try another image.');
+        input.value = '';
+    });
 }
 
 // ===== ADMIN FUNCTIONS =====
