@@ -3589,7 +3589,10 @@ function renderTeamSizeRows() {
         if (Array.isArray(parsed)) {
             parsed.forEach(item => {
                 if (item && Number(item.player) > 0) {
-                    existingValues[Number(item.player)] = String(item.size || '');
+                    existingValues[Number(item.player)] = {
+                        topSize: String(item.topSize || item.upperSize || item.size || ''),
+                        bottomSize: String(item.bottomSize || '')
+                    };
                 }
             });
         }
@@ -3607,15 +3610,17 @@ function renderTeamSizeRows() {
 
     for (let index = 1; index <= playerCount; index += 1) {
         const row = document.createElement('div');
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
-        row.style.gap = '8px';
-        row.style.marginBottom = '8px';
+        row.className = 'team-player-size-row';
+        const savedSizes = existingValues[index] || {};
         row.innerHTML = `
-            <label style="min-width: 90px; color: #d4af37; font-weight: 600;">Player ${index}</label>
-            <select data-player-index="${index}" style="flex: 1; min-width: 120px;">
-                <option value="">-- Select size --</option>
-                ${sizeOptions.map(option => `<option value="${option}" ${existingValues[index] === option ? 'selected' : ''}>${option}</option>`).join('')}
+            <strong>Player ${index}</strong>
+            <select data-player-index="${index}" data-size-type="topSize" aria-label="Player ${index} upper size">
+                <option value="">Upper size</option>
+                ${sizeOptions.map(option => `<option value="${option}" ${savedSizes.topSize === option ? 'selected' : ''}>${option}</option>`).join('')}
+            </select>
+            <select data-player-index="${index}" data-size-type="bottomSize" aria-label="Player ${index} bottom size">
+                <option value="">Bottom size</option>
+                ${sizeOptions.map(option => `<option value="${option}" ${savedSizes.bottomSize === option ? 'selected' : ''}>${option}</option>`).join('')}
             </select>
         `;
         teamSizeRows.appendChild(row);
@@ -3623,23 +3628,27 @@ function renderTeamSizeRows() {
 
     const rows = teamSizeRows.querySelectorAll('select[data-player-index]');
     rows.forEach(select => {
-        select.addEventListener('change', () => {
-            const selectedSizes = Array.from(teamSizeRows.querySelectorAll('select[data-player-index]')).map(item => ({
-                player: Number(item.dataset.playerIndex),
-                size: item.value
-            })).filter(item => item.player > 0 && item.size);
-            teamSizesHidden.value = JSON.stringify(selectedSizes);
-        });
+        select.addEventListener('change', syncTeamSizeValues);
     });
 
-    teamSizesHidden.value = JSON.stringify(
-        Array.from(teamSizeRows.querySelectorAll('select[data-player-index]'))
-            .map(select => ({
-                player: Number(select.dataset.playerIndex),
-                size: select.value
-            }))
-            .filter(item => item.player > 0 && item.size)
-    );
+    syncTeamSizeValues();
+}
+
+function syncTeamSizeValues() {
+    const teamSizeRows = document.getElementById('teamSizeRows');
+    const teamSizesHidden = document.getElementById('teamSizes');
+    if (!teamSizeRows || !teamSizesHidden) return;
+
+    const sizesByPlayer = new Map();
+    teamSizeRows.querySelectorAll('select[data-player-index]').forEach(select => {
+        const player = Number(select.dataset.playerIndex);
+        if (!sizesByPlayer.has(player)) {
+            sizesByPlayer.set(player, { player, topSize: '', bottomSize: '' });
+        }
+        sizesByPlayer.get(player)[select.dataset.sizeType] = select.value;
+    });
+
+    teamSizesHidden.value = JSON.stringify([...sizesByPlayer.values()].filter(item => item.topSize || item.bottomSize));
 }
 
 function toggleTeamOrderFields() {
@@ -3778,12 +3787,16 @@ function processCustomerOrder() {
 
     if (teamOrderInput.isTeamOrder) {
         if (!teamOrderInput.teamName) missingFields.push('team name');
+        if (!teamOrderInput.teamType) missingFields.push('team category');
         if (!Number.isInteger(teamOrderInput.totalPlayers) || teamOrderInput.totalPlayers < 2) {
             missingFields.push('at least 2 team players');
         } else {
-            const playersWithSizes = new Set(teamOrderInput.teamSizes.map(item => item.player));
-            const hasEveryPlayerSize = Array.from({ length: teamOrderInput.totalPlayers }, (_, index) => playersWithSizes.has(index + 1)).every(Boolean);
-            if (!hasEveryPlayerSize) missingFields.push('a size for every team player');
+            const sizesByPlayer = new Map(teamOrderInput.teamSizes.map(item => [item.player, item]));
+            const hasBothSizesForEveryPlayer = Array.from({ length: teamOrderInput.totalPlayers }, (_, index) => {
+                const sizes = sizesByPlayer.get(index + 1);
+                return Boolean(sizes?.topSize && sizes?.bottomSize);
+            }).every(Boolean);
+            if (!hasBothSizesForEveryPlayer) missingFields.push('upper and bottom sizes for every team player');
         }
     }
 
@@ -4019,7 +4032,7 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
     }).join('');
     const measurements = order.measurements || {};
     const teamSizesHtml = order.teamOrder && Array.isArray(order.teamOrder.teamSizes) && order.teamOrder.teamSizes.length
-        ? `<div style="margin-top: 12px; padding: 10px; border: 1px solid #d4af37; border-radius: 6px; background: rgba(212, 175, 55, 0.08);"><strong>Team Player Sizes:</strong><br>${order.teamOrder.teamSizes.map(item => `Player ${item.player}: ${item.size}`).join('<br>')}</div>`
+        ? `<div style="margin-top: 12px; padding: 10px; border: 1px solid #d4af37; border-radius: 6px; background: rgba(212, 175, 55, 0.08);"><strong>Team Player Sizes:</strong><br>${buildTeamSizeSummary(order.teamOrder.teamSizes)}</div>`
         : '';
 
     document.getElementById('orderDetailsContent').innerHTML = `
@@ -4154,7 +4167,7 @@ function loadCustomerOrders() {
             ? `<p style="margin: 8px 0 0; color: #d4af37; font-weight: 700;">🏆 ${buildTeamOrderLabel(order.teamOrder)}</p>`
             : '';
         const teamOrderSizes = order.teamOrder && Array.isArray(order.teamOrder.teamSizes) && order.teamOrder.teamSizes.length
-            ? `<p style="margin: 8px 0 0; color: #d4af37;">Team sizes: ${order.teamOrder.teamSizes.map(item => `Player ${item.player}: ${item.size}`).join(' • ')}</p>`
+            ? `<p style="margin: 8px 0 0; color: #d4af37;">Team sizes: ${buildTeamSizeSummary(order.teamOrder.teamSizes)}</p>`
             : '';
 
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
@@ -5250,7 +5263,7 @@ function renderAdminOrders() {
             ? `<div style="margin-top: 8px; padding: 6px 8px; border-radius: 4px; background: rgba(212, 175, 55, 0.12); color: #f5d76a; font-weight: 700;">🏆 ${buildTeamOrderLabel(order.teamOrder)}</div>`
             : '';
         const teamSizesText = order.teamOrder && Array.isArray(order.teamOrder.teamSizes) && order.teamOrder.teamSizes.length
-            ? `<div style="margin-top: 6px; color: #e8d37a; font-size: 0.85em;">Team sizes: ${order.teamOrder.teamSizes.map(item => `Player ${item.player}: ${item.size}`).join(' • ')}</div>`
+            ? `<div style="margin-top: 6px; color: #e8d37a; font-size: 0.85em;">Team sizes: ${buildTeamSizeSummary(order.teamOrder.teamSizes)}</div>`
             : '';
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
         const paymentProofHtml = paymentMethod === 'gcash'

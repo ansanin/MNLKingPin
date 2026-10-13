@@ -2,11 +2,15 @@
     function parseTeamSizes(value) {
         if (Array.isArray(value)) {
             return value
-                .map(item => ({
-                    player: Number(item && item.player),
-                    size: String(item && item.size || '').trim()
-                }))
-                .filter(item => Number.isFinite(item.player) && item.player > 0 && item.size);
+                .map(item => {
+                    const legacySize = String(item && item.size || '').trim();
+                    return {
+                        player: Number(item && item.player),
+                        topSize: String(item && (item.topSize || item.upperSize) || legacySize).trim(),
+                        bottomSize: String(item && item.bottomSize || '').trim()
+                    };
+                })
+                .filter(item => Number.isFinite(item.player) && item.player > 0 && (item.topSize || item.bottomSize));
         }
 
         if (typeof value === 'string') {
@@ -25,9 +29,10 @@
                 return matches
                     .map(match => ({
                         player: Number(match[1]),
-                        size: String(match[2]).trim()
+                        topSize: String(match[2]).trim(),
+                        bottomSize: ''
                     }))
-                    .filter(item => Number.isFinite(item.player) && item.player > 0 && item.size);
+                    .filter(item => Number.isFinite(item.player) && item.player > 0 && item.topSize);
             }
 
             return [];
@@ -69,7 +74,7 @@
             return '';
         }
 
-        return normalized.map(item => `Player ${item.player}: ${item.size}`).join(' • ');
+        return normalized.map(item => `Player ${item.player}: Upper ${item.topSize || '—'} / Bottom ${item.bottomSize || '—'}`).join(' • ');
     }
 
     function buildTeamOrderLabel(input) {
@@ -83,7 +88,7 @@
         const teamType = normalized.teamType ? ` • ${normalized.teamType}` : '';
         const playerCount = normalized.totalPlayers > 0 ? ` • ${normalized.totalPlayers} players` : '';
         const sizeSummary = normalized.teamSizes.length
-            ? ` • sizes: ${normalized.teamSizes.map(item => `${item.player}:${item.size}`).join(', ')}`
+            ? ` • sizes: ${normalized.teamSizes.map(item => `${item.player}:U${item.topSize || '—'}/B${item.bottomSize || '—'}`).join(', ')}`
             : '';
 
         return `${teamName}${teamType}${playerCount}${sizeSummary}`;

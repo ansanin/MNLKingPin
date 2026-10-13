@@ -7,10 +7,10 @@ const teamInput = {
   teamType: 'Basketball',
   totalPlayers: 4,
   teamSizes: [
-    { player: 1, size: 'M' },
-    { player: 2, size: 'L' },
-    { player: 3, size: 'XL' },
-    { player: 4, size: 'S' }
+    { player: 1, topSize: 'M', bottomSize: 'S' },
+    { player: 2, topSize: 'L', bottomSize: 'M' },
+    { player: 3, topSize: 'XL', bottomSize: 'L' },
+    { player: 4, topSize: 'S', bottomSize: 'XS' }
   ],
   teamNotes: 'Need matching jersey numbers.'
 };
@@ -21,13 +21,17 @@ assert.strictEqual(normalized.teamName, 'Team Alpha');
 assert.strictEqual(normalized.teamType, 'Basketball');
 assert.strictEqual(normalized.totalPlayers, 4);
 assert.deepStrictEqual(normalized.teamSizes, [
-  { player: 1, size: 'M' },
-  { player: 2, size: 'L' },
-  { player: 3, size: 'XL' },
-  { player: 4, size: 'S' }
+  { player: 1, topSize: 'M', bottomSize: 'S' },
+  { player: 2, topSize: 'L', bottomSize: 'M' },
+  { player: 3, topSize: 'XL', bottomSize: 'L' },
+  { player: 4, topSize: 'S', bottomSize: 'XS' }
 ]);
-assert.strictEqual(buildTeamOrderLabel(normalized), 'Team Alpha • Basketball • 4 players • sizes: 1:M, 2:L, 3:XL, 4:S');
-assert.strictEqual(buildTeamSizeSummary(normalized.teamSizes), 'Player 1: M • Player 2: L • Player 3: XL • Player 4: S');
+assert.strictEqual(buildTeamOrderLabel(normalized), 'Team Alpha • Basketball • 4 players • sizes: 1:UM/BS, 2:UL/BM, 3:UXL/BL, 4:US/BXS');
+assert.strictEqual(buildTeamSizeSummary(normalized.teamSizes), 'Player 1: Upper M / Bottom S • Player 2: Upper L / Bottom M • Player 3: Upper XL / Bottom L • Player 4: Upper S / Bottom XS');
+
+assert.deepStrictEqual(normalizeTeamOrderInput({ teamSizes: [{ player: 1, size: 'M' }] }).teamSizes, [
+  { player: 1, topSize: 'M', bottomSize: '' }
+]);
 
 const regularOrder = normalizeTeamOrderInput({
   isTeamOrder: false,
