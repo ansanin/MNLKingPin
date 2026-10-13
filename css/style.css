@@ -833,6 +833,34 @@ body.light-mode .website-footer-location {
     color: #d4af37;
 }
 
+.design-team-order-option {
+    margin: 0 0 20px;
+    padding: 12px 14px;
+    border: 1px solid rgba(212, 175, 55, .4);
+    border-radius: 8px;
+    background: rgba(212, 175, 55, .06);
+}
+
+.design-team-order-option label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #f4bd1b;
+    font-weight: 700;
+}
+
+.design-team-order-option input {
+    width: 18px;
+    height: 18px;
+    accent-color: #d4af37;
+}
+
+.design-team-order-option p {
+    margin: 4px 0 0 26px;
+    color: #a0a0a0;
+    font-size: .85rem;
+}
+
 .search-bar {
     display: flex;
     gap: 10px;

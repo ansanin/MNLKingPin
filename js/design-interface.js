@@ -102,7 +102,22 @@ function toggleDesignInterface() {
 
 // Initialize Design Interface
 function initializeDesignInterface() {
+    const designTeamOrderCheckbox = document.getElementById('designIsTeamOrder');
+    const checkoutTeamOrderCheckbox = document.getElementById('isTeamOrder');
+    if (designTeamOrderCheckbox && checkoutTeamOrderCheckbox) {
+        designTeamOrderCheckbox.checked = checkoutTeamOrderCheckbox.checked;
+    }
+
     setupFileUploadPreview();
+}
+
+function syncDesignTeamOrderSelection() {
+    const designTeamOrderCheckbox = document.getElementById('designIsTeamOrder');
+    const checkoutTeamOrderCheckbox = document.getElementById('isTeamOrder');
+    if (!designTeamOrderCheckbox || !checkoutTeamOrderCheckbox) return;
+
+    checkoutTeamOrderCheckbox.checked = designTeamOrderCheckbox.checked;
+    toggleTeamOrderFields();
 }
 
 // Set Design Mode
