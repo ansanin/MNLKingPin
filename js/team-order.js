@@ -38,14 +38,14 @@
 
     function normalizeTeamOrderInput(input) {
         const source = input && typeof input === 'object' ? input : {};
-        const isTeamOrder = Boolean(
-            source.isTeamOrder === true ||
-            source.teamOrder === true ||
-            source.teamName ||
-            source.teamType ||
-            source.teamNotes ||
-            (Number(source.totalPlayers) > 0)
-        );
+        const explicitTeamOrder = typeof source.isTeamOrder === 'boolean'
+            ? source.isTeamOrder
+            : typeof source.teamOrder === 'boolean'
+                ? source.teamOrder
+                : null;
+        const isTeamOrder = explicitTeamOrder === null
+            ? Boolean(source.teamName || source.teamType || source.teamNotes || Number(source.totalPlayers) > 0)
+            : explicitTeamOrder;
 
         const teamName = String(source.teamName || '').trim();
         const teamType = String(source.teamType || '').trim();

@@ -29,7 +29,11 @@ assert.deepStrictEqual(normalized.teamSizes, [
 assert.strictEqual(buildTeamOrderLabel(normalized), 'Team Alpha • Basketball • 4 players • sizes: 1:M, 2:L, 3:XL, 4:S');
 assert.strictEqual(buildTeamSizeSummary(normalized.teamSizes), 'Player 1: M • Player 2: L • Player 3: XL • Player 4: S');
 
-const regularOrder = normalizeTeamOrderInput({ isTeamOrder: false });
+const regularOrder = normalizeTeamOrderInput({
+  isTeamOrder: false,
+  totalPlayers: 2,
+  teamSizes: [{ player: 1, size: 'M' }]
+});
 assert.strictEqual(normalized.isTeamOrder, true);
 assert.strictEqual(regularOrder.isTeamOrder, false);
 assert.strictEqual(buildTeamOrderLabel(regularOrder), 'Individual order');

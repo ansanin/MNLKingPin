@@ -3502,13 +3502,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const isTeamOrderCheckbox = document.getElementById('isTeamOrder');
     if (isTeamOrderCheckbox) {
-        isTeamOrderCheckbox.checked = true;
         isTeamOrderCheckbox.addEventListener('change', toggleTeamOrderFields);
     }
 
     const teamPlayersField = document.getElementById('teamPlayers');
     if (teamPlayersField) {
-        teamPlayersField.value = teamPlayersField.value || '2';
+        if (isTeamOrderCheckbox?.checked) {
+            teamPlayersField.value = teamPlayersField.value || '2';
+        }
         teamPlayersField.addEventListener('input', renderTeamSizeRows);
         teamPlayersField.addEventListener('change', renderTeamSizeRows);
     }
