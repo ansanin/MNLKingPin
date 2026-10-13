@@ -102,22 +102,7 @@ function toggleDesignInterface() {
 
 // Initialize Design Interface
 function initializeDesignInterface() {
-    const designTeamOrderCheckbox = document.getElementById('designIsTeamOrder');
-    const checkoutTeamOrderCheckbox = document.getElementById('isTeamOrder');
-    if (designTeamOrderCheckbox && checkoutTeamOrderCheckbox) {
-        designTeamOrderCheckbox.checked = checkoutTeamOrderCheckbox.checked;
-    }
-
     setupFileUploadPreview();
-}
-
-function syncDesignTeamOrderSelection() {
-    const designTeamOrderCheckbox = document.getElementById('designIsTeamOrder');
-    const checkoutTeamOrderCheckbox = document.getElementById('isTeamOrder');
-    if (!designTeamOrderCheckbox || !checkoutTeamOrderCheckbox) return;
-
-    checkoutTeamOrderCheckbox.checked = designTeamOrderCheckbox.checked;
-    toggleTeamOrderFields();
 }
 
 // Set Design Mode
@@ -167,20 +152,19 @@ function setClothingType(type) {
 function addTopsToCart() {
     const color = document.getElementById('topColor').value;
     const fabric = document.getElementById('topFabric').value;
-    const size = document.getElementById('topSize').value;
     const accentColor = document.getElementById('topAccentColor').value;
     const frontDesign = document.getElementById('topPrintDesign').value;
     const backDesign = document.getElementById('topBackDesign').value;
     
     // Validation
-    if (!color || !fabric || !size) {
-        alert('Please fill in all required fields (Color, Fabric, Size)');
+    if (!color || !fabric) {
+        alert('Please fill in all required fields (Color and Fabric)');
         return;
     }
     
     const cartItem = {
         id: Date.now(),
-        name: `Custom Top - ${color} (${size})`,
+        name: `Custom Top - ${color}`,
         type: 'custom-design',
         quantity: 1,
         price: 500, // Base price for custom design
@@ -190,7 +174,6 @@ function addTopsToCart() {
             baseColor: color,
             accentColor: accentColor || 'None',
             fabricType: fabric,
-            size: size,
             frontDesign: frontDesign,
             backDesign: backDesign,
             customizationDate: new Date().toLocaleString()
@@ -216,19 +199,18 @@ function addTopsToCart() {
 function addBottomsToCart() {
     const color = document.getElementById('bottomColor').value;
     const fabric = document.getElementById('bottomFabric').value;
-    const size = document.getElementById('bottomSize').value;
     const sideStripe = document.getElementById('bottomSideStripe').value;
     const design = document.getElementById('bottomDesign').value;
     
     // Validation
-    if (!color || !fabric || !size) {
-        alert('Please fill in all required fields (Color, Fabric, Size)');
+    if (!color || !fabric) {
+        alert('Please fill in all required fields (Color and Fabric)');
         return;
     }
     
     const cartItem = {
         id: Date.now(),
-        name: `Custom Bottoms - ${color} (${size})`,
+        name: `Custom Bottoms - ${color}`,
         type: 'custom-design',
         quantity: 1,
         price: 450, // Base price for custom bottoms
@@ -237,7 +219,6 @@ function addBottomsToCart() {
             clothingType: 'bottoms',
             baseColor: color,
             fabricType: fabric,
-            size: size,
             sideStripe: sideStripe || 'None',
             design: design,
             customizationDate: new Date().toLocaleString()
