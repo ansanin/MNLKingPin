@@ -418,8 +418,12 @@ function loadNotifications() {
 function saveUserCart() {
     if (!appData.currentUser) return;
     const key = `kingpinCart_${appData.currentUser}`;
-    localStorage.setItem(key, JSON.stringify(appData.cart));
-    console.log(`Cart saved for user: ${appData.currentUser}`);
+    try {
+        localStorage.setItem(key, JSON.stringify(appData.cart));
+        console.log(`Cart saved for user: ${appData.currentUser}`);
+    } catch (error) {
+        console.warn('Unable to save the cart locally because browser storage is full.', error);
+    }
 }
 
 // Load user's cart from localStorage
@@ -3140,6 +3144,12 @@ function getUploadedDesignTypeLabel(type) {
     return labels[type] || type || 'N/A';
 }
 
+function getUploadedDesignImageSource(item) {
+    if (item?.designType !== 'uploaded' || !item.details) return '';
+    const source = String(item.details.uploadedFile || '');
+    return /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(source) ? source : '';
+}
+
 function updateCartDisplay() {
     const cartItems = document.getElementById('cartItems');
     const cartTotal = document.getElementById('cartTotal');
@@ -4020,11 +4030,18 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
         const numberText = customization.number ? ` #${customization.number}` : '';
         const colorText = color && color !== 'Not specified' ? ` / Color: ${color}` : '';
         const sizeText = `${customization.size ? ` / Top Size: ${customization.size}` : ''}${customization.bottomSize ? ` / Bottom Size: ${customization.bottomSize}` : ''}`;
+        const uploadedDesignImage = getUploadedDesignImageSource(item);
+        const uploadedDesignPreview = uploadedDesignImage
+            ? `<a href="${uploadedDesignImage}" target="_blank" rel="noopener noreferrer"><img src="${uploadedDesignImage}" alt="Uploaded customer design" style="display: block; max-width: 220px; max-height: 180px; object-fit: contain; margin: 8px 0; border: 1px solid #777; border-radius: 4px;"></a>`
+            : '';
 
         return `
-            <div style="display: flex; justify-content: space-between; gap: 15px; padding: 8px 0; border-bottom: 1px solid #444;">
-            <span>${item.name} × ${item.quantity}${sizeText}${nameText}${numberText}${colorText}</span>
-                <strong>₱${(item.price * item.quantity).toFixed(2)}</strong>
+            <div style="padding: 8px 0; border-bottom: 1px solid #444;">
+                <div style="display: flex; justify-content: space-between; gap: 15px;">
+                    <span>${item.name} × ${item.quantity}${sizeText}${nameText}${numberText}${colorText}</span>
+                    <strong>₱${(item.price * item.quantity).toFixed(2)}</strong>
+                </div>
+                ${uploadedDesignPreview}
             </div>
         `;
     }).join('');
@@ -4157,6 +4174,12 @@ function loadCustomerOrders() {
             }
             return `${item.name} (x${item.quantity})${customStr}`;
         }).join(', ');
+        const uploadedDesignsHtml = order.items.map(item => {
+            const imageSource = getUploadedDesignImageSource(item);
+            return imageSource
+                ? `<img src="${imageSource}" alt="Uploaded customer design" style="display: block; max-width: 180px; max-height: 140px; object-fit: contain; margin: 8px 0; border: 1px solid #5b6268; border-radius: 4px;">`
+                : '';
+        }).join('');
         
         const orderItem = document.createElement('div');
         orderItem.className = 'order-item';
@@ -4207,6 +4230,7 @@ function loadCustomerOrders() {
                 <p><strong>Customer:</strong> ${order.customerName}</p>
                 <p><strong>Email:</strong> ${order.customerEmail}</p>
                 <p><strong>Products:</strong> ${itemsList}</p>
+                ${uploadedDesignsHtml ? `<div class="customer-order-designs"><strong>Uploaded Design:</strong>${uploadedDesignsHtml}</div>` : ''}
                 <p><strong>Delivery Address:</strong> ${order.customerAddress}</p>
                 <p><strong>Order Date:</strong> ${order.date}</p>
                 <p><strong>Payment Method:</strong> ${(order.paymentMethod || 'gcash').toUpperCase()}</p>
@@ -5201,7 +5225,8 @@ function renderAdminOrders() {
                 (item.id && Number(savedProduct.id) === Number(item.id)) || savedProduct.name === item.name
             );
             const productImages = Array.isArray(product?.images) ? product.images : product?.image ? [product.image] : [];
-            const image = item.image || item.productImage || item.images?.[0] || productImages[0];
+            const uploadedDesignImage = getUploadedDesignImageSource(item);
+            const image = uploadedDesignImage || item.image || item.productImage || item.images?.[0] || productImages[0];
             const itemEntry = document.createElement('div');
             itemEntry.className = 'admin-order-product';
 
@@ -5215,7 +5240,7 @@ function renderAdminOrders() {
                 const thumbnail = document.createElement('img');
                 thumbnail.className = 'admin-order-product-image';
                 thumbnail.src = image;
-                thumbnail.alt = `${item.name} product photo`;
+                thumbnail.alt = uploadedDesignImage ? 'Customer uploaded design' : `${item.name} product photo`;
                 thumbnail.loading = 'lazy';
                 details.appendChild(thumbnail);
             } else {

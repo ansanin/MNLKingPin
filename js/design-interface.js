@@ -278,8 +278,55 @@ function setupFileUploadPreview() {
     });
 }
 
+function readDesignFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Unable to read the uploaded file.'));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function prepareUploadedDesignFile(file) {
+    const originalData = await readDesignFileAsDataUrl(file);
+    if (!file.type.startsWith('image/')) {
+        return { data: originalData, fileName: file.name, fileType: file.type };
+    }
+
+    const image = new Image();
+    image.src = originalData;
+    await image.decode();
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+        const maxDimension = 1600 * Math.pow(0.82, attempt);
+        const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+
+        const quality = Math.max(0.5, 0.82 - attempt * 0.1);
+        let data = canvas.toDataURL('image/webp', quality);
+        if (!data.startsWith('data:image/webp;base64,')) {
+            const context = canvas.getContext('2d');
+            context.globalCompositeOperation = 'destination-over';
+            context.fillStyle = '#fff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            data = canvas.toDataURL('image/jpeg', quality);
+        }
+
+        if (data.length <= 1800000) {
+            const extension = data.startsWith('data:image/webp;') ? 'webp' : 'jpg';
+            const baseName = file.name.replace(/\.[^.]+$/, '') || 'customer-design';
+            return { data, fileName: `${baseName}.${extension}`, fileType: data.slice(5, data.indexOf(';')) };
+        }
+    }
+
+    throw new Error('This photo is too large to add. Please choose a smaller image.');
+}
+
 // Add Uploaded Design to Cart
-function addUploadedDesignToCart() {
+async function addUploadedDesignToCart() {
     const file = designData.uploadedDesignFile;
     const clothingType = document.getElementById('uploadClothingType').value;
     const itemDescription = document.getElementById('uploadItemDescription').value;
@@ -288,10 +335,9 @@ function addUploadedDesignToCart() {
         alert('Please upload a file, select item type, and provide a description');
         return;
     }
-    
-    // Read file as base64
-    const reader = new FileReader();
-    reader.onload = function(e) {
+
+    try {
+        const uploadedDesign = await prepareUploadedDesignFile(file);
         const cartItem = {
             id: Date.now(),
             name: `${itemDescription} (Custom Upload)`,
@@ -302,9 +348,9 @@ function addUploadedDesignToCart() {
             details: {
                 clothingType: clothingType,
                 itemDescription: itemDescription,
-                uploadedFile: e.target.result,
-                fileName: file.name,
-                fileType: file.type,
+                uploadedFile: uploadedDesign.data,
+                fileName: uploadedDesign.fileName,
+                fileType: uploadedDesign.fileType,
                 uploadDate: new Date().toLocaleString()
             }
         };
@@ -313,21 +359,23 @@ function addUploadedDesignToCart() {
         saveUserCart();
         updateCartCount();
         
-        showStatusUpdateToast(`✓ ${itemDescription} added to cart!`);
+        showStatusUpdateToast(`${itemDescription} uploaded design added to cart successfully.`);
         
         // Reset form
         document.getElementById('uploadDesignFile').value = '';
         document.getElementById('uploadClothingType').value = '';
         document.getElementById('uploadItemDescription').value = '';
         document.getElementById('uploadDesignPreview').style.display = 'none';
+        designData.uploadedDesignFile = null;
         
         // Switch back to shop
         document.getElementById('designSection').style.display = 'none';
         document.getElementById('productsSection').style.display = 'block';
         updateCartDisplay();
-    };
-    
-    reader.readAsDataURL(file);
+    } catch (error) {
+        console.error('Unable to add uploaded design to cart:', error);
+        alert(error.message || 'Unable to add the uploaded design to cart.');
+    }
 }
 
 // Helper function to convert color names to hex codes
