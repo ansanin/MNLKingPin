@@ -34,6 +34,7 @@ const { handler: orderDesignHandler } = require('../netlify/functions/order-desi
 async function testOrderDesignAttachments() {
     const imageData = `data:image/webp;base64,${Buffer.from('sample design').toString('base64')}`;
     const ordersStore = blobModule.getStore('kingpin-orders');
+    const orderIndexStore = blobModule.getStore('kingpin-order-index');
     await ordersStore.setJSON('orders', [{
         id: 100,
         customerEmail: 'legacy@example.com',
@@ -63,7 +64,7 @@ async function testOrderDesignAttachments() {
 
     assert.strictEqual(response.statusCode, 200);
     const legacyOrders = await ordersStore.get('orders', { type: 'json' });
-    const storedOrders = await ordersStore.get('orders-v2', { type: 'json' });
+    const storedOrders = await orderIndexStore.get('orders', { type: 'json' });
     assert.strictEqual(legacyOrders.length, 1);
     assert.ok(legacyOrders[0].items[0].details.uploadedFile);
     assert.strictEqual(storedOrders.length, 1);
@@ -79,6 +80,7 @@ async function testOrderDesignAttachments() {
     assert.strictEqual(savedOrders.length, 2);
     assert.ok(savedOrders.find(order => order.id === 100).items[0].details.uploadedFileUrl);
     assert.ok(savedOrders.find(order => order.id === 200).items[0].details.uploadedFileUrl);
+    assert.strictEqual((await orderIndexStore.get('orders', { type: 'json' })).length, 2);
 
     const cachedActiveResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
     const activeOrders = JSON.parse(cachedActiveResponse.body).orders;

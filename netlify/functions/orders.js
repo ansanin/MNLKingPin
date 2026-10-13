@@ -45,35 +45,33 @@ exports.handler = async function handler(event) {
 
     try {
         const store = getStore('kingpin-orders');
+        const orderIndexStore = getStore('kingpin-order-index');
         const designStore = getStore('kingpin-order-designs');
 
         if (event.httpMethod === 'GET') {
             const activeOnly = event.queryStringParameters?.scope === 'active';
-            const indexedOrders = (await store.get('orders-v2', { type: 'json' })) || [];
+            const indexedOrders = (await orderIndexStore.get('orders', { type: 'json' })) || [];
             if (activeOnly) {
-                const legacyActiveOrders = (await store.get('legacy-active-orders', { type: 'json' })) || [];
-                const orderById = new Map(legacyActiveOrders.map(order => [String(order.id), order]));
-                indexedOrders.forEach(order => orderById.set(String(order.id), order));
-                const activeOrders = Array.from(orderById.values()).filter(isActiveOrder);
+                const activeOrders = indexedOrders.filter(isActiveOrder);
                 return jsonResponse(200, { orders: activeOrders });
             }
 
             const legacyOrders = (await store.get('orders', { type: 'json' })) || [];
+            const previousIndexedOrders = (await store.get('orders-v2', { type: 'json' })) || [];
             const orderById = new Map(legacyOrders.map(order => [String(order.id), order]));
+            previousIndexedOrders.forEach(order => orderById.set(String(order.id), order));
             indexedOrders.forEach(order => orderById.set(String(order.id), order));
             const selectedOrders = Array.from(orderById.values());
             const normalizedOrders = await Promise.all(selectedOrders.map(order => removeInlineDesignFiles(order, designStore)));
             const responseOrders = normalizedOrders.map(result => result.order);
-            const indexedIds = new Set(indexedOrders.map(order => String(order.id)));
-            const legacyActiveOrders = responseOrders.filter(order => !indexedIds.has(String(order.id)) && isActiveOrder(order));
-            await store.setJSON('legacy-active-orders', legacyActiveOrders);
+            await orderIndexStore.setJSON('orders', responseOrders);
             return jsonResponse(200, { orders: responseOrders });
         }
         if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'Method not allowed' });
 
         const order = JSON.parse(event.body || '{}');
         if (!order.id || !order.customerEmail) return jsonResponse(400, { error: 'A valid order is required' });
-        const orders = (await store.get('orders-v2', { type: 'json' })) || [];
+        const orders = (await orderIndexStore.get('orders', { type: 'json' })) || [];
         const normalizedOrder = (await removeInlineDesignFiles(order, designStore)).order;
         const existingIndex = orders.findIndex(savedOrder => String(savedOrder.id) === String(normalizedOrder.id));
         if (existingIndex >= 0) {
@@ -81,7 +79,7 @@ exports.handler = async function handler(event) {
         } else {
             orders.push(normalizedOrder);
         }
-        await store.setJSON('orders-v2', orders.slice(-500));
+        await orderIndexStore.setJSON('orders', orders.slice(-500));
         return jsonResponse(200, { ok: true });
     } catch (error) {
         console.error('Netlify orders function error:', error);
