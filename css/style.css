@@ -3963,6 +3963,24 @@ body.light-mode .floating-back-button button:hover {
     }
 }
 
+#customerPage .customer-container > [style*="display: none"] {
+    display: none !important;
+}
+
+#customerPage[style*="display: block"]:has(#designSection[style*="display: block"]) {
+    display: block !important;
+    height: auto !important;
+    min-height: 100vh;
+    overflow: visible !important;
+}
+
+#customerPage[style*="display: block"]:has(#designSection[style*="display: block"]) .customer-container {
+    display: block !important;
+    min-height: 0;
+    flex: none !important;
+    padding: 24px clamp(18px, 4vw, 54px) 42px;
+}
+
 #customerPage .products-section h2,
 #customerPage .design-section h2,
 #customerPage .cart-section h2,
