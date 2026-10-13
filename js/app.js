@@ -5183,33 +5183,62 @@ function renderAdminOrders() {
     }
 
     activeOrders.forEach(order => {
-        // Build items list with images and customization details
-        const itemsList = order.items.map(item => {
-            let customStr = '';
-            if (item.customization) {
-                customStr = '<br><small style="color: #d4af37;">';
-                if (item.customization.size) customStr += `📏 ${item.customization.size}`;
-                if (item.customization.name || item.customization.number) {
-                    if (item.customization.size) customStr += ' | ';
-                    if (item.customization.name) customStr += `👤 ${item.customization.name}`;
-                    if (item.customization.name && item.customization.number) customStr += ' ';
-                    if (item.customization.number) customStr += `🔢 #${item.customization.number}`;
-                }
-                customStr += '</small>';
-            }
-            
-            // Add product image if available
-            let imgHtml = '';
-            if (item.image) {
-                imgHtml = `<img src="${item.image}" alt="${item.name}" style="width: 60px; height: 60px; border-radius: 5px; margin-bottom: 8px;"><br>`;
+        const itemsList = document.createElement('div');
+        itemsList.className = 'admin-order-product-list';
+        (Array.isArray(order.items) ? order.items : []).forEach(item => {
+            const product = (appData.products || []).find(savedProduct =>
+                (item.id && Number(savedProduct.id) === Number(item.id)) || savedProduct.name === item.name
+            );
+            const productImages = Array.isArray(product?.images) ? product.images : product?.image ? [product.image] : [];
+            const image = item.image || item.productImage || item.images?.[0] || productImages[0];
+            const itemEntry = document.createElement('div');
+            itemEntry.className = 'admin-order-product';
+
+            if (image) {
+                const thumbnail = document.createElement('img');
+                thumbnail.className = 'admin-order-product-image';
+                thumbnail.src = image;
+                thumbnail.alt = `${item.name} product photo`;
+                thumbnail.loading = 'lazy';
+                itemEntry.appendChild(thumbnail);
+            } else {
+                const placeholder = document.createElement('div');
+                placeholder.className = 'admin-order-product-placeholder';
+                placeholder.textContent = 'No photo';
+                itemEntry.appendChild(placeholder);
             }
 
-            const designAttachment = item.designType === 'uploaded'
-                ? '<br><small style="color: #4caf50;">📎 Customer design attached; open View to preview or download.</small>'
-                : '';
-            
-            return `${imgHtml}<strong>${item.name}</strong> (Qty: ${item.quantity}) - ₱${(item.price * item.quantity).toFixed(2)}${customStr}${designAttachment}`;
-        }).join('<br><br>');
+            const details = document.createElement('div');
+            details.className = 'admin-order-product-details';
+            const name = document.createElement('strong');
+            name.textContent = item.name || 'Product';
+            details.appendChild(name);
+
+            const quantityPrice = document.createElement('span');
+            quantityPrice.textContent = `(Qty: ${item.quantity}) - ₱${((Number(item.price) || 0) * (Number(item.quantity) || 0)).toFixed(2)}`;
+            details.appendChild(quantityPrice);
+
+            const customizationText = [
+                item.customization?.size && `Size: ${item.customization.size}`,
+                item.customization?.name && `Name: ${item.customization.name}`,
+                item.customization?.number && `#${item.customization.number}`
+            ].filter(Boolean).join(' | ');
+            if (customizationText) {
+                const customization = document.createElement('small');
+                customization.textContent = customizationText;
+                details.appendChild(customization);
+            }
+
+            if (item.designType === 'uploaded') {
+                const attachmentNote = document.createElement('small');
+                attachmentNote.className = 'admin-order-design-note';
+                attachmentNote.textContent = 'Customer design attached; open View to preview or download.';
+                details.appendChild(attachmentNote);
+            }
+
+            itemEntry.appendChild(details);
+            itemsList.appendChild(itemEntry);
+        });
         
         // Ensure order data exists
         const customerName = order.customerName || 'N/A';
@@ -5241,7 +5270,7 @@ function renderAdminOrders() {
                 ${teamOrderSummary}
                 ${teamSizesText}
             </td>
-            <td style="max-width: 300px;">${itemsList}</td>
+            <td class="admin-order-products-cell" style="max-width: 340px;"></td>
             <td><strong>₱${totalAmount.toFixed(2)}</strong></td>
             <td><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
             <td>${order.date}</td>
@@ -5258,6 +5287,7 @@ function renderAdminOrders() {
                 <button class="btn btn-small" onclick="viewOrderDetails(${Number(order.id) || 0})" style="margin-top: 8px; background: #4caf50; padding: 4px 8px; font-size: 0.85em; width: 100%;">👁️ View</button>
             </td>
         `;
+        row.querySelector('.admin-order-products-cell').appendChild(itemsList);
         document.getElementById('adminOrdersList').appendChild(row);
     });
 }

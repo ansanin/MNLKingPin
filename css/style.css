@@ -1831,6 +1831,52 @@ table tbody tr:hover {
     object-fit: cover;
 }
 
+.admin-order-product-list {
+    display: grid;
+    min-width: 240px;
+    gap: 12px;
+}
+
+.admin-order-product {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.admin-order-product-image,
+.admin-order-product-placeholder {
+    width: 72px;
+    height: 72px;
+    flex: 0 0 72px;
+    border: 1px solid #454b52;
+    border-radius: 5px;
+}
+
+.admin-order-product-image {
+    object-fit: cover;
+}
+
+.admin-order-product-placeholder {
+    display: grid;
+    place-items: center;
+    background: #202328;
+    color: #a0a0a0;
+    font-size: .75rem;
+}
+
+.admin-order-product-details {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+    overflow-wrap: anywhere;
+}
+
+.admin-order-design-note {
+    color: #4caf50;
+}
+
 .action-buttons {
     display: flex;
     gap: 10px;
