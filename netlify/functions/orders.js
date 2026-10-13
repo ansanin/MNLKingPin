@@ -39,18 +39,6 @@ function isActiveOrder(order) {
     return !['completed', 'delivered', 'cancelled'].includes(String(order.status || '').toLowerCase());
 }
 
-async function getLegacyActiveOrders(store, designStore) {
-    const cachedOrders = await store.get('legacy-active-orders', { type: 'json' });
-    if (Array.isArray(cachedOrders)) return cachedOrders;
-
-    const legacyOrders = (await store.get('orders', { type: 'json' })) || [];
-    const activeOrders = legacyOrders.filter(isActiveOrder);
-    const normalizedOrders = await Promise.all(activeOrders.map(order => removeInlineDesignFiles(order, designStore)));
-    const compactOrders = normalizedOrders.map(result => result.order);
-    await store.setJSON('legacy-active-orders', compactOrders);
-    return compactOrders;
-}
-
 exports.handler = async function handler(event) {
     connectLambda(event);
     if (event.httpMethod === 'OPTIONS') return jsonResponse(204, {});
@@ -63,7 +51,7 @@ exports.handler = async function handler(event) {
             const activeOnly = event.queryStringParameters?.scope === 'active';
             const indexedOrders = (await store.get('orders-v2', { type: 'json' })) || [];
             if (activeOnly) {
-                const legacyActiveOrders = await getLegacyActiveOrders(store, designStore);
+                const legacyActiveOrders = (await store.get('legacy-active-orders', { type: 'json' })) || [];
                 const orderById = new Map(legacyActiveOrders.map(order => [String(order.id), order]));
                 indexedOrders.forEach(order => orderById.set(String(order.id), order));
                 const activeOrders = Array.from(orderById.values()).filter(isActiveOrder);
@@ -76,6 +64,9 @@ exports.handler = async function handler(event) {
             const selectedOrders = Array.from(orderById.values());
             const normalizedOrders = await Promise.all(selectedOrders.map(order => removeInlineDesignFiles(order, designStore)));
             const responseOrders = normalizedOrders.map(result => result.order);
+            const indexedIds = new Set(indexedOrders.map(order => String(order.id)));
+            const legacyActiveOrders = responseOrders.filter(order => !indexedIds.has(String(order.id)) && isActiveOrder(order));
+            await store.setJSON('legacy-active-orders', legacyActiveOrders);
             return jsonResponse(200, { orders: responseOrders });
         }
         if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'Method not allowed' });

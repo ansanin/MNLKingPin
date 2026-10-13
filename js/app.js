@@ -5215,6 +5215,19 @@ async function loadAdminOrders() {
     } catch (error) {
         console.warn('Using local orders because shared orders could not be loaded:', error);
     }
+
+    if (!window.kingPinLegacyOrderImportStarted) {
+        window.kingPinLegacyOrderImportStarted = true;
+        fetchSharedOrders().then(sharedOrders => {
+            const ordersById = new Map(appData.orders.map(order => [String(order.id), order]));
+            sharedOrders.forEach(order => ordersById.set(String(order.id), order));
+            appData.orders = Array.from(ordersById.values());
+            saveOrders();
+            renderAdminOrders();
+        }).catch(error => {
+            console.warn('Unable to import legacy shared orders yet:', error);
+        });
+    }
 }
 
 function renderAdminOrders() {
