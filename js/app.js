@@ -1843,6 +1843,8 @@ function showAdminTab(tabName) {
         loadAdminOrders();
     } else if (tabName === 'messages') {
         loadAdminMessages();
+    } else if (tabName === 'history') {
+        loadHistoryTable();
     } else if (tabName === 'reports') {
         generateReports();
     }
@@ -5057,6 +5059,9 @@ async function loadAdminOrders() {
             });
         });
         renderAdminOrders();
+        if (document.getElementById('historyTab')?.style.display === 'block') {
+            loadHistoryTable();
+        }
     } catch (error) {
         console.warn('Using local orders because shared orders could not be loaded:', error);
     }
@@ -5767,14 +5772,26 @@ function exportCustomersToCSV() {
 // Load History Table
 function loadHistoryTable() {
     const historyList = document.getElementById('historyList');
-    const storedHistory = JSON.parse(localStorage.getItem('orderHistory')) || [];
+    if (!historyList) return;
+    const storedHistory = JSON.parse(localStorage.getItem('orderHistory') || '[]');
     const liveCompletedOrders = (appData.orders || [])
         .filter(order => isOrderInPurchaseHistory(order))
         .map(order => ({ ...order }));
-    const history = [
-        ...storedHistory,
-        ...liveCompletedOrders.filter(order => !storedHistory.some(item => Number(item.id) === Number(order.id)))
-    ];
+    const historyById = new Map(storedHistory.map(order => [String(order.id), order]));
+    liveCompletedOrders.forEach(order => {
+        const storedOrder = historyById.get(String(order.id));
+        const storedItems = storedOrder?.items || [];
+        const mergedItems = (order.items || []).map((item, index) => {
+            const storedItem = storedItems.find(savedItem => Number(savedItem.id) === Number(item.id)) || storedItems[index];
+            return {
+                ...storedItem,
+                ...item,
+                image: item.image || item.productImage || storedItem?.image || storedItem?.productImage
+            };
+        });
+        historyById.set(String(order.id), { ...storedOrder, ...order, items: mergedItems });
+    });
+    const history = [...historyById.values()];
     
     const selectedYear = document.getElementById('yearSelector').value;
     const selectedMonth = document.getElementById('monthSelector').value;
@@ -5805,22 +5822,49 @@ function loadHistoryTable() {
         return;
     }
 
-    // Sort by date (newest first)
-    filteredHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
+    filteredHistory.sort((firstOrder, secondOrder) => {
+        const idDifference = (Number(secondOrder.id) || 0) - (Number(firstOrder.id) || 0);
+        return idDifference || new Date(secondOrder.date) - new Date(firstOrder.date);
+    });
 
     filteredHistory.forEach(order => {
-        const itemsList = order.items.map(item => `${item.name} (x${item.quantity})`).join(', ');
+        const orderItems = Array.isArray(order.items) ? order.items : [];
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>#${order.id}</td>
             <td>${order.customerName}</td>
             <td>${order.customerEmail}</td>
-            <td>${itemsList}</td>
+            <td class="history-products-cell"></td>
             <td>₱${order.totalAmount.toFixed(2)}</td>
             <td><span class="order-status ${order.status}">${order.status}</span></td>
             <td>${order.date}</td>
             <td>${order.customerAddress}</td>
         `;
+
+        const productsCell = row.querySelector('.history-products-cell');
+        orderItems.forEach(item => {
+            const product = appData.products.find(savedProduct =>
+                Number(savedProduct.id) === Number(item.id) || savedProduct.name === item.name
+            );
+            const image = item.image || item.productImage || item.images?.[0] || (product ? getProductImages(product)[0] : '');
+            const productEntry = document.createElement('div');
+            productEntry.className = 'history-product-entry';
+
+            if (image) {
+                const thumbnail = document.createElement('img');
+                thumbnail.className = 'history-product-image';
+                thumbnail.src = image;
+                thumbnail.alt = `${item.name} order image`;
+                thumbnail.loading = 'lazy';
+                productEntry.appendChild(thumbnail);
+            }
+
+            const productName = document.createElement('span');
+            productName.textContent = `${item.name} (x${item.quantity})`;
+            productEntry.appendChild(productName);
+            productsCell.appendChild(productEntry);
+        });
+
         historyList.appendChild(row);
     });
 }

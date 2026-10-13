@@ -1811,6 +1811,26 @@ table tbody tr:hover {
     border-radius: 3px;
 }
 
+.history-products-cell {
+    min-width: 190px;
+}
+
+.history-product-entry {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0;
+}
+
+.history-product-image {
+    width: 56px;
+    height: 56px;
+    flex: 0 0 56px;
+    border: 1px solid #454b52;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
 .action-buttons {
     display: flex;
     gap: 10px;
@@ -3755,6 +3775,44 @@ body.light-mode .floating-back-button button:hover {
 #customerPage .products-section,
 #adminPage .admin-tab {
     margin-bottom: 28px;
+}
+
+/* Keep the shop controls visible while the product catalog scrolls. */
+#customerPage:has(#productsSection:not([style*="display: none"])) {
+    display: flex !important;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+}
+
+#customerPage:has(#productsSection:not([style*="display: none"])) .navbar {
+    flex: 0 0 auto;
+}
+
+#customerPage:has(#productsSection:not([style*="display: none"])) .customer-container {
+    display: flex;
+    width: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+}
+
+#customerPage:has(#productsSection:not([style*="display: none"])) .products-section {
+    display: flex !important;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    margin-bottom: 0;
+}
+
+#customerPage:has(#productsSection:not([style*="display: none"])) #productsList {
+    min-height: 0;
+    flex: 1 1 auto;
+    align-content: start;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 6px;
 }
 
 #customerPage .products-section h2,
