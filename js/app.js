@@ -5194,25 +5194,25 @@ function renderAdminOrders() {
             const itemEntry = document.createElement('div');
             itemEntry.className = 'admin-order-product';
 
+            const details = document.createElement('div');
+            details.className = 'admin-order-product-details';
+            const name = document.createElement('strong');
+            name.textContent = item.name || 'Product';
+            details.appendChild(name);
+
             if (image) {
                 const thumbnail = document.createElement('img');
                 thumbnail.className = 'admin-order-product-image';
                 thumbnail.src = image;
                 thumbnail.alt = `${item.name} product photo`;
                 thumbnail.loading = 'lazy';
-                itemEntry.appendChild(thumbnail);
+                details.appendChild(thumbnail);
             } else {
                 const placeholder = document.createElement('div');
                 placeholder.className = 'admin-order-product-placeholder';
                 placeholder.textContent = 'No photo';
-                itemEntry.appendChild(placeholder);
+                details.appendChild(placeholder);
             }
-
-            const details = document.createElement('div');
-            details.className = 'admin-order-product-details';
-            const name = document.createElement('strong');
-            name.textContent = item.name || 'Product';
-            details.appendChild(name);
 
             const quantityPrice = document.createElement('span');
             quantityPrice.textContent = `(Qty: ${item.quantity}) - ₱${((Number(item.price) || 0) * (Number(item.quantity) || 0)).toFixed(2)}`;

@@ -1833,27 +1833,26 @@ table tbody tr:hover {
 
 .admin-order-product-list {
     display: grid;
-    min-width: 240px;
-    gap: 12px;
+    min-width: 0;
+    gap: 8px;
 }
 
 .admin-order-product {
-    display: flex;
+    display: block;
     min-width: 0;
-    align-items: flex-start;
-    gap: 10px;
 }
 
 .admin-order-product-image,
 .admin-order-product-placeholder {
-    width: 72px;
-    height: 72px;
-    flex: 0 0 72px;
+    width: 56px;
+    height: 56px;
     border: 1px solid #454b52;
     border-radius: 5px;
 }
 
 .admin-order-product-image {
+    display: block;
+    margin: 3px 0;
     object-fit: cover;
 }
 
@@ -1869,7 +1868,7 @@ table tbody tr:hover {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
     overflow-wrap: anywhere;
 }
 
