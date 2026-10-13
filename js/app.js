@@ -3147,7 +3147,12 @@ function getUploadedDesignTypeLabel(type) {
 function getUploadedDesignImageSource(item) {
     if (item?.designType !== 'uploaded' || !item.details) return '';
     const source = String(item.details.uploadedFile || '');
-    return /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(source) ? source : '';
+    if (/^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(source)) return source;
+
+    const uploadedFileUrl = String(item.details.uploadedFileUrl || '');
+    return /^\/(?:\.netlify\/functions\/order-design|api\/order-design)\?orderId=\d+&itemIndex=\d+$/.test(uploadedFileUrl)
+        ? uploadedFileUrl
+        : '';
 }
 
 function updateCartDisplay() {
@@ -3704,7 +3709,7 @@ function placeCustomerOrder(event) {
 }
 
 // Handle Checkout
-function processCustomerOrder() {
+async function processCustomerOrder() {
     const orderProcessingKey = 'kingpinOrderProcessing';
     const lastOrderSuccessRaw = sessionStorage.getItem('kingpinLastOrderSuccess');
     let lastOrderSuccess = null;
@@ -3922,6 +3927,13 @@ function processCustomerOrder() {
             gcashDownpaymentAmount: paymentMethod === 'gcash' ? downpaymentAmount : 0
         };
 
+        try {
+            await saveOrderToSharedServer(orderData);
+        } catch (error) {
+            console.error('Unable to deliver order to admin:', error);
+            throw new Error('Hindi naipadala ang order sa admin. Pakisubukan muli; hindi muna inalis ang laman ng cart.');
+        }
+
         // Decrease stock for each item in the order
         appData.cart.forEach(cartItem => {
             const quantityToReduce = Number(cartItem.quantity) || 1;
@@ -3946,9 +3958,6 @@ function processCustomerOrder() {
         
         appData.orders.push(orderData);
         saveOrders();
-        saveOrderToSharedServer(orderData).catch(error => {
-            console.error('Order was saved locally but not shared with admin:', error);
-        });
         saveOrderToHistory({ ...orderData }, false);
         appData.cart = [];
         
@@ -5177,6 +5186,14 @@ window.onload = function() {
 
 // Load Admin Orders
 async function loadAdminOrders() {
+    if (!window.kingPinAdminOrdersRefreshTimer) {
+        window.kingPinAdminOrdersRefreshTimer = setInterval(() => {
+            if (appData.currentRole === 'admin' && document.getElementById('ordersTab')?.style.display === 'block') {
+                loadAdminOrders();
+            }
+        }, 15000);
+    }
+
     loadOrders();
     renderAdminOrders();
     try {
@@ -5474,9 +5491,12 @@ function viewOrderDetails(orderStr) {
                 if (item.designType === 'uploaded' && item.details) {
                     const details = item.details;
                     const fileName = String(details.fileName || 'customer-design').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-                    const uploadedFile = String(details.uploadedFile || '');
-                    const isImage = /^data:image\/(png|jpeg|gif|webp);base64,/i.test(uploadedFile);
-                    const isPdf = /^data:application\/pdf;base64,/i.test(uploadedFile);
+                    const uploadedFile = String(details.uploadedFile || details.uploadedFileUrl || '');
+                    const isStoredAttachment = /^\/\.netlify\/functions\/order-design\?orderId=\d+&itemIndex=\d+$/.test(uploadedFile);
+                    const isImage = /^data:image\/(png|jpeg|gif|webp);base64,/i.test(uploadedFile)
+                        || (isStoredAttachment && String(details.fileType || '').startsWith('image/'));
+                    const isPdf = /^data:application\/pdf;base64,/i.test(uploadedFile)
+                        || (isStoredAttachment && details.fileType === 'application/pdf');
                     const fileLink = isImage || isPdf
                         ? `<a href="${uploadedFile}" download="${fileName}" style="display: inline-block; margin-top: 8px; color: #1769aa; font-weight: 700;">Download ${isPdf ? 'PDF' : 'image'}: ${fileName}</a>`
                         : '<span style="display: block; margin-top: 8px; color: #a66;">Attachment is unavailable. Ask the customer to upload the design again.</span>';
