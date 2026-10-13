@@ -44,6 +44,27 @@ function clearNavigationState() {
     localStorage.removeItem('kingpinNavigationState');
 }
 
+function isAdminPortalPage() {
+    return new URLSearchParams(window.location.search).get('portal') === 'admin';
+}
+
+function showAccessDenied() {
+    ['loginPage', 'customerPage', 'adminPage'].forEach(pageId => {
+        const page = document.getElementById(pageId);
+        if (page) page.style.display = 'none';
+    });
+    const accessDeniedPage = document.getElementById('accessDeniedPage');
+    if (accessDeniedPage) accessDeniedPage.style.display = 'block';
+}
+
+function switchToAdminLogin() {
+    clearCurrentSession();
+    clearNavigationState();
+    localStorage.removeItem('kingpinSession');
+    localStorage.removeItem('kingpinCurrentSession');
+    window.location.href = 'index.html?portal=admin';
+}
+
 let sharedProductsRequest = null;
 
 function applyTheme(theme) {
@@ -444,6 +465,11 @@ function checkSavedSession() {
         
         // Auto-login based on role
         if (session.role === 'customer') {
+            if (isAdminPortalPage()) {
+                showAccessDenied();
+                return;
+            }
+
             // Load customer accounts
             const accounts = loadCustomerAccounts();
             const customer = accounts[session.user];
@@ -1108,18 +1134,26 @@ if (customerSignupFormElement) {
 // Login customer
 function loginCustomer(e) {
     e.preventDefault();
+
+    const errorMessage = document.getElementById('customerLoginErrorMessage');
+    if (errorMessage) {
+        errorMessage.textContent = '';
+        errorMessage.style.display = 'none';
+    }
     
     const email = normalizeCustomerEmail(document.getElementById('customerLoginEmail').value);
     const password = document.getElementById('customerLoginPassword').value;
     
     if (!email) {
-        document.getElementById('customerLoginErrorMessage').textContent = 'Please enter your email or use Gmail login';
+        errorMessage.textContent = 'Please enter your email or use Gmail login.';
+        errorMessage.style.display = 'block';
         return;
     }
     
     // Validate email format
     if (!email.includes('@')) {
-        document.getElementById('customerLoginErrorMessage').textContent = 'Please enter a valid email address';
+        errorMessage.textContent = 'Please enter a valid email address.';
+        errorMessage.style.display = 'block';
         return;
     }
     
@@ -1316,6 +1350,8 @@ function loginAdmin(e) {
     const username = document.getElementById('adminUsername').value.trim();
     const password = document.getElementById('adminPassword').value;
     const errorMessage = document.getElementById('adminErrorMessage');
+    errorMessage.textContent = '';
+    errorMessage.style.display = 'none';
 
     if (username !== appData.adminCredentials.username || password !== appData.adminCredentials.password) {
         errorMessage.textContent = 'Incorrect admin username or password.';
@@ -1787,12 +1823,13 @@ function showCustomerDashboard() {
 
 async function showAdminDashboard() {
     if (appData.currentRole !== 'admin') {
-        showCustomerDashboard();
+        showAccessDenied();
         return;
     }
 
     document.getElementById('loginPage').style.display = 'none';
     document.getElementById('customerPage').style.display = 'none';
+    document.getElementById('accessDeniedPage').style.display = 'none';
     document.getElementById('adminPage').style.display = 'block';
 
     try {
@@ -1817,7 +1854,7 @@ async function showAdminDashboard() {
 
 function showAdminTab(tabName) {
     if (appData.currentRole !== 'admin') {
-        document.getElementById('adminPage').style.display = 'none';
+        showAccessDenied();
         return;
     }
 
@@ -2896,11 +2933,24 @@ function submitProductRating() {
     displayProductRatings(appData.selectedProduct);
 }
 
+function isValidQuantity(value, stock) {
+    const quantity = Number(value);
+    const stockLimit = Number(stock);
+    return Number.isInteger(quantity) && quantity >= 1 && (!Number.isFinite(stockLimit) || quantity <= stockLimit);
+}
+
+function getQuantityValidationMessage(stock) {
+    const stockLimit = Number(stock);
+    return Number.isFinite(stockLimit)
+        ? `Enter a whole quantity from 1 to ${stockLimit}.`
+        : 'Enter a whole quantity of at least 1.';
+}
+
 // Add to Cart
 function addToCart() {
     if (!appData.selectedProduct) return;
 
-    const quantity = parseInt(document.getElementById('modalProductQuantity').value);
+    const quantity = Number(document.getElementById('modalProductQuantity').value);
     const customName = '';
     const customNumber = '';
     const customSizeElement = document.getElementById('customSize');
@@ -2924,8 +2974,8 @@ function addToCart() {
         return;
     }
     
-    if (quantity < 1 || quantity > appData.selectedProduct.stock) {
-        alert(`Invalid quantity. Available stock: ${appData.selectedProduct.stock}`);
+    if (!isValidQuantity(quantity, appData.selectedProduct.stock)) {
+        alert(getQuantityValidationMessage(appData.selectedProduct.stock));
         return;
     }
 
@@ -2981,7 +3031,7 @@ function placeOrderDirect() {
         return;
     }
 
-    const quantity = parseInt(document.getElementById('modalProductQuantity').value);
+    const quantity = Number(document.getElementById('modalProductQuantity').value);
     const customName = '';
     const customNumber = '';
     const customSizeElement = document.getElementById('customSize');
@@ -3004,8 +3054,8 @@ function placeOrderDirect() {
         return;
     }
     
-    if (quantity < 1 || quantity > appData.selectedProduct.stock) {
-        alert(`Invalid quantity. Available stock: ${appData.selectedProduct.stock}`);
+    if (!isValidQuantity(quantity, appData.selectedProduct.stock)) {
+        alert(getQuantityValidationMessage(appData.selectedProduct.stock));
         return;
     }
 
@@ -3249,24 +3299,31 @@ function saveCustomizationEdit() {
 
 // Update Cart Quantity
 function updateCartQuantity(index, change) {
-    const newQuantity = appData.cart[index].quantity + change;
+    const cartItem = appData.cart[index];
+    if (!cartItem) return;
+    const newQuantity = Number(cartItem.quantity) + Number(change);
     if (newQuantity < 1) {
         removeFromCart(index);
-    } else if (newQuantity <= appData.cart[index].stock) {
-        appData.cart[index].quantity = newQuantity;
+    } else if (isValidQuantity(newQuantity, cartItem.stock)) {
+        cartItem.quantity = newQuantity;
         updateCartDisplay();
         updateCartCount();
         saveUserCart();  // Save cart to localStorage
+    } else {
+        alert(getQuantityValidationMessage(cartItem.stock));
     }
 }
 
 function updateCartQuantityDirect(index, value) {
-    const newQuantity = parseInt(value);
-    if (newQuantity < 1 || newQuantity > appData.cart[index].stock) {
+    const cartItem = appData.cart[index];
+    if (!cartItem) return;
+    const newQuantity = Number(value);
+    if (!isValidQuantity(newQuantity, cartItem.stock)) {
+        alert(getQuantityValidationMessage(cartItem.stock));
         updateCartDisplay();
         return;
     }
-    appData.cart[index].quantity = newQuantity;
+    cartItem.quantity = newQuantity;
     updateCartDisplay();
     updateCartCount();
     saveUserCart();  // Save cart to localStorage
@@ -3709,6 +3766,26 @@ function processCustomerOrder() {
     if (!customerPhone) missingFields.push('numero ng telepono');
     if (!customerAddress) missingFields.push('delivery address');
     if (!paymentMethod) missingFields.push('paraan ng bayad');
+    if (checkoutNumber && (!Number.isInteger(Number(checkoutNumber)) || Number(checkoutNumber) < 0 || Number(checkoutNumber) > 99)) {
+        missingFields.push('jersey number between 0 and 99');
+    }
+
+    const invalidQuantityItems = appData.cart.filter(item => !isValidQuantity(item.quantity, item.stock));
+    if (invalidQuantityItems.length > 0) {
+        const itemNames = [...new Set(invalidQuantityItems.map(item => item.name))].join(', ');
+        missingFields.push(`valid quantity for ${itemNames}`);
+    }
+
+    if (teamOrderInput.isTeamOrder) {
+        if (!teamOrderInput.teamName) missingFields.push('team name');
+        if (!Number.isInteger(teamOrderInput.totalPlayers) || teamOrderInput.totalPlayers < 2) {
+            missingFields.push('at least 2 team players');
+        } else {
+            const playersWithSizes = new Set(teamOrderInput.teamSizes.map(item => item.player));
+            const hasEveryPlayerSize = Array.from({ length: teamOrderInput.totalPlayers }, (_, index) => playersWithSizes.has(index + 1)).every(Boolean);
+            if (!hasEveryPlayerSize) missingFields.push('a size for every team player');
+        }
+    }
 
     const incompleteItems = getIncompleteCartItems(checkoutSize, checkoutColor);
     if (incompleteItems.length > 0) {
@@ -3775,30 +3852,6 @@ function processCustomerOrder() {
         return;
     }
 
-    if (teamOrderInput.isTeamOrder && !teamOrderInput.teamName) {
-        alert('Please enter your team name for the team order.');
-        sessionStorage.removeItem('kingpinOrderProcessing');
-        const placeOrderButtonReset = document.getElementById('placeCustomerOrderButton');
-        if (placeOrderButtonReset) {
-            placeOrderButtonReset.disabled = false;
-            placeOrderButtonReset.style.opacity = '1';
-            placeOrderButtonReset.style.cursor = 'pointer';
-        }
-        return;
-    }
-
-    if (teamOrderInput.isTeamOrder && teamOrderInput.totalPlayers > 0 && teamOrderInput.teamSizes.length === 0) {
-        alert('Please select a size for each player in this team order.');
-        sessionStorage.removeItem('kingpinOrderProcessing');
-        const placeOrderButtonReset = document.getElementById('placeCustomerOrderButton');
-        if (placeOrderButtonReset) {
-            placeOrderButtonReset.disabled = false;
-            placeOrderButtonReset.style.opacity = '1';
-            placeOrderButtonReset.style.cursor = 'pointer';
-        }
-        return;
-    }
-    
     try {
         const totalAmount = appData.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         const downpaymentAmount = paymentMethod === 'gcash' ? Number(totalAmount) / 2 : 0;

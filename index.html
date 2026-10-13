@@ -46,11 +46,11 @@
                         </form>
                         <p class="create-account">Don't have an account? <button type="button" class="text-button" onclick="showCustomerSignup()">Create Account &nbsp;→</button></p>
                         <button type="button" class="login-back" onclick="hideCustomerAuth()"><span aria-hidden="true">←</span> Back</button>
-                        <div id="customerLoginErrorMessage" class="error-message"></div>
+                        <div id="customerLoginErrorMessage" class="error-message" role="alert"></div>
                     </div>
                     <div id="customerSignupForm" style="display: none;"><h3>Create Customer Account</h3><form id="customerSignupFormElement" autocomplete="off"><div class="form-group"><label for="customerSignupUsername">Username</label><input type="text" id="customerSignupUsername" name="customerSignupUsername" required minlength="3" placeholder="Choose a username" autocomplete="off"></div><div class="form-group"><label for="customerSignupName">Full Name</label><input type="text" id="customerSignupName" name="customerSignupName" required placeholder="John Doe" autocomplete="off"></div><div class="form-group"><label for="customerSignupEmail">Email</label><input type="email" id="customerSignupEmail" name="customerSignupEmail" required placeholder="your@gmail.com" autocomplete="off"></div><div class="form-group"><label for="customerSignupPhone">Phone (optional)</label><input type="tel" id="customerSignupPhone" name="customerSignupPhone" placeholder="+63 9xx xxx xxxx" autocomplete="off"></div><div class="form-group"><label for="customerSignupPassword">Password</label><div class="password-field"><input type="password" id="customerSignupPassword" name="customerSignupPassword" required minlength="6" placeholder="At least 6 characters" autocomplete="off"><button type="button" onclick="togglePassword('customerSignupPassword', this)" aria-label="Show password">◉</button></div></div><button type="submit" class="btn btn-primary login-submit">Create Account</button><button type="button" class="btn btn-secondary form-back" onclick="showCustomerLogin()">Back to Login</button></form><div id="customerSignupErrorMessage" class="error-message"></div></div>
                 </div>
-                <div id="adminLoginForm" class="login-auth-section" style="display: none;"><form id="adminForm" autocomplete="off" onsubmit="loginAdmin(event)"><div class="form-group"><label for="adminUsername">Admin username</label><input type="text" id="adminUsername" name="adminUsername" placeholder="admin" required autocomplete="off"></div><div class="form-group"><label for="adminPassword">Password</label><div class="password-field"><input type="password" id="adminPassword" name="adminPassword" placeholder="Enter your password" required autocomplete="off"><button type="button" onclick="togglePassword('adminPassword', this)" aria-label="Show password">◉</button></div></div><button type="submit" class="btn btn-primary login-submit">→ &nbsp; Login as Admin</button><button type="button" class="btn btn-secondary form-back" onclick="hideAdminLogin()">← &nbsp; Back</button></form><div id="adminErrorMessage" class="error-message"></div></div>
+                <div id="adminLoginForm" class="login-auth-section" style="display: none;"><form id="adminForm" autocomplete="off" onsubmit="loginAdmin(event)"><div class="form-group"><label for="adminUsername">Admin username</label><input type="text" id="adminUsername" name="adminUsername" placeholder="admin" required autocomplete="off"></div><div class="form-group"><label for="adminPassword">Password</label><div class="password-field"><input type="password" id="adminPassword" name="adminPassword" placeholder="Enter your password" required autocomplete="off"><button type="button" onclick="togglePassword('adminPassword', this)" aria-label="Show password">◉</button></div></div><button type="submit" class="btn btn-primary login-submit">→ &nbsp; Login as Admin</button><button type="button" class="btn btn-secondary form-back" onclick="hideAdminLogin()">← &nbsp; Back</button></form><div id="adminErrorMessage" class="error-message" role="alert"></div></div>
                 <footer class="login-footer"><svg class="footer-crown" viewBox="0 0 32 22" aria-hidden="true"><path d="M3 18h26M5 17 3 4l8 7 5-9 5 9 8-7-2 13Z"></path></svg><span>© 2025 MNL KingPin CamSur. All rights reserved.</span></footer>
             </section>
         </div>
@@ -75,6 +75,17 @@
                 </nav>
             </div>
         </footer>
+    </div>
+
+    <div id="accessDeniedPage" class="page" style="display: none;">
+        <div class="login-container">
+            <section class="login-box" aria-labelledby="accessDeniedTitle">
+                <h1 id="accessDeniedTitle" style="color: #ff6b6b; text-align: center;">Access Denied</h1>
+                <p style="text-align: center; margin: 16px 0 24px;">A customer account cannot access the admin portal. Sign in with an admin account to continue.</p>
+                <button type="button" class="btn btn-secondary" style="width: 100%; margin-bottom: 10px;" onclick="window.location.href='index.html'">Return to Customer Store</button>
+                <button type="button" class="btn btn-primary" style="width: 100%;" onclick="switchToAdminLogin()">Switch to Admin Login</button>
+            </section>
+        </div>
     </div>
 
     <!-- Customer Dashboard -->
