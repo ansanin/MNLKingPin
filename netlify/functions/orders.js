@@ -24,7 +24,9 @@ async function removeInlineDesignFiles(order, designStore) {
         if (!match) continue;
 
         const orderId = String(normalized.id);
-        await designStore.set(uploadedDesignKey(orderId, itemIndex), uploadedFile);
+        const designKey = uploadedDesignKey(orderId, itemIndex);
+        const savedDesign = await designStore.get(designKey, { type: 'text' });
+        if (!savedDesign) await designStore.set(designKey, uploadedFile);
         item.details.uploadedFileUrl = `/.netlify/functions/order-design?orderId=${encodeURIComponent(orderId)}&itemIndex=${itemIndex}`;
         delete item.details.uploadedFile;
         changed = true;
@@ -43,19 +45,21 @@ exports.handler = async function handler(event) {
         let orders = (await store.get('orders', { type: 'json' })) || [];
 
         if (event.httpMethod === 'GET') {
-            const normalizedOrders = await Promise.all(orders.map(order => removeInlineDesignFiles(order, designStore)));
-            orders = normalizedOrders.map(result => result.order);
-            if (normalizedOrders.some(result => result.changed)) {
-                await store.setJSON('orders', orders);
+            const activeOnly = event.queryStringParameters?.scope === 'active';
+            const selectedOrders = activeOnly
+                ? orders.filter(order => !['completed', 'delivered', 'cancelled'].includes(String(order.status || '').toLowerCase()))
+                : orders;
+            const normalizedOrders = await Promise.all(selectedOrders.map(order => removeInlineDesignFiles(order, designStore)));
+            const responseOrders = normalizedOrders.map(result => result.order);
+            if (!activeOnly && normalizedOrders.some(result => result.changed)) {
+                await store.setJSON('orders', responseOrders);
             }
-            return jsonResponse(200, { orders });
+            return jsonResponse(200, { orders: responseOrders });
         }
         if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'Method not allowed' });
 
         const order = JSON.parse(event.body || '{}');
         if (!order.id || !order.customerEmail) return jsonResponse(400, { error: 'A valid order is required' });
-        const normalizedOrders = await Promise.all(orders.map(savedOrder => removeInlineDesignFiles(savedOrder, designStore)));
-        orders = normalizedOrders.map(result => result.order);
         const normalizedOrder = (await removeInlineDesignFiles(order, designStore)).order;
         const existingIndex = orders.findIndex(savedOrder => String(savedOrder.id) === String(normalizedOrder.id));
         if (existingIndex >= 0) {

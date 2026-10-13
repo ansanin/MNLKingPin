@@ -348,8 +348,9 @@ function loadOrders() {
     }
 }
 
-async function fetchSharedOrders() {
-    const endpoints = ['api/orders', 'api/orders.php', '/.netlify/functions/orders'];
+async function fetchSharedOrders({ activeOnly = false } = {}) {
+    const query = activeOnly ? '?scope=active' : '';
+    const endpoints = [`api/orders${query}`, `api/orders.php${query}`, `/.netlify/functions/orders${query}`];
     for (const endpoint of endpoints) {
         try {
             const response = await fetch(endpoint, { cache: 'no-store' });
@@ -2037,7 +2038,7 @@ async function viewOrders() {
     saveNavigationState('customer', 'viewOrders');
     await loadSharedGcashQRCode();
     loadCustomerOrders();
-    fetchSharedOrders().then(sharedOrders => {
+    fetchSharedOrders({ activeOnly: true }).then(sharedOrders => {
         const sharedById = new Map(sharedOrders.map(order => [String(order.id), order]));
         const localIds = new Set(appData.orders.map(order => String(order.id)));
 
@@ -5197,7 +5198,7 @@ async function loadAdminOrders() {
     loadOrders();
     renderAdminOrders();
     try {
-        const sharedOrders = await fetchSharedOrders();
+        const sharedOrders = await fetchSharedOrders({ activeOnly: true });
         const sharedIds = new Set(sharedOrders.map(order => String(order.id)));
         const localOnlyOrders = appData.orders.filter(order => !sharedIds.has(String(order.id)));
         appData.orders = [...sharedOrders, ...localOnlyOrders];
