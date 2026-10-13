@@ -3778,7 +3778,7 @@ body.light-mode .floating-back-button button:hover {
 }
 
 /* Keep the shop controls visible while the product catalog scrolls. */
-#customerPage:has(#productsSection:not([style*="display: none"])) {
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) {
     display: flex !important;
     flex-direction: column;
     height: 100vh;
@@ -3786,11 +3786,11 @@ body.light-mode .floating-back-button button:hover {
     overflow: hidden;
 }
 
-#customerPage:has(#productsSection:not([style*="display: none"])) .navbar {
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .navbar {
     flex: 0 0 auto;
 }
 
-#customerPage:has(#productsSection:not([style*="display: none"])) .customer-container {
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .customer-container {
     display: flex;
     width: 100%;
     min-height: 0;
@@ -3798,7 +3798,7 @@ body.light-mode .floating-back-button button:hover {
     flex-direction: column;
 }
 
-#customerPage:has(#productsSection:not([style*="display: none"])) .products-section {
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .products-section {
     display: flex !important;
     min-height: 0;
     flex: 1 1 auto;
@@ -3806,7 +3806,7 @@ body.light-mode .floating-back-button button:hover {
     margin-bottom: 0;
 }
 
-#customerPage:has(#productsSection:not([style*="display: none"])) #productsList {
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) #productsList {
     min-height: 0;
     flex: 1 1 auto;
     align-content: start;
