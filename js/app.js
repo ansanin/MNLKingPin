@@ -2240,9 +2240,23 @@ function loadCustomerNotifications() {
     });
 }
 
+function getIncompleteCartItems(fallbackSize = '', fallbackColor = '') {
+    return (appData.cart || []).filter(item => {
+        if (item.type === 'custom-design') return false;
+        return !(item.customization?.size || fallbackSize) || !(item.customization?.color || fallbackColor);
+    });
+}
+
 function checkout() {
     if (appData.cart.length === 0) {
         alert('Your cart is empty!');
+        return;
+    }
+
+    const incompleteItems = getIncompleteCartItems();
+    if (incompleteItems.length > 0) {
+        const itemNames = [...new Set(incompleteItems.map(item => item.name))].join(', ');
+        alert(`Kulang ang size o kulay ng mga item na ito: ${itemNames}. Piliin muna ang required options bago mag-checkout.`);
         return;
     }
 
@@ -3682,6 +3696,35 @@ function processCustomerOrder() {
         teamOrderInput,
         cartLength: appData.cart.length
     });
+
+    const missingFields = [];
+    const customerEmailField = document.getElementById('customerEmail');
+    if (!customerName) missingFields.push('buong pangalan');
+    if (!customerEmail) {
+        missingFields.push('email');
+    } else if (customerEmailField && !customerEmailField.checkValidity()) {
+        missingFields.push('valid na email');
+    }
+    if (!customerPhone) missingFields.push('numero ng telepono');
+    if (!customerAddress) missingFields.push('delivery address');
+    if (!paymentMethod) missingFields.push('paraan ng bayad');
+
+    const incompleteItems = getIncompleteCartItems(checkoutSize, checkoutColor);
+    if (incompleteItems.length > 0) {
+        const itemNames = [...new Set(incompleteItems.map(item => item.name))].join(', ');
+        missingFields.push(`size o kulay para sa ${itemNames}`);
+    }
+
+    if (missingFields.length > 0) {
+        sessionStorage.removeItem(orderProcessingKey);
+        if (placeOrderButton) {
+            placeOrderButton.disabled = false;
+            placeOrderButton.style.opacity = '1';
+            placeOrderButton.style.cursor = 'pointer';
+        }
+        alert(`Kulang ang kinakailangang impormasyon: ${missingFields.join(', ')}. Pakikumpleto muna bago mag-place ng order.`);
+        return;
+    }
     
     if (!customerName) {
         alert('Please enter your name');

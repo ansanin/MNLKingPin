@@ -3796,6 +3796,7 @@ body.light-mode .floating-back-button button:hover {
     min-height: 0;
     flex: 1 1 auto;
     flex-direction: column;
+    padding: 4px clamp(12px, 2vw, 24px);
 }
 
 #customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .products-section {
@@ -3804,16 +3805,94 @@ body.light-mode .floating-back-button button:hover {
     flex: 1 1 auto;
     flex-direction: column;
     margin-bottom: 0;
+    padding: 8px;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .products-section h2 {
+    margin-bottom: 4px;
+    font-size: 22px;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .search-bar {
+    gap: 6px;
+    margin-bottom: 4px;
+    padding: 3px;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .search-bar input,
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .search-bar select {
+    min-width: 0;
+    min-height: 32px;
+    padding: 5px;
 }
 
 #customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) #productsList {
     min-height: 0;
     flex: 1 1 auto;
     align-content: start;
+    gap: 8px;
     grid-auto-rows: max-content;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-right: 6px;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-image-gallery {
+    height: 88px;
+    flex: 0 0 88px;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-image {
+    height: 88px;
+    min-height: 88px;
+    flex: 0 0 100%;
+    aspect-ratio: auto;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-info {
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-info h3 {
+    margin: 0 0 3px;
+    font-size: .85rem;
+    line-height: 1.1;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-info p {
+    margin: 0 0 2px;
+    font-size: .68rem;
+    line-height: 1.1;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-info p:nth-of-type(2) {
+    display: none;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-price {
+    margin: 2px 0;
+    font-size: .9rem;
+    line-height: 1.1;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-stock {
+    margin: 0 0 4px;
+    font-size: .68rem;
+}
+
+#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-info .btn-small {
+    min-height: 28px;
+    padding: 4px 6px;
+    font-size: .7rem;
+}
+
+@media (max-width: 600px) {
+    #customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .search-bar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
 }
 
 #customerPage .products-section h2,
