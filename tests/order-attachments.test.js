@@ -37,7 +37,7 @@ async function testOrderDesignAttachments() {
     await ordersStore.setJSON('orders', [{
         id: 100,
         customerEmail: 'legacy@example.com',
-        status: 'completed',
+        status: 'pending',
         items: [{
             id: 1,
             type: 'custom-design',
@@ -62,21 +62,25 @@ async function testOrderDesignAttachments() {
     });
 
     assert.strictEqual(response.statusCode, 200);
-    const storedOrders = await ordersStore.get('orders', { type: 'json' });
-    assert.strictEqual(storedOrders.length, 2);
-    assert.ok(storedOrders[0].items[0].details.uploadedFile);
-    assert.ok(storedOrders[1].items[0].details.uploadedFileUrl);
+    const legacyOrders = await ordersStore.get('orders', { type: 'json' });
+    const storedOrders = await ordersStore.get('orders-v2', { type: 'json' });
+    assert.strictEqual(legacyOrders.length, 1);
+    assert.ok(legacyOrders[0].items[0].details.uploadedFile);
+    assert.strictEqual(storedOrders.length, 1);
+    assert.ok(storedOrders[0].items[0].details.uploadedFileUrl);
 
     const historyResponse = await ordersHandler({ httpMethod: 'GET' });
     const savedOrders = JSON.parse(historyResponse.body).orders;
     assert.strictEqual(savedOrders.length, 2);
-    assert.ok(savedOrders.every(order => order.items[0].details.uploadedFile === undefined));
-    assert.ok(savedOrders.every(order => order.items[0].details.uploadedFileUrl));
+    assert.ok(savedOrders.find(order => order.id === 100).items[0].details.uploadedFileUrl);
+    assert.ok(savedOrders.find(order => order.id === 200).items[0].details.uploadedFileUrl);
 
     const activeResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
     const activeOrders = JSON.parse(activeResponse.body).orders;
-    assert.strictEqual(activeOrders.length, 1);
-    assert.strictEqual(activeOrders[0].status, 'pending');
+    assert.strictEqual(activeOrders.length, 2);
+    assert.ok(activeOrders.every(order => order.status === 'pending'));
+    assert.ok(activeOrders.find(order => order.id === 100).items[0].details.uploadedFileUrl);
+    assert.ok(activeOrders.find(order => order.id === 200).items[0].details.uploadedFileUrl);
 
     const imageResponse = await orderDesignHandler({
         httpMethod: 'GET',
