@@ -3167,13 +3167,11 @@ function updateCartDisplay() {
                     customizationHTML += `<span>🎨 Base Color: <strong>${details.baseColor}</strong></span>`;
                     customizationHTML += `<span>Accent: <strong>${details.accentColor}</strong></span>`;
                     customizationHTML += `<span>Fabric: <strong>${details.fabricType}</strong></span>`;
-                    customizationHTML += `<span>Size: <strong>${details.size}</strong></span>`;
                     if (details.frontDesign) customizationHTML += `<span>Front Design: <strong>${details.frontDesign.substring(0, 30)}...</strong></span>`;
                 } else if (details.clothingType === 'bottoms') {
                     customizationHTML += `<span>👖 Type: Custom Bottoms</span>`;
                     customizationHTML += `<span>🎨 Base Color: <strong>${details.baseColor}</strong></span>`;
                     customizationHTML += `<span>Fabric: <strong>${details.fabricType}</strong></span>`;
-                    customizationHTML += `<span>Size: <strong>${details.size}</strong></span>`;
                     customizationHTML += `<span>Side Stripe: <strong>${details.sideStripe}</strong></span>`;
                 }
             } else if (item.designType === 'preset') {
@@ -3419,14 +3417,12 @@ function updateCheckoutDisplay() {
                     customHTML += `<span style="display: block; margin: 5px 0;">🎨 Base Color: <strong>${details.baseColor}</strong></span>`;
                     customHTML += `<span style="display: block; margin: 5px 0;">Accent Color: <strong>${details.accentColor}</strong></span>`;
                     customHTML += `<span style="display: block; margin: 5px 0;">📦 Fabric: <strong>${details.fabricType}</strong></span>`;
-                    customHTML += `<span style="display: block; margin: 5px 0;">📏 Size: <strong>${details.size}</strong></span>`;
                     if (details.frontDesign) customHTML += `<span style="display: block; margin: 5px 0;">Front Design: <em>${details.frontDesign}</em></span>`;
                     if (details.backDesign) customHTML += `<span style="display: block; margin: 5px 0;">Back Design: <em>${details.backDesign}</em></span>`;
                 } else if (details.clothingType === 'bottoms') {
                     customHTML += `<span style="display: block; margin: 5px 0;">👖 <strong>Bottoms Design</strong></span>`;
                     customHTML += `<span style="display: block; margin: 5px 0;">🎨 Base Color: <strong>${details.baseColor}</strong></span>`;
                     customHTML += `<span style="display: block; margin: 5px 0;">📦 Fabric: <strong>${details.fabricType}</strong></span>`;
-                    customHTML += `<span style="display: block; margin: 5px 0;">📏 Size: <strong>${details.size}</strong></span>`;
                     customHTML += `<span style="display: block; margin: 5px 0;">Side Stripe: <strong>${details.sideStripe}</strong></span>`;
                     if (details.design) customHTML += `<span style="display: block; margin: 5px 0;">Design: <em>${details.design}</em></span>`;
                 }
