@@ -332,7 +332,12 @@ function saveOrders() {
         }))
     })).slice(-30);
 
-    localStorage.setItem('kingpinOrders', JSON.stringify(minimalOrders));
+    try {
+        localStorage.setItem('kingpinOrders', JSON.stringify(minimalOrders));
+    } catch (finalError) {
+        console.warn('Unable to save orders locally because browser storage is full.', finalError);
+        return false;
+    }
 }
 
 // Load orders from localStorage
@@ -3947,7 +3952,11 @@ function processCustomerOrder() {
         addNotification('customer', paymentMethod === 'gcash'
             ? `✓ Order #${orderData.id} was placed. Please upload your GCash payment proof in My Orders.`
             : `✓ Your ${teamOrderInput.isTeamOrder ? 'team ' : ''}order #${orderData.id} was placed successfully. Total: ₱${orderData.totalAmount.toFixed(2)}. Payment: Pickup at Shop.`, orderData.id);
-        saveNotifications();
+        try {
+            saveNotifications();
+        } catch (error) {
+            console.warn('Unable to save order notifications locally because browser storage is full.', error);
+        }
         updateNotificationBadges();
         if (document.getElementById('notificationsList')) {
             loadCustomerNotifications();
@@ -3961,17 +3970,11 @@ function processCustomerOrder() {
             messageDiv.style.display = 'block';
         }
 
-        showStatusUpdateToast(`✅ Order #${orderData.id} placed successfully! Receipt is ready.`);
         sessionStorage.setItem('kingpinLastOrderSuccess', JSON.stringify({
             orderId: orderData.id,
             message: `✅ Order #${orderData.id} placed successfully! Receipt is ready.`,
             timestamp: Date.now()
         }));
-        if (typeof alert === 'function') {
-            setTimeout(() => {
-                alert(`✅ Your order #${orderData.id} has been placed successfully!`);
-            }, 200);
-        }
 
         document.getElementById('checkoutSection').style.display = 'none';
         document.getElementById('productsSection').style.display = 'block';
@@ -3988,7 +3991,6 @@ function processCustomerOrder() {
         document.getElementById('checkoutForm').reset();
         toggleTeamOrderFields();
         updateCartCount();
-        loadOrders();
         loadProducts();
         loadNotifications();
     } catch (error) {
@@ -5734,7 +5736,11 @@ function saveOrderToHistory(orderData, updateCustomerProfile = true) {
         localStorage.setItem('orderHistory', JSON.stringify(history.slice(-200)));
     } catch (error) {
         console.warn('orderHistory quota exceeded; trimming older history entries.', error);
-        localStorage.setItem('orderHistory', JSON.stringify(history.slice(-50)));
+        try {
+            localStorage.setItem('orderHistory', JSON.stringify(history.slice(-50)));
+        } catch (finalError) {
+            console.warn('Unable to save order history locally because browser storage is full.', finalError);
+        }
     }
     
     if (updateCustomerProfile) {
