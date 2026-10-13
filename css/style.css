@@ -3810,6 +3810,7 @@ body.light-mode .floating-back-button button:hover {
     min-height: 0;
     flex: 1 1 auto;
     align-content: start;
+    grid-auto-rows: max-content;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-right: 6px;
