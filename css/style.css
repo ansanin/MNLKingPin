@@ -5928,6 +5928,27 @@ body.light-mode #adminPage .message {
     white-space: pre-wrap;
 }
 
+.admin-order-uploaded-design {
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid #9ab9a2;
+    border-radius: 5px;
+    background: #e6eee8;
+    color: #263238;
+}
+
+.admin-order-uploaded-design > strong {
+    color: #1b5e35;
+}
+
+.admin-order-uploaded-design a {
+    color: #075985 !important;
+}
+
+.admin-order-uploaded-design > span {
+    color: #7c3f20 !important;
+}
+
 @media (max-width: 480px) {
     .admin-order-team-size-row {
         grid-template-columns: minmax(0, 1fr);
@@ -5945,6 +5966,10 @@ body.light-mode #orderDetailsModal .admin-order-team-sizes,
 body.light-mode #orderDetailsModal .admin-order-team-notes,
 body.light-mode #orderDetailsModal .admin-order-team-size-row {
     border-color: #d0d7dc;
+}
+
+body.light-mode #orderDetailsModal .admin-order-uploaded-design > strong {
+    color: #1b5e35 !important;
 }
 
 body.light-mode #orderDetailsModal .admin-order-customer-info h3,

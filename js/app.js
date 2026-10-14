@@ -5464,7 +5464,7 @@ function viewOrderDetails(orderStr) {
                         ? `<img src="${uploadedFile}" alt="Customer design: ${fileName}" style="display: block; max-width: 100%; max-height: 420px; object-fit: contain; margin-top: 10px; border: 1px solid #ccc; border-radius: 4px;">`
                         : '';
 
-                    uploadedDesignHtml = `<div style="margin-top: 12px; padding: 12px; background: #f4f7f5; border: 1px solid #9ab9a2; border-radius: 5px;">
+                    uploadedDesignHtml = `<div class="admin-order-uploaded-design">
                         <strong style="color: #28703d;">📤 Customer uploaded design</strong><br>
                         Item: ${details.itemDescription || 'N/A'} | Type: ${getUploadedDesignTypeLabel(details.clothingType)}<br>
                         File: ${fileName}${fileLink}${preview}
