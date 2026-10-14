@@ -5268,102 +5268,19 @@ function renderAdminOrders() {
     }
 
     activeOrders.forEach(order => {
-        const itemsList = document.createElement('div');
-        itemsList.className = 'admin-order-product-list';
-        (Array.isArray(order.items) ? order.items : []).forEach(item => {
-            const product = (appData.products || []).find(savedProduct =>
-                (item.id && Number(savedProduct.id) === Number(item.id)) || savedProduct.name === item.name
-            );
-            const productImages = Array.isArray(product?.images) ? product.images : product?.image ? [product.image] : [];
-            const uploadedDesignImage = getUploadedDesignImageSource(item);
-            const image = uploadedDesignImage || item.image || item.productImage || item.images?.[0] || productImages[0];
-            const itemEntry = document.createElement('div');
-            itemEntry.className = 'admin-order-product';
-
-            const details = document.createElement('div');
-            details.className = 'admin-order-product-details';
-            const name = document.createElement('strong');
-            name.textContent = item.name || 'Product';
-            details.appendChild(name);
-
-            if (image) {
-                const thumbnail = document.createElement('img');
-                thumbnail.className = 'admin-order-product-image';
-                thumbnail.src = image;
-                thumbnail.alt = uploadedDesignImage ? 'Customer uploaded design' : `${item.name} product photo`;
-                thumbnail.loading = 'lazy';
-                details.appendChild(thumbnail);
-            } else {
-                const placeholder = document.createElement('div');
-                placeholder.className = 'admin-order-product-placeholder';
-                placeholder.textContent = 'No photo';
-                details.appendChild(placeholder);
-            }
-
-            const quantityPrice = document.createElement('span');
-            quantityPrice.textContent = `(Qty: ${item.quantity}) - ₱${((Number(item.price) || 0) * (Number(item.quantity) || 0)).toFixed(2)}`;
-            details.appendChild(quantityPrice);
-
-            const customizationText = [
-                item.customization?.size && `Size: ${item.customization.size}`,
-                item.customization?.name && `Name: ${item.customization.name}`,
-                item.customization?.number && `#${item.customization.number}`
-            ].filter(Boolean).join(' | ');
-            if (customizationText) {
-                const customization = document.createElement('small');
-                customization.textContent = customizationText;
-                details.appendChild(customization);
-            }
-
-            if (item.designType === 'uploaded') {
-                const attachmentNote = document.createElement('small');
-                attachmentNote.className = 'admin-order-design-note';
-                attachmentNote.textContent = 'Customer design attached; open View to preview or download.';
-                details.appendChild(attachmentNote);
-            }
-
-            itemEntry.appendChild(details);
-            itemsList.appendChild(itemEntry);
-        });
-        
-        // Ensure order data exists
+        const itemCount = Array.isArray(order.items) ? order.items.length : 0;
         const customerName = order.customerName || 'N/A';
-        const customerEmail = order.customerEmail || 'N/A';
-        const customerPhone = order.customerPhone || 'N/A';
-        const customerAddress = order.customerAddress || 'N/A';
         const totalAmount = order.totalAmount || 0;
-        const teamOrderSummary = order.teamOrder && order.teamOrder.isTeamOrder
-            ? `<div style="margin-top: 8px; padding: 6px 8px; border-radius: 4px; background: rgba(212, 175, 55, 0.12); color: #f5d76a; font-weight: 700;">🏆 ${buildTeamOrderLabel(order.teamOrder)}</div>`
-            : '';
-        const teamSizesText = order.teamOrder && Array.isArray(order.teamOrder.teamSizes) && order.teamOrder.teamSizes.length
-            ? `<div style="margin-top: 6px; color: #e8d37a; font-size: 0.85em;">Team sizes: ${buildTeamSizeSummary(order.teamOrder.teamSizes)}</div>`
-            : '';
-        const paymentMethod = normalizePaymentMethod(order.paymentMethod);
-        const paymentProof = getOrderMediaSource(order, 'gcashPaymentProof');
-        const paymentProofHtml = paymentMethod === 'gcash'
-            ? paymentProof
-                ? `<div style="margin-top: 8px; color: #4caf50;"><strong>GCash Proof:</strong> Uploaded<br><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="GCash payment proof for order #${order.id}" style="width: 90px; height: 90px; object-fit: cover; border-radius: 4px; border: 1px solid #4caf50; margin-top: 5px;"></a></div>`
-                : '<div style="margin-top: 8px; color: #ffb74d;"><strong>GCash Proof:</strong> Waiting for customer upload</div>'
-            : '';
-        
+
         const row = document.createElement('tr');
         row.innerHTML = `
             <td><strong>#${order.id}</strong></td>
-            <td>
-                <strong>${customerName}</strong><br>
-                <small>📧 ${customerEmail}</small><br>
-                <small>📱 ${customerPhone}</small><br>
-                <small>📍 ${customerAddress}</small>
-                ${teamOrderSummary}
-                ${teamSizesText}
-            </td>
-            <td class="admin-order-products-cell" style="max-width: 340px;"></td>
+            <td><strong>${customerName}</strong></td>
+            <td><span class="admin-order-item-count">${itemCount} ${itemCount === 1 ? 'item' : 'items'}</span>${order.teamOrder?.isTeamOrder ? '<small class="admin-order-team-label">Team order</small>' : ''}</td>
             <td><strong>₱${totalAmount.toFixed(2)}</strong></td>
             <td><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
             <td>${order.date}</td>
             <td>
-                <div><strong>Payment:</strong> ${paymentMethod.toUpperCase()}</div>
-                ${paymentProofHtml}
                 <select class="status-dropdown" onchange="changeOrderStatus(${order.id}, this.value)">
                     <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Order Received</option>
                     <option value="processing" ${order.status === 'processing' ? 'selected' : ''}>Production</option>
@@ -5371,10 +5288,9 @@ function renderAdminOrders() {
                     <option value="delivered" ${order.status === 'completed' || order.status === 'delivered' ? 'selected' : ''}>Delivered</option>
                     <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
                 </select>
-                <button class="btn btn-small" onclick="viewOrderDetails(${Number(order.id) || 0})" style="margin-top: 8px; background: #4caf50; padding: 4px 8px; font-size: 0.85em; width: 100%;">👁️ View</button>
+                <button type="button" class="btn btn-small admin-order-view-details" onclick="viewOrderDetails(${Number(order.id) || 0})">View Details</button>
             </td>
         `;
-        row.querySelector('.admin-order-products-cell').appendChild(itemsList);
         document.getElementById('adminOrdersList').appendChild(row);
     });
 }
@@ -5508,6 +5424,16 @@ function viewOrderDetails(orderStr) {
         if (order.items && order.items.length > 0) {
             itemsHtml = order.items.map(item => {
                 let customStr = '';
+                const product = (appData.products || []).find(savedProduct =>
+                    (item.id && Number(savedProduct.id) === Number(item.id)) || savedProduct.name === item.name
+                );
+                const productImages = Array.isArray(product?.images) ? product.images : product?.image ? [product.image] : [];
+                const productImage = item.designType === 'uploaded'
+                    ? ''
+                    : item.image || item.productImage || item.images?.[0] || productImages[0] || '';
+                const productImageHtml = productImage
+                    ? `<img src="${productImage}" alt="${item.name || 'Order item'}" style="display:block; max-width:220px; max-height:160px; object-fit:contain; margin-top:8px; border:1px solid #ccc; border-radius:4px;">`
+                    : '';
                 if (item.customization) {
                     customStr = '<br><small style="color: #888;">';
                     if (item.customization.size) customStr += `📏 Size: ${item.customization.size}`;
@@ -5548,6 +5474,7 @@ function viewOrderDetails(orderStr) {
                     <strong>${item.name}</strong> (Qty: ${item.quantity})<br>
                     Price: ₱${(item.price).toFixed(2)} each = ₱${(item.price * item.quantity).toFixed(2)}
                     ${customStr}
+                    ${productImageHtml}
                     ${uploadedDesignHtml}
                 </div>`;
             }).join('');
@@ -5558,10 +5485,16 @@ function viewOrderDetails(orderStr) {
         const orderGcashQr = getOrderMediaSource(order, 'gcashQRCode');
         if (orderGcashQr) {
             qrCodeHtml = `<div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;">
-                <h3>💳 GCash Payment Proof</h3>
-            <img src="${orderGcashQr}" alt="GCash QR Code" style="max-width: 300px; height: auto; border: 1px solid #ddd; border-radius: 5px;">
+                <h3>GCash QR Code</h3>
+                <img src="${orderGcashQr}" alt="GCash QR Code" style="max-width: 300px; height: auto; border: 1px solid #ddd; border-radius: 5px;">
             </div>`;
         }
+        const teamOrderHtml = order.teamOrder?.isTeamOrder
+            ? `<div class="admin-order-customer-info"><h3>Team Order</h3><div class="admin-order-customer-field">${buildTeamOrderLabel(order.teamOrder)}</div>${order.teamOrder.teamSizes?.length ? `<div class="admin-order-customer-field"><strong>Player sizes:</strong> ${buildTeamSizeSummary(order.teamOrder.teamSizes)}</div>` : ''}${order.teamOrder.teamNotes ? `<div class="admin-order-customer-field"><strong>Notes:</strong> ${order.teamOrder.teamNotes}</div>` : ''}</div>`
+            : '';
+        const paymentMethod = normalizePaymentMethod(order.paymentMethod);
+        const paymentProof = getOrderMediaSource(order, 'gcashPaymentProof');
+        const paymentHtml = `<div class="admin-order-customer-info"><h3>Payment</h3><div class="admin-order-customer-field"><strong>Method:</strong> ${paymentMethod.toUpperCase()}</div><div class="admin-order-customer-field"><strong>Status:</strong> ${String(order.paymentStatus || 'pending').replace('-', ' ')}</div>${order.gcashDownpaymentAmount ? `<div class="admin-order-customer-field"><strong>Downpayment:</strong> ₱${Number(order.gcashDownpaymentAmount).toFixed(2)}</div>` : ''}${paymentMethod === 'gcash' ? paymentProof ? `<div class="admin-order-customer-field"><strong>Proof:</strong> Uploaded<br><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="GCash payment proof for order #${order.id}" style="max-width:240px; max-height:180px; object-fit:contain; margin-top:8px; border:1px solid #4caf50; border-radius:4px;"></a></div>` : '<div class="admin-order-customer-field">Payment proof not uploaded yet</div>' : ''}</div>`;
         
         const contentHtml = `
             <div style="padding: 15px 0;">
@@ -5587,12 +5520,15 @@ function viewOrderDetails(orderStr) {
                     <div class="admin-order-customer-field"><strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
                     <div class="admin-order-customer-field"><strong>Address:</strong> ${order.customerAddress || 'N/A'}</div>
                 </div>
+
+                ${teamOrderHtml}
                 
                 <div>
                     <h3>Order Items</h3>
                     ${itemsHtml}
                 </div>
-                
+
+                ${paymentHtml}
                 ${qrCodeHtml}
             </div>
         `;
