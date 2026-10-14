@@ -963,9 +963,11 @@ function establishAuthenticatedSession(result) {
     appData.authToken = result.token;
     appData.currentRole = result.role;
     appData.currentUser = result.user.email || result.user.username;
-    appData.currentUserProfile = result.user.role === 'admin' ? null : result.user;
+    appData.currentUserProfile = result.role === 'admin' ? null : result.user;
     if (appData.currentRole === 'customer') {
-        saveCustomerAccounts({ [appData.currentUser]: appData.currentUserProfile });
+        const customerAccounts = loadCustomerAccounts();
+        customerAccounts[normalizeCustomerEmail(appData.currentUser)] = appData.currentUserProfile;
+        saveCustomerAccounts(customerAccounts);
         loadUserCart();
     }
     saveCurrentSession();
@@ -3462,6 +3464,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const loginPage = document.getElementById('loginPage');
     const customerPage = document.getElementById('customerPage');
     const adminPage = document.getElementById('adminPage');
+
+    const legacyCustomerAccounts = loadCustomerAccounts();
+    if (Object.keys(legacyCustomerAccounts).length) saveCustomerAccounts(legacyCustomerAccounts);
 
     // Restore the active dashboard and view whenever the page is initialized.
     const savedSession = loadCurrentSession();

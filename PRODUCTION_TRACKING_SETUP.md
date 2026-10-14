@@ -18,6 +18,14 @@ Set these in Netlify **Site configuration → Environment variables** for every 
   - `RESEND_API_KEY` and `RESEND_FROM_EMAIL`.
 - `GOOGLE_CLIENT_ID` is optional if the deployed Google sign-in client ID is the one already in the page.
 
+To generate `KINGPIN_AUTH_SECRET` without sending it through chat, run this locally and paste the output directly into Netlify:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
+
+After saving the variables, trigger a new Netlify deploy so the Functions receive them. Confirm `/.netlify/functions/auth` registration/login requests no longer return HTTP 503. Set the admin username/password as well; without them the admin login correctly stays unavailable until an initial admin is configured.
+
 No secret belongs in `index.html`, `js/app.js`, or a committed `.env` file. Account creation requires a working verification email provider. If authentication variables are absent, the functions fail closed and logins/order reads will not work.
 
 The first successful environment-backed admin login bootstraps the admin. Admin credential changes are then stored as a scrypt password hash in the `kingpin-auth` Blob store.
@@ -27,6 +35,7 @@ The first successful environment-backed admin login bootstraps the admin. Admin 
 - Existing Netlify order stores and legacy order arrays are read and indexed without deleting the original records. Legacy statuses are mapped into production stages when first read.
 - Orders that exist only in an admin browser's `kingpinOrders` localStorage are migrated to shared Blobs after that admin signs in. The migration action creates missing records only and does not overwrite an existing shared order.
 - Customer profiles/passwords created by the old browser-only login were local to one browser and stored without server authentication. They cannot be safely migrated as trusted credentials. Each existing customer must create/verify an account using the same email address; that email continues to match their existing orders.
+- On page initialization, existing local customer profile records are retained but legacy plaintext password fields are removed. Customer passwords are now verified only against server-side password hashes.
 - The PHP/XAMPP endpoints are not a synchronized Netlify database. Use Netlify Functions (for example, `netlify dev`) to exercise authenticated workflows locally.
 
 ## Workflow

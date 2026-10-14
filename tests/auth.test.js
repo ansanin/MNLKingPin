@@ -1,5 +1,6 @@
 const assert = require('assert');
 const {
+  accountKey,
   authenticateEvent,
   hashPassword,
   signAccessToken,
@@ -44,6 +45,30 @@ async function run() {
   process.env.KINGPIN_ADMIN_PASSWORD = 'test-admin-password';
   process.env.SMTP_USER = 'test@example.com';
   process.env.SMTP_PASS = 'test-smtp-password';
+  const authWithMissingSecret = await authHandler({
+    httpMethod: 'POST',
+    headers: {},
+    body: JSON.stringify({ action: 'login', email: 'test@example.com', password: 'not-a-real-password' })
+  });
+  const originalSecret = process.env.KINGPIN_AUTH_SECRET;
+  delete process.env.KINGPIN_AUTH_SECRET;
+  const missingSecretResponse = await authHandler({
+    httpMethod: 'POST',
+    headers: {},
+    body: JSON.stringify({ action: 'login', email: 'test@example.com', password: 'not-a-real-password' })
+  });
+  assert.strictEqual(missingSecretResponse.statusCode, 503);
+  assert.ok(JSON.parse(missingSecretResponse.body).error.includes('KINGPIN_AUTH_SECRET'));
+  process.env.KINGPIN_AUTH_SECRET = 'too-short';
+  const weakSecretResponse = await authHandler({
+    httpMethod: 'POST',
+    headers: {},
+    body: JSON.stringify({ action: 'login', email: 'test@example.com', password: 'not-a-real-password' })
+  });
+  assert.strictEqual(weakSecretResponse.statusCode, 503);
+  assert.ok(JSON.parse(weakSecretResponse.body).error.includes('at least 32 characters'));
+  process.env.KINGPIN_AUTH_SECRET = originalSecret;
+  assert.strictEqual(authWithMissingSecret.statusCode, 401);
   const token = signAccessToken({ sub: 'customer@example.com', role: 'customer' });
   assert.strictEqual(verifyAccessToken(token).sub, 'customer@example.com');
   assert.strictEqual(verifyAccessToken(token.slice(0, -1) + (token.endsWith('a') ? 'b' : 'a')), null);
@@ -93,6 +118,19 @@ async function run() {
   assert.strictEqual(verified.statusCode, 200);
   assert.strictEqual(JSON.parse(verified.body).user.password, undefined);
   assert.strictEqual((await authHandler(postEvent('', { action: 'login', email: 'new-customer@example.com', password: 'customer-password-123' }))).statusCode, 200);
+
+  delete process.env.SMTP_USER;
+  delete process.env.SMTP_PASS;
+  const failedEmailRegistration = await authHandler(postEvent('', {
+    action: 'register',
+    email: 'mail-unavailable@example.com',
+    username: 'mail-unavailable',
+    fullName: 'Mail Unavailable',
+    password: 'customer-password-123'
+  }));
+  assert.strictEqual(failedEmailRegistration.statusCode, 503);
+  assert.ok(JSON.parse(failedEmailRegistration.body).error.includes('verification email'));
+  assert.strictEqual(await blobModule.getStore('kingpin-auth').get(accountKey('mail-unavailable@example.com'), { type: 'json' }), null);
   console.log('authentication tests passed');
 }
 

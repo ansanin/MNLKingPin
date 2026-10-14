@@ -3,6 +3,7 @@ const { getStore, connectLambda } = require('@netlify/blobs');
 const {
     accountKey,
     authenticateEvent,
+    getAuthConfigurationError,
     hashPassword,
     hashVerificationCode,
     safeEqual,
@@ -158,12 +159,13 @@ exports.handler = async function handler(event) {
         return claims ? jsonResponse(200, { ok: true, user: claims.sub, role: claims.role, exp: claims.exp }) : jsonResponse(401, { error: 'Authentication required' });
     }
     if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'Method not allowed' });
-    if (!process.env.KINGPIN_AUTH_SECRET || process.env.KINGPIN_AUTH_SECRET.length < 32) {
-        return jsonResponse(503, { error: 'Server authentication is not configured' });
-    }
+    const configurationError = getAuthConfigurationError();
+    if (configurationError) return jsonResponse(503, { error: configurationError });
 
+    let action = '';
     try {
         const data = JSON.parse(event.body || '{}');
+        action = data.action || '';
         const store = getStore('kingpin-auth');
         if (data.action === 'register') return await handleRegistration(store, data);
         if (data.action === 'verify') return await handleVerification(store, data);
@@ -257,6 +259,9 @@ exports.handler = async function handler(event) {
         return jsonResponse(400, { error: 'Unknown authentication action.' });
     } catch (error) {
         console.error('KingPin authentication error:', error);
+        if (action === 'register') {
+            return jsonResponse(503, { error: 'We could not send the verification email. Check the Netlify SMTP or Resend settings, then try registration again in one minute.' });
+        }
         return jsonResponse(500, { error: 'Unable to complete authentication.' });
     }
 };

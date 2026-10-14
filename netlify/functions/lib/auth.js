@@ -47,13 +47,19 @@ function getBearerToken(event) {
 }
 
 function authenticateEvent(event) {
-    if (!process.env.KINGPIN_AUTH_SECRET || process.env.KINGPIN_AUTH_SECRET.length < 32) {
-        return { ok: false, statusCode: 503, error: 'Server authentication is not configured' };
-    }
+    const configurationError = getAuthConfigurationError();
+    if (configurationError) return { ok: false, statusCode: 503, error: configurationError };
     const claims = verifyAccessToken(getBearerToken(event));
     return claims
         ? { ok: true, claims }
         : { ok: false, statusCode: 401, error: 'Authentication required' };
+}
+
+function getAuthConfigurationError() {
+    const secret = process.env.KINGPIN_AUTH_SECRET;
+    if (!secret) return 'Server authentication is not configured. Add the KINGPIN_AUTH_SECRET Netlify environment variable and redeploy.';
+    if (secret.length < 32) return 'Server authentication is misconfigured. KINGPIN_AUTH_SECRET must be at least 32 characters; update it in Netlify and redeploy.';
+    return '';
 }
 
 function accountKey(email) {
@@ -97,6 +103,7 @@ module.exports = {
     authenticateEvent,
     hashPassword,
     hashVerificationCode,
+    getAuthConfigurationError,
     safeEqual,
     signAccessToken,
     verifyAccessToken,
