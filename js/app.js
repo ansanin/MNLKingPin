@@ -3091,29 +3091,13 @@ function getUploadedDesignTypeLabel(type) {
     return labels[type] || type || 'N/A';
 }
 
-function getUploadedDesignImageSource(item) {
-    if (item?.designType !== 'uploaded' || !item.details) return '';
-    const source = String(item.details.uploadedFile || '');
-    if (/^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(source)) return source;
-
-    const uploadedFileUrl = String(item.details.uploadedFileUrl || '');
-    return /^\/(?:\.netlify\/functions\/order-design|api\/order-design)\?orderId=\d+&itemIndex=\d+$/.test(uploadedFileUrl)
-        ? uploadedFileUrl
-        : '';
+function getUploadedDesignImageSource(item, orderId, itemIndex) {
+    return window.KingPinOrderMedia.getUploadedDesignImageSource(item, orderId, itemIndex);
 }
 
-    function getOrderMediaSource(order, field) {
-        const mediaType = field === 'gcashQRCode' ? 'gcash-qr' : field === 'gcashPaymentProof' ? 'gcash-proof' : '';
-        if (!mediaType) return '';
-
-        const source = String(order?.[field] || '');
-        if (/^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(source)) return source;
-
-        const mediaUrl = String(order?.[`${field}Url`] || '');
-        return new RegExp(`^/\\.netlify/functions/order-design\\?orderId=\\d+&media=${mediaType}$`).test(mediaUrl)
-        ? mediaUrl
-        : '';
-    }
+function getOrderMediaSource(order, field) {
+    return window.KingPinOrderMedia.getOrderMediaSource(order, field);
+}
 
 function updateCartDisplay() {
     const cartItems = document.getElementById('cartItems');
@@ -4214,8 +4198,8 @@ function loadCustomerOrders() {
             }
             return `${item.name} (x${item.quantity})${customStr}`;
         }).join(', ');
-        const uploadedDesignsHtml = order.items.map(item => {
-            const imageSource = getUploadedDesignImageSource(item);
+        const uploadedDesignsHtml = order.items.map((item, itemIndex) => {
+            const imageSource = getUploadedDesignImageSource(item, order.id, itemIndex);
             return imageSource
                 ? `<img src="${imageSource}" alt="Uploaded customer design" style="display: block; max-width: 180px; max-height: 140px; object-fit: contain; margin: 8px 0; border: 1px solid #5b6268; border-radius: 4px;">`
                 : '';
