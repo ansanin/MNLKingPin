@@ -44,7 +44,9 @@ async function testOrderDesignAttachments() {
             type: 'custom-design',
             designType: 'uploaded',
             details: { uploadedFile: imageData, fileName: 'legacy.webp', fileType: 'image/webp' }
-        }]
+        }],
+        gcashQRCode: imageData,
+        gcashPaymentProof: imageData
     }]);
     await ordersStore.setJSON('orders-v2', [{
         id: 150,
@@ -64,7 +66,9 @@ async function testOrderDesignAttachments() {
                 type: 'custom-design',
                 designType: 'uploaded',
                 details: { uploadedFile: imageData, fileName: 'design.webp', fileType: 'image/webp' }
-            }]
+                }],
+                gcashQRCode: imageData,
+                gcashPaymentProof: imageData
         })
     });
 
@@ -75,6 +79,10 @@ async function testOrderDesignAttachments() {
     assert.ok(legacyOrders[0].items[0].details.uploadedFile);
     assert.strictEqual(storedOrders.length, 1);
     assert.ok(storedOrders[0].items[0].details.uploadedFileUrl);
+    assert.ok(storedOrders[0].gcashQRCodeUrl);
+    assert.ok(storedOrders[0].gcashPaymentProofUrl);
+    assert.strictEqual(storedOrders[0].gcashQRCode, undefined);
+    assert.strictEqual(storedOrders[0].gcashPaymentProof, undefined);
 
     const activeResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
     const firstActiveOrders = JSON.parse(activeResponse.body).orders;
@@ -86,6 +94,8 @@ async function testOrderDesignAttachments() {
     assert.strictEqual(savedOrders.length, 3);
     assert.ok(savedOrders.find(order => order.id === 100).items[0].details.uploadedFileUrl);
     assert.ok(savedOrders.find(order => order.id === 200).items[0].details.uploadedFileUrl);
+    assert.ok(savedOrders.find(order => order.id === 100).gcashQRCodeUrl);
+    assert.ok(savedOrders.find(order => order.id === 100).gcashPaymentProofUrl);
     assert.strictEqual((await orderIndexStore.get('orders', { type: 'json' })).length, 3);
 
     const cachedActiveResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
@@ -102,6 +112,20 @@ async function testOrderDesignAttachments() {
     assert.strictEqual(imageResponse.statusCode, 200);
     assert.strictEqual(imageResponse.headers['Content-Type'], 'image/webp');
     assert.strictEqual(Buffer.from(imageResponse.body, 'base64').toString(), 'sample design');
+
+    const proofResponse = await orderDesignHandler({
+        httpMethod: 'GET',
+        queryStringParameters: { orderId: '200', media: 'gcash-proof' }
+    });
+    assert.strictEqual(proofResponse.statusCode, 200);
+    assert.strictEqual(Buffer.from(proofResponse.body, 'base64').toString(), 'sample design');
+
+    const qrResponse = await orderDesignHandler({
+        httpMethod: 'GET',
+        queryStringParameters: { orderId: '200', media: 'gcash-qr' }
+    });
+    assert.strictEqual(qrResponse.statusCode, 200);
+    assert.strictEqual(Buffer.from(qrResponse.body, 'base64').toString(), 'sample design');
 
     console.log('order attachment tests passed');
 }

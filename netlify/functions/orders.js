@@ -12,6 +12,31 @@ function uploadedDesignKey(orderId, itemIndex) {
     return `order-design-${orderId}-${itemIndex}`;
 }
 
+function orderMediaKey(orderId, mediaType) {
+    return `order-media-${orderId}-${mediaType}`;
+}
+
+async function removeInlineOrderMedia(order, designStore) {
+    const normalized = JSON.parse(JSON.stringify(order));
+    let changed = false;
+
+    for (const [field, mediaType] of [['gcashQRCode', 'gcash-qr'], ['gcashPaymentProof', 'gcash-proof']]) {
+        const dataUrl = String(normalized[field] || '');
+        const match = dataUrl.match(/^data:(image\/(?:png|jpeg|gif|webp));base64,([a-z0-9+/=]+)$/i);
+        if (!match) continue;
+
+        const orderId = String(normalized.id);
+        const key = orderMediaKey(orderId, mediaType);
+        const savedMedia = await designStore.get(key, { type: 'text' });
+        if (!savedMedia) await designStore.set(key, dataUrl);
+        normalized[`${field}Url`] = `/.netlify/functions/order-design?orderId=${encodeURIComponent(orderId)}&media=${mediaType}`;
+        delete normalized[field];
+        changed = true;
+    }
+
+    return { order: normalized, changed };
+}
+
 async function removeInlineDesignFiles(order, designStore) {
     const normalized = JSON.parse(JSON.stringify(order));
     let changed = false;
@@ -32,7 +57,8 @@ async function removeInlineDesignFiles(order, designStore) {
         changed = true;
     }
 
-    return { order: normalized, changed };
+    const mediaResult = await removeInlineOrderMedia(normalized, designStore);
+    return { order: mediaResult.order, changed: changed || mediaResult.changed };
 }
 
 function isActiveOrder(order) {
@@ -53,7 +79,14 @@ exports.handler = async function handler(event) {
             const indexedOrders = (await orderIndexStore.get('orders', { type: 'json' })) || [];
             if (activeOnly) {
                 const activeOrders = indexedOrders.filter(isActiveOrder);
-                return jsonResponse(200, { orders: activeOrders });
+                const normalizedOrders = await Promise.all(activeOrders.map(order => removeInlineDesignFiles(order, designStore)));
+                const normalizedById = new Map(normalizedOrders.map(result => [String(result.order.id), result.order]));
+                const responseOrders = indexedOrders.map(order => normalizedById.get(String(order.id)) || order);
+                if (normalizedOrders.some(result => result.changed)) {
+                    await orderIndexStore.setJSON('orders', responseOrders);
+                }
+                const activeResponseOrders = responseOrders.filter(isActiveOrder);
+                return jsonResponse(200, { orders: activeResponseOrders });
             }
 
             const legacyOrders = (await store.get('orders', { type: 'json' })) || [];

@@ -12,13 +12,16 @@ exports.handler = async function handler(event) {
     connectLambda(event);
     const orderId = String(event.queryStringParameters?.orderId || '');
     const itemIndex = String(event.queryStringParameters?.itemIndex || '');
-    if (!/^\d+$/.test(orderId) || !/^\d+$/.test(itemIndex)) {
+    const mediaType = String(event.queryStringParameters?.media || '');
+    const isOrderMedia = ['gcash-qr', 'gcash-proof'].includes(mediaType);
+    if (!/^\d+$/.test(orderId) || (!isOrderMedia && !/^\d+$/.test(itemIndex))) {
         return jsonResponse(400, { error: 'A valid order design is required' });
     }
 
     try {
         const store = getStore('kingpin-order-designs');
-        const dataUrl = await store.get(`order-design-${orderId}-${itemIndex}`, { type: 'text' });
+        const key = isOrderMedia ? `order-media-${orderId}-${mediaType}` : `order-design-${orderId}-${itemIndex}`;
+        const dataUrl = await store.get(key, { type: 'text' });
         const match = String(dataUrl || '').match(/^data:(image\/(?:png|jpeg|gif|webp)|application\/pdf);base64,([a-z0-9+/=]+)$/i);
         if (!match) return jsonResponse(404, { error: 'Order design not found' });
 

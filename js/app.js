@@ -282,9 +282,8 @@ function compactOrderForStorage(order) {
         });
     }
 
-    if (compact.gcashQRCode && typeof compact.gcashQRCode === 'string' && compact.gcashQRCode.startsWith('data:')) {
-        compact.gcashQRCode = compact.gcashQRCode.length > 2000 ? null : compact.gcashQRCode;
-    }
+    if (typeof compact.gcashQRCode === 'string' && compact.gcashQRCode.startsWith('data:')) delete compact.gcashQRCode;
+    if (typeof compact.gcashPaymentProof === 'string' && compact.gcashPaymentProof.startsWith('data:')) delete compact.gcashPaymentProof;
 
     return compact;
 }
@@ -3156,6 +3155,19 @@ function getUploadedDesignImageSource(item) {
         : '';
 }
 
+    function getOrderMediaSource(order, field) {
+        const mediaType = field === 'gcashQRCode' ? 'gcash-qr' : field === 'gcashPaymentProof' ? 'gcash-proof' : '';
+        if (!mediaType) return '';
+
+        const source = String(order?.[field] || '');
+        if (/^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(source)) return source;
+
+        const mediaUrl = String(order?.[`${field}Url`] || '');
+        return new RegExp(`^/\\.netlify/functions/order-design\\?orderId=\\d+&media=${mediaType}$`).test(mediaUrl)
+        ? mediaUrl
+        : '';
+    }
+
 function updateCartDisplay() {
     const cartItems = document.getElementById('cartItems');
     const cartTotal = document.getElementById('cartTotal');
@@ -3934,6 +3946,10 @@ async function processCustomerOrder() {
             console.error('Unable to deliver order to admin:', error);
             throw new Error('Hindi naipadala ang order sa admin. Pakisubukan muli; hindi muna inalis ang laman ng cart.');
         }
+        if (orderData.gcashQRCode && String(orderData.gcashQRCode).startsWith('data:image/')) {
+            orderData.gcashQRCodeUrl = `/.netlify/functions/order-design?orderId=${orderData.id}&media=gcash-qr`;
+            delete orderData.gcashQRCode;
+        }
 
         // Decrease stock for each item in the order
         appData.cart.forEach(cartItem => {
@@ -4203,9 +4219,10 @@ function loadCustomerOrders() {
 
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
         const requiredDownpayment = Number(order.gcashDownpaymentAmount ?? ((Number(order.totalAmount || 0) / 2) || 0));
-        const orderGcashQr = order.gcashQRCode || (paymentMethod === 'gcash' ? (appData.gcashQRCode || localStorage.getItem('kingpinGCashQR')) : null);
-        const gcashProofHtml = order.gcashPaymentProof
-            ? `<p style="color: #4caf50;">✓ Proof uploaded</p><img src="${order.gcashPaymentProof}" alt="GCash payment proof">`
+        const orderGcashQr = getOrderMediaSource(order, 'gcashQRCode') || (paymentMethod === 'gcash' ? (appData.gcashQRCode || localStorage.getItem('kingpinGCashQR')) : null);
+        const paymentProof = getOrderMediaSource(order, 'gcashPaymentProof');
+        const gcashProofHtml = paymentProof
+            ? `<p style="color: #4caf50;">✓ Proof uploaded</p><img src="${paymentProof}" alt="GCash payment proof">`
             : '<p style="color: #ffb74d;">Proof not uploaded yet</p>';
         
         // Determine status progress
@@ -4614,6 +4631,8 @@ function uploadOrderPaymentProof(orderId, input) {
         try {
             await saveOrderToSharedServer(order);
             sharedSaveSucceeded = true;
+            order.gcashPaymentProofUrl = `/.netlify/functions/order-design?orderId=${order.id}&media=gcash-proof`;
+            delete order.gcashPaymentProof;
         } catch (error) {
             console.error('Payment proof was not shared with admin:', error);
         }
@@ -5320,9 +5339,10 @@ function renderAdminOrders() {
             ? `<div style="margin-top: 6px; color: #e8d37a; font-size: 0.85em;">Team sizes: ${buildTeamSizeSummary(order.teamOrder.teamSizes)}</div>`
             : '';
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
+        const paymentProof = getOrderMediaSource(order, 'gcashPaymentProof');
         const paymentProofHtml = paymentMethod === 'gcash'
-            ? order.gcashPaymentProof
-                ? `<div style="margin-top: 8px; color: #4caf50;"><strong>GCash Proof:</strong> Uploaded<br><a href="${order.gcashPaymentProof}" target="_blank" rel="noopener"><img src="${order.gcashPaymentProof}" alt="GCash payment proof for order #${order.id}" style="width: 90px; height: 90px; object-fit: cover; border-radius: 4px; border: 1px solid #4caf50; margin-top: 5px;"></a></div>`
+            ? paymentProof
+                ? `<div style="margin-top: 8px; color: #4caf50;"><strong>GCash Proof:</strong> Uploaded<br><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="GCash payment proof for order #${order.id}" style="width: 90px; height: 90px; object-fit: cover; border-radius: 4px; border: 1px solid #4caf50; margin-top: 5px;"></a></div>`
                 : '<div style="margin-top: 8px; color: #ffb74d;"><strong>GCash Proof:</strong> Waiting for customer upload</div>'
             : '';
         
@@ -5535,10 +5555,11 @@ function viewOrderDetails(orderStr) {
         
         // GCash QR Code display
         let qrCodeHtml = '';
-        if (order.gcashQRCode) {
+        const orderGcashQr = getOrderMediaSource(order, 'gcashQRCode');
+        if (orderGcashQr) {
             qrCodeHtml = `<div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;">
                 <h3>💳 GCash Payment Proof</h3>
-                <img src="${order.gcashQRCode}" alt="GCash QR Code" style="max-width: 300px; height: auto; border: 1px solid #ddd; border-radius: 5px;">
+            <img src="${orderGcashQr}" alt="GCash QR Code" style="max-width: 300px; height: auto; border: 1px solid #ddd; border-radius: 5px;">
             </div>`;
         }
         
