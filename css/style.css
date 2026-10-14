@@ -6131,3 +6131,80 @@ body.light-mode .footer-social-link:focus-visible {
         font-size: .92rem;
     }
 }
+
+.upload-design-preview {
+    width: 100%;
+    max-width: 100%;
+    margin: 20px 0;
+    overflow: hidden;
+    text-align: center;
+}
+
+.upload-design-preview-image {
+    display: block;
+    width: auto;
+    max-width: min(100%, 420px);
+    max-height: min(360px, 42vh);
+    margin: 0 auto;
+    object-fit: contain;
+    border: 2px solid #d4af37;
+    padding: 5px;
+    border-radius: 5px;
+}
+
+@media (max-width: 600px) {
+    #customerPage .design-section {
+        width: 100%;
+        max-width: 100%;
+        padding: 16px 12px;
+    }
+
+    #customerPage .design-section h2 {
+        margin-bottom: 20px;
+        font-size: 1.35rem;
+        line-height: 1.25;
+    }
+
+    #customerPage .design-mode-selector {
+        margin-bottom: 22px;
+    }
+
+    #customerPage .design-mode-buttons {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+
+    #customerPage .design-mode-btn {
+        width: 100%;
+        min-width: 0;
+        padding: 12px 10px;
+        overflow-wrap: anywhere;
+    }
+
+    #customerPage .design-mode-content {
+        padding: 16px 12px;
+    }
+
+    #customerPage .upload-design-container {
+        max-width: 100%;
+        padding: 14px 10px;
+    }
+
+    #customerPage #uploadDesignFile {
+        max-width: 100%;
+        min-width: 0;
+        padding: 8px 6px;
+        font-size: .82rem;
+    }
+
+    #customerPage .upload-design-preview {
+        margin: 16px 0;
+    }
+
+    #customerPage .upload-design-preview-image {
+        max-width: 100%;
+        max-height: min(240px, 32dvh);
+        padding: 4px;
+    }
+}
