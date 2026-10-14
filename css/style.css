@@ -2475,6 +2475,7 @@ table tbody tr:hover {
     transition: all 0.3s ease;
     font-weight: 600;
     font-size: 1em;
+    white-space: nowrap;
 }
 
 .design-mode-btn:hover {
@@ -6183,8 +6184,7 @@ body.light-mode .footer-social-link:focus-visible {
         align-items: center;
         justify-content: center;
         padding: 10px 6px;
-        overflow-wrap: anywhere;
-        font-size: .84rem;
+        font-size: .76rem;
         line-height: 1.2;
         text-align: center;
     }
