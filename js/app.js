@@ -5489,8 +5489,22 @@ function viewOrderDetails(orderStr) {
                 <img src="${orderGcashQr}" alt="GCash QR Code" style="max-width: 300px; height: auto; border: 1px solid #ddd; border-radius: 5px;">
             </div>`;
         }
-        const teamOrderHtml = order.teamOrder?.isTeamOrder
-            ? `<div class="admin-order-customer-info"><h3>Team Order</h3><div class="admin-order-customer-field">${buildTeamOrderLabel(order.teamOrder)}</div>${order.teamOrder.teamSizes?.length ? `<div class="admin-order-customer-field"><strong>Player sizes:</strong> ${buildTeamSizeSummary(order.teamOrder.teamSizes)}</div>` : ''}${order.teamOrder.teamNotes ? `<div class="admin-order-customer-field"><strong>Notes:</strong> ${order.teamOrder.teamNotes}</div>` : ''}</div>`
+        const teamOrder = normalizeTeamOrderInput(order.teamOrder);
+        const escapeDetailText = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+        const teamOrderHtml = teamOrder.isTeamOrder
+            ? `<div class="admin-order-customer-info admin-order-team-info">
+                <h3>Team Order</h3>
+                <div class="admin-order-team-meta">
+                    <div class="admin-order-customer-field"><strong>Team:</strong> ${escapeDetailText(teamOrder.teamName || 'Team order')}</div>
+                    ${teamOrder.teamType ? `<div class="admin-order-customer-field"><strong>Sport / Type:</strong> ${escapeDetailText(teamOrder.teamType)}</div>` : ''}
+                    ${teamOrder.totalPlayers ? `<div class="admin-order-customer-field"><strong>Players:</strong> ${teamOrder.totalPlayers}</div>` : ''}
+                </div>
+                ${teamOrder.teamSizes.length ? `<div class="admin-order-team-sizes">
+                    <strong>Player Sizes</strong>
+                    ${teamOrder.teamSizes.map(size => `<div class="admin-order-team-size-row"><strong>Player ${size.player}</strong><span>Upper: ${escapeDetailText(size.topSize || 'N/A')}</span><span>Bottom: ${escapeDetailText(size.bottomSize || 'N/A')}</span></div>`).join('')}
+                </div>` : ''}
+                ${teamOrder.teamNotes ? `<div class="admin-order-team-notes"><strong>Notes</strong><div>${escapeDetailText(teamOrder.teamNotes)}</div></div>` : ''}
+            </div>`
             : '';
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
         const paymentProof = getOrderMediaSource(order, 'gcashPaymentProof');
