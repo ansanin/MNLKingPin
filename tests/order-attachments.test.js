@@ -1,5 +1,7 @@
 const assert = require('assert');
 
+process.env.KINGPIN_AUTH_SECRET = 'test-secret-that-is-at-least-32-characters-long';
+
 const blobStores = new Map();
 const blobModulePath = require.resolve('@netlify/blobs');
 const blobModule = {
@@ -30,6 +32,9 @@ require.cache[blobModulePath] = {
 
 const { handler: ordersHandler } = require('../netlify/functions/orders.js');
 const { handler: orderDesignHandler } = require('../netlify/functions/order-design.js');
+const { signAccessToken } = require('../netlify/functions/lib/auth.js');
+const adminToken = signAccessToken({ sub: 'shop-admin', role: 'admin' });
+const customerToken = signAccessToken({ sub: 'customer@example.com', role: 'customer' });
 
 async function testOrderDesignAttachments() {
     const imageData = `data:image/webp;base64,${Buffer.from('sample design').toString('base64')}`;
@@ -59,7 +64,8 @@ async function testOrderDesignAttachments() {
 
     const response = await ordersHandler({
         httpMethod: 'POST',
-        body: JSON.stringify({
+        headers: { authorization: `Bearer ${customerToken}` },
+        body: JSON.stringify({ action: 'create', order: {
             id: 200,
             customerEmail: 'customer@example.com',
             status: 'pending',
@@ -73,10 +79,10 @@ async function testOrderDesignAttachments() {
                 }],
                 gcashQRCode: imageData,
                 gcashPaymentProof: imageData
-        })
+        } })
     });
 
-    assert.strictEqual(response.statusCode, 200);
+    assert.strictEqual(response.statusCode, 201);
     const legacyOrders = await ordersStore.get('orders', { type: 'json' });
     const storedOrder = await orderIndexStore.get('order-200', { type: 'json' });
     assert.strictEqual(legacyOrders.length, 1);
@@ -90,12 +96,12 @@ async function testOrderDesignAttachments() {
     assert.deepStrictEqual(storedOrder.items[0].images, []);
     assert.deepStrictEqual(await orderIndexStore.get('active-order-ids', { type: 'json' }), [200]);
 
-    const activeResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
+    const activeResponse = await ordersHandler({ httpMethod: 'GET', headers: { authorization: `Bearer ${adminToken}` }, queryStringParameters: { scope: 'active' } });
     const firstActiveOrders = JSON.parse(activeResponse.body).orders;
-    assert.strictEqual(firstActiveOrders.length, 1);
-    assert.strictEqual(firstActiveOrders[0].id, 200);
+    assert.strictEqual(firstActiveOrders.length, 3);
+    assert.ok(firstActiveOrders.some(order => order.id === 200));
 
-    const historyResponse = await ordersHandler({ httpMethod: 'GET' });
+    const historyResponse = await ordersHandler({ httpMethod: 'GET', headers: { authorization: `Bearer ${adminToken}` } });
     const savedOrders = JSON.parse(historyResponse.body).orders;
     assert.strictEqual(savedOrders.length, 3);
     assert.ok(savedOrders.find(order => order.id === 100).items[0].details.uploadedFileUrl);
@@ -108,31 +114,38 @@ async function testOrderDesignAttachments() {
     assert.strictEqual((await orderIndexStore.get('order-150', { type: 'json' })).id, 150);
     assert.deepStrictEqual(await orderIndexStore.get('active-order-ids', { type: 'json' }), [100, 150, 200]);
 
-    const cachedActiveResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
+    const cachedActiveResponse = await ordersHandler({ httpMethod: 'GET', headers: { authorization: `Bearer ${adminToken}` }, queryStringParameters: { scope: 'active' } });
     const activeOrders = JSON.parse(cachedActiveResponse.body).orders;
     assert.strictEqual(activeOrders.length, 3);
     assert.ok(activeOrders.every(order => order.status === 'pending'));
     assert.ok(activeOrders.find(order => order.id === 100).items[0].details.uploadedFileUrl);
     assert.ok(activeOrders.find(order => order.id === 200).items[0].details.uploadedFileUrl);
 
+    const customerOrder = firstActiveOrders.find(order => order.id === 200);
+    const designUrl = new URL(customerOrder.items[0].details.uploadedFileUrl, 'https://kingpin.example');
     const imageResponse = await orderDesignHandler({
         httpMethod: 'GET',
-        queryStringParameters: { orderId: '200', itemIndex: '0' }
+        headers: {},
+        queryStringParameters: Object.fromEntries(designUrl.searchParams)
     });
     assert.strictEqual(imageResponse.statusCode, 200);
     assert.strictEqual(imageResponse.headers['Content-Type'], 'image/webp');
     assert.strictEqual(Buffer.from(imageResponse.body, 'base64').toString(), 'sample design');
 
+    const proofUrl = new URL(customerOrder.gcashPaymentProofUrl, 'https://kingpin.example');
     const proofResponse = await orderDesignHandler({
         httpMethod: 'GET',
-        queryStringParameters: { orderId: '200', media: 'gcash-proof' }
+        headers: {},
+        queryStringParameters: Object.fromEntries(proofUrl.searchParams)
     });
     assert.strictEqual(proofResponse.statusCode, 200);
     assert.strictEqual(Buffer.from(proofResponse.body, 'base64').toString(), 'sample design');
 
+    const qrUrl = new URL(customerOrder.gcashQRCodeUrl, 'https://kingpin.example');
     const qrResponse = await orderDesignHandler({
         httpMethod: 'GET',
-        queryStringParameters: { orderId: '200', media: 'gcash-qr' }
+        headers: {},
+        queryStringParameters: Object.fromEntries(qrUrl.searchParams)
     });
     assert.strictEqual(qrResponse.statusCode, 200);
     assert.strictEqual(Buffer.from(qrResponse.body, 'base64').toString(), 'sample design');

@@ -5890,6 +5890,266 @@ body.light-mode #adminPage .message {
     color: #d4af37;
 }
 
+.production-summary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0 0 16px;
+}
+
+.production-metric {
+    display: flex;
+    min-width: 0;
+    min-height: 70px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    background: #1f1f1f;
+    color: #d0d0d0;
+}
+
+.production-metric strong {
+    color: #d4af37;
+    font-size: 1.25rem;
+}
+
+.production-metric-delayed strong {
+    color: #ff8a65;
+}
+
+.production-order-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 14px;
+}
+
+.production-order-controls select,
+.production-admin-controls select,
+.production-admin-controls input,
+.production-admin-controls textarea {
+    max-width: 100%;
+    padding: 9px 10px;
+    border: 1px solid #494949;
+    border-radius: 4px;
+    background: #151515;
+    color: #f4f4f4;
+}
+
+.production-stage-cell {
+    min-width: 150px;
+}
+
+.production-stage-label {
+    display: inline-block;
+    color: #d4af37;
+    font-weight: 700;
+}
+
+.production-progress-track {
+    height: 5px;
+    margin-top: 7px;
+    overflow: hidden;
+    border-radius: 5px;
+    background: #3a3a3a;
+}
+
+.production-progress-track span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: #d4af37;
+}
+
+.production-tracking-panel {
+    margin: 16px 0;
+    padding: 14px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    background: #1f1f1f;
+    color: #f4f4f4;
+}
+
+.customer-production-tracking {
+    margin: 16px 0;
+    padding: 14px 0 0;
+    border: 0;
+    border-top: 1px solid #3a3a3a;
+    border-radius: 0;
+    background: transparent;
+}
+
+.production-exception-status {
+    color: #ff8a65;
+    font-weight: 700;
+}
+
+.production-update-notice,
+.production-final-design {
+    margin: 12px 0;
+    padding-top: 10px;
+    border-top: 1px solid #3a3a3a;
+    overflow-wrap: anywhere;
+}
+
+.production-update-notice time {
+    display: block;
+    margin-top: 4px;
+    color: #a0a0a0;
+    font-size: .85rem;
+}
+
+.production-approval-actions {
+    margin-top: 10px;
+}
+
+.production-tracking-panel h3,
+.production-tracking-panel h4 {
+    margin: 0 0 10px;
+    color: #d4af37;
+}
+
+.production-admin-controls-wrap {
+    margin: 16px 0;
+    padding: 14px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    background: #1f1f1f;
+}
+
+.production-admin-controls-wrap h3 {
+    margin: 0 0 10px;
+    color: #d4af37;
+}
+
+.production-admin-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 12px 0;
+}
+
+.production-admin-controls label {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+    color: #d0d0d0;
+}
+
+.production-admin-controls .production-admin-remarks,
+.production-admin-controls .production-admin-actions {
+    grid-column: 1 / -1;
+}
+
+.production-admin-controls textarea {
+    min-height: 72px;
+    resize: vertical;
+}
+
+.production-admin-actions,
+.production-approval-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.production-history {
+    display: grid;
+    gap: 8px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.production-history li {
+    padding: 9px 10px;
+    border-left: 2px solid #d4af37;
+    background: rgba(255, 255, 255, .035);
+    overflow-wrap: anywhere;
+}
+
+.production-history time {
+    display: block;
+    margin-top: 3px;
+    color: #a0a0a0;
+    font-size: .85rem;
+}
+
+.production-timeline-wrap {
+    margin: 12px 0;
+    overflow-x: auto;
+}
+
+.production-timeline {
+    display: grid;
+    min-width: 620px;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    padding: 8px 4px 12px;
+}
+
+.production-timeline-step {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 7px;
+    text-align: center;
+    color: #8d9298;
+    font-size: .78rem;
+}
+
+.production-timeline-step:not(:last-child)::after {
+    position: absolute;
+    top: 13px;
+    left: calc(50% + 13px);
+    width: calc(100% - 26px);
+    height: 2px;
+    background: #42464a;
+    content: '';
+}
+
+.production-timeline-step.done:not(:last-child)::after {
+    background: #d4af37;
+}
+
+.production-timeline-marker {
+    z-index: 1;
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    border: 2px solid #555b61;
+    border-radius: 50%;
+    background: #17191b;
+    color: #a0a0a0;
+    font-weight: 700;
+}
+
+.production-timeline-step.done .production-timeline-marker,
+.production-timeline-step.current .production-timeline-marker {
+    border-color: #d4af37;
+    background: #d4af37;
+    color: #171717;
+}
+
+.production-timeline-step.current {
+    color: #f3d66c;
+    font-weight: 700;
+}
+
+.production-design-preview {
+    display: block;
+    max-width: min(100%, 420px);
+    max-height: 320px;
+    margin: 10px 0;
+    object-fit: contain;
+    border: 1px solid #454545;
+    border-radius: 4px;
+}
+
 .admin-order-team-meta {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
@@ -5966,6 +6226,83 @@ body.light-mode #orderDetailsModal .admin-order-team-sizes,
 body.light-mode #orderDetailsModal .admin-order-team-notes,
 body.light-mode #orderDetailsModal .admin-order-team-size-row {
     border-color: #d0d7dc;
+}
+
+body.light-mode #orderDetailsModal .production-tracking-panel,
+body.light-mode #orderDetailsModal .production-admin-controls-wrap,
+body.light-mode #adminPage .production-metric {
+    background: #f1f4f6 !important;
+    border-color: #d0d7dc !important;
+    color: #263238 !important;
+}
+
+body.light-mode #orderDetailsModal .production-history li {
+    background: #e7ecef;
+}
+
+body.light-mode #customerPage .customer-production-tracking {
+    border-color: #d0d7dc;
+}
+
+body.light-mode #customerPage .production-update-notice,
+body.light-mode #customerPage .production-final-design {
+    border-color: #d0d7dc;
+}
+
+body.light-mode #customerPage .production-exception-status {
+    color: #a54321;
+}
+
+body.light-mode #orderDetailsModal .production-history time {
+    color: #58656d;
+}
+
+body.light-mode #adminPage .production-metric strong,
+body.light-mode #adminPage .production-stage-label,
+body.light-mode #orderDetailsModal .production-tracking-panel h3,
+body.light-mode #orderDetailsModal .production-tracking-panel h4,
+body.light-mode #orderDetailsModal .production-admin-controls-wrap h3,
+body.light-mode #customerPage .production-timeline-step.current {
+    color: #765500 !important;
+}
+
+body.light-mode #customerPage .production-timeline-step {
+    color: #58656d;
+}
+
+body.light-mode #adminPage .production-order-controls select,
+body.light-mode #orderDetailsModal .production-admin-controls select,
+body.light-mode #orderDetailsModal .production-admin-controls input,
+body.light-mode #orderDetailsModal .production-admin-controls textarea {
+    background: #ffffff !important;
+    border-color: #b8c2cc !important;
+    color: #263238 !important;
+}
+
+@media (max-width: 700px) {
+    .production-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .production-metric:last-child {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 480px) {
+    .production-order-controls {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .production-admin-controls {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .production-admin-controls .production-admin-remarks,
+    .production-admin-controls .production-admin-actions {
+        grid-column: auto;
+    }
 }
 
 body.light-mode #orderDetailsModal .admin-order-uploaded-design > strong {

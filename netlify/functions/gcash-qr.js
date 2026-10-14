@@ -1,4 +1,5 @@
 const { connectLambda, getStore } = require('@netlify/blobs');
+const { authenticateEvent } = require('./lib/auth');
 
 const qrKey = 'gcash-qr';
 
@@ -29,6 +30,10 @@ exports.handler = async function handler(event) {
         if (event.httpMethod !== 'POST') {
             return jsonResponse(405, { error: 'Method not allowed' });
         }
+
+        const authentication = authenticateEvent(event);
+        if (!authentication.ok) return jsonResponse(authentication.statusCode, { error: authentication.error });
+        if (authentication.claims.role !== 'admin') return jsonResponse(403, { error: 'Admin access required.' });
 
         const payload = JSON.parse(event.body || '{}');
         const gcashQRCode = payload.gcashQRCode;

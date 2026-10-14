@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>KingPin Custom Ph® CamSur - Jersey Management System</title>
-    <link rel="stylesheet" href="css/style.css?v=20261003-footer-social-left-2">
+    <link rel="stylesheet" href="css/style.css?v=20261015-production-1">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -48,7 +48,7 @@
                         <button type="button" class="login-back" onclick="hideCustomerAuth()"><span aria-hidden="true">←</span> Back</button>
                         <div id="customerLoginErrorMessage" class="error-message" role="alert"></div>
                     </div>
-                    <div id="customerSignupForm" style="display: none;"><h3>Create Customer Account</h3><form id="customerSignupFormElement" autocomplete="off"><div class="form-group"><label for="customerSignupUsername">Username</label><input type="text" id="customerSignupUsername" name="customerSignupUsername" required minlength="3" placeholder="Choose a username" autocomplete="off"></div><div class="form-group"><label for="customerSignupName">Full Name</label><input type="text" id="customerSignupName" name="customerSignupName" required placeholder="John Doe" autocomplete="off"></div><div class="form-group"><label for="customerSignupEmail">Email</label><input type="email" id="customerSignupEmail" name="customerSignupEmail" required placeholder="your@gmail.com" autocomplete="off"></div><div class="form-group"><label for="customerSignupPhone">Phone (optional)</label><input type="tel" id="customerSignupPhone" name="customerSignupPhone" placeholder="+63 9xx xxx xxxx" autocomplete="off"></div><div class="form-group"><label for="customerSignupPassword">Password</label><div class="password-field"><input type="password" id="customerSignupPassword" name="customerSignupPassword" required minlength="6" placeholder="At least 6 characters" autocomplete="off"><button type="button" onclick="togglePassword('customerSignupPassword', this)" aria-label="Show password">◉</button></div></div><button type="submit" class="btn btn-primary login-submit">Create Account</button><button type="button" class="btn btn-secondary form-back" onclick="showCustomerLogin()">Back to Login</button></form><div id="customerSignupErrorMessage" class="error-message"></div></div>
+                    <div id="customerSignupForm" style="display: none;"><h3>Create Customer Account</h3><form id="customerSignupFormElement" autocomplete="off"><div class="form-group"><label for="customerSignupUsername">Username</label><input type="text" id="customerSignupUsername" name="customerSignupUsername" required minlength="3" placeholder="Choose a username" autocomplete="off"></div><div class="form-group"><label for="customerSignupName">Full Name</label><input type="text" id="customerSignupName" name="customerSignupName" required placeholder="John Doe" autocomplete="off"></div><div class="form-group"><label for="customerSignupEmail">Email</label><input type="email" id="customerSignupEmail" name="customerSignupEmail" required placeholder="your@gmail.com" autocomplete="off"></div><div class="form-group"><label for="customerSignupPhone">Phone (optional)</label><input type="tel" id="customerSignupPhone" name="customerSignupPhone" placeholder="+63 9xx xxx xxxx" autocomplete="off"></div><div class="form-group"><label for="customerSignupPassword">Password</label><div class="password-field"><input type="password" id="customerSignupPassword" name="customerSignupPassword" required minlength="8" placeholder="At least 8 characters" autocomplete="new-password"><button type="button" onclick="togglePassword('customerSignupPassword', this)" aria-label="Show password">◉</button></div></div><button type="submit" class="btn btn-primary login-submit">Create Account</button><button type="button" class="btn btn-secondary form-back" onclick="showCustomerLogin()">Back to Login</button></form><div id="customerSignupErrorMessage" class="error-message"></div></div>
                 </div>
                 <div id="adminLoginForm" class="login-auth-section" style="display: none;"><form id="adminForm" autocomplete="off" onsubmit="loginAdmin(event)"><div class="form-group"><label for="adminUsername">Admin username</label><input type="text" id="adminUsername" name="adminUsername" placeholder="admin" required autocomplete="off"></div><div class="form-group"><label for="adminPassword">Password</label><div class="password-field"><input type="password" id="adminPassword" name="adminPassword" placeholder="Enter your password" required autocomplete="off"><button type="button" onclick="togglePassword('adminPassword', this)" aria-label="Show password">◉</button></div></div><button type="submit" class="btn btn-primary login-submit">→ &nbsp; Login as Admin</button><button type="button" class="btn btn-secondary form-back" onclick="hideAdminLogin()">← &nbsp; Back</button></form><div id="adminErrorMessage" class="error-message" role="alert"></div></div>
                 <footer class="login-footer"><svg class="footer-crown" viewBox="0 0 32 22" aria-hidden="true"><path d="M3 18h26M5 17 3 4l8 7 5-9 5 9 8-7-2 13Z"></path></svg><span>© 2025 MNL KingPin CamSur. All rights reserved.</span></footer>
@@ -986,6 +986,28 @@
             <!-- Orders Management -->
             <div id="ordersTab" class="admin-tab" style="display: none;">
                 <h2>Manage Orders</h2>
+                <div class="production-summary" aria-label="Production order summary">
+                    <div class="production-metric"><span>Pending</span><strong id="productionPendingCount">0</strong></div>
+                    <div class="production-metric"><span>In Production</span><strong id="productionInProgressCount">0</strong></div>
+                    <div class="production-metric"><span>Ready</span><strong id="productionReadyCount">0</strong></div>
+                    <div class="production-metric"><span>Completed</span><strong id="productionCompletedCount">0</strong></div>
+                    <div class="production-metric production-metric-delayed"><span>Delayed</span><strong id="productionDelayedCount">0</strong></div>
+                </div>
+                <div class="production-order-controls">
+                    <label for="productionStageFilter">Production stage</label>
+                    <select id="productionStageFilter" onchange="renderAdminOrders()">
+                        <option value="all">All stages</option>
+                        <option value="order-placed">Order Placed</option>
+                        <option value="payment-verification">Payment Verification</option>
+                        <option value="design-approval">Design Approval</option>
+                        <option value="printing">Printing / Production</option>
+                        <option value="quality-checking">Quality Checking</option>
+                        <option value="ready-for-release">Ready for Pickup / Delivery</option>
+                        <option value="completed">Completed</option>
+                        <option value="on-hold">On Hold</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
                 
                 <div class="orders-table">
                     <table id="ordersInventory">
@@ -995,7 +1017,8 @@
                                 <th>Customer Name</th>
                                 <th>Products</th>
                                 <th>Total Amount</th>
-                                <th>Status</th>
+                                <th>Order Status</th>
+                                <th>Production Stage</th>
                                 <th>Order Date</th>
                                 <th>Actions</th>
                             </tr>
@@ -1385,7 +1408,8 @@
     </div>
 
     <script src="js/team-order.js?v=20261003-team-order-2"></script>
-    <script src="js/app.js?v=20261003-shop-footer-contact-1"></script>
+    <script src="js/production-tracking.js?v=20261015-production-1"></script>
+    <script src="js/app.js?v=20261015-production-1"></script>
     <script src="js/design-interface.js?v=20261003-team-order-2"></script>
     <script>
         // Force initialization when page loads

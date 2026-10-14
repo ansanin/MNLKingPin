@@ -6,6 +6,7 @@ const appData = {
     currentUser: null,
     currentRole: null,
     currentUserProfile: null,
+    authToken: null,
     products: [],
     cart: [],
     orders: [],
@@ -21,10 +22,6 @@ const appData = {
         contactNumber: '',
         facebookUrl: '',
         instagramUrl: ''
-    },
-    adminCredentials: {
-        username: 'admin',
-        password: 'admin123'
     }
 };
 
@@ -347,12 +344,31 @@ function loadOrders() {
     }
 }
 
+function getAuthenticatedHeaders(extraHeaders = {}) {
+    return {
+        ...extraHeaders,
+        ...(appData.authToken ? { Authorization: `Bearer ${appData.authToken}` } : {})
+    };
+}
+
+async function callAuthApi(payload) {
+    const response = await fetch('/.netlify/functions/auth', {
+        method: 'POST',
+        headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Authentication service is unavailable.');
+    return result;
+}
+
 async function fetchSharedOrders({ activeOnly = false } = {}) {
-    const query = activeOnly ? '?scope=active' : '';
-    const endpoints = [`api/orders${query}`, `api/orders.php${query}`, `/.netlify/functions/orders${query}`];
+    const scope = activeOnly ? 'active' : 'all';
+    const query = `?scope=${scope}`;
+    const endpoints = [`api/orders${query}`, '/.netlify/functions/orders' + query];
     for (const endpoint of endpoints) {
         try {
-            const response = await fetch(endpoint, { cache: 'no-store' });
+            const response = await fetch(endpoint, { cache: 'no-store', headers: getAuthenticatedHeaders() });
             if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) continue;
             const result = await response.json();
             if (Array.isArray(result.orders)) return result.orders;
@@ -363,23 +379,45 @@ async function fetchSharedOrders({ activeOnly = false } = {}) {
     throw new Error('Shared order API unavailable');
 }
 
-async function saveOrderToSharedServer(order) {
-    const endpoints = ['api/orders', 'api/orders.php', '/.netlify/functions/orders'];
+async function saveOrderToSharedServer(order, action = 'customer-update') {
+    const endpoints = ['api/orders', '/.netlify/functions/orders'];
     for (const endpoint of endpoints) {
         try {
             const response = await fetch(endpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(order)
+                headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ action, order })
             });
             if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) continue;
             const result = await response.json();
-            if (result.ok === true) return true;
+            if (result.ok === true) return result.order || true;
         } catch (error) {
             console.warn(`Unable to save shared order to ${endpoint}:`, error);
         }
     }
     throw new Error('Shared order API unavailable');
+}
+
+async function saveAdminOrderOperation(orderId, operation, fields = {}) {
+    const response = await fetch('/.netlify/functions/orders', {
+        method: 'POST',
+        headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ action: 'admin-update', operation, orderId, ...fields })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok !== true) throw new Error(result.error || 'Unable to save the production update.');
+    return result.order;
+}
+
+async function saveCustomerDesignDecision(orderId, decision, remarks = '') {
+    const response = await fetch('/.netlify/functions/orders', {
+        method: 'POST',
+        headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ action: 'customer-approval', orderId, decision, remarks })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok !== true) throw new Error(result.error || 'Unable to save the design response.');
+    return result.order;
 }
 
 // Save notifications to localStorage
@@ -458,87 +496,68 @@ function clearUserCart() {
     console.log(`Cart cleared for user: ${appData.currentUser}`);
 }
 
-// Check for saved session and auto-login
-function checkSavedSession() {
+// Restore only a session that the server signed and has not expired.
+async function checkSavedSession() {
     const session = loadCurrentSession();
-    if (!session) return; // No saved session
-    
+    const token = sessionStorage.getItem('kingpinAccessToken');
+    if (!session || !token) {
+        clearCurrentSession();
+        return;
+    }
+
     try {
-        // Check if session is still valid (less than 7 days old)
-        const sessionAge = Date.now() - session.savedAt;
-        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-        if (sessionAge > sevenDaysMs) {
+        const response = await fetch('/.netlify/functions/auth', {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: 'no-store'
+        });
+        if (!response.ok) {
             clearCurrentSession();
             return;
         }
-        
-        // Auto-login based on role
-        if (session.role === 'customer') {
+        const identity = await response.json();
+        if (identity.role === 'customer' && session.role === 'customer' && identity.user === session.user) {
             if (isAdminPortalPage()) {
                 showAccessDenied();
                 return;
             }
-
-            // Load customer accounts
-            const accounts = loadCustomerAccounts();
-            const customer = accounts[session.user];
-            
-            if (customer) {
-                appData.currentUser = session.user;
-                appData.currentRole = 'customer';
-                appData.currentUserProfile = customer;
-                
-                // Load user's saved cart
-                loadUserCart();
-                
-                // Auto-login
-                initializeData();
-                document.getElementById('loginPage').style.display = 'none';
-                document.getElementById('customerPage').style.display = 'block';
-                document.getElementById('adminPage').style.display = 'none';
-                document.getElementById('productsSection').style.display = 'block';
-                document.getElementById('cartSection').style.display = 'none';
-                document.getElementById('ordersSection').style.display = 'none';
-                document.getElementById('notificationsSection').style.display = 'none';
-                document.getElementById('checkoutSection').style.display = 'none';
-                const savedView = loadNavigationState();
-                if (savedView?.role === 'customer' && typeof window[savedView.view] === 'function') {
-                    window[savedView.view]();
-                }
-                
-                // Display customer name in navbar
-                const displayName = appData.currentUserProfile?.username || appData.currentUser;
-                document.getElementById('customerDisplayName').textContent = `Welcome, ${displayName}!`;
-                
-                loadProducts();
-                setTimeout(() => {
-                    updateNotificationBadges();
-                }, 150);
-                
-                console.log('✓ Customer session restored for:', session.user);
+            appData.authToken = token;
+            appData.currentUser = session.user;
+            appData.currentRole = 'customer';
+            appData.currentUserProfile = session.userProfile || { email: session.user, username: session.user };
+            loadUserCart();
+            initializeData();
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('customerPage').style.display = 'block';
+            document.getElementById('adminPage').style.display = 'none';
+            document.getElementById('productsSection').style.display = 'block';
+            document.getElementById('cartSection').style.display = 'none';
+            document.getElementById('ordersSection').style.display = 'none';
+            document.getElementById('notificationsSection').style.display = 'none';
+            document.getElementById('checkoutSection').style.display = 'none';
+            const savedView = loadNavigationState();
+            if (savedView?.role === 'customer' && typeof window[savedView.view] === 'function') window[savedView.view]();
+            document.getElementById('customerDisplayName').textContent = `Welcome, ${appData.currentUserProfile.username || appData.currentUser}!`;
+            loadProducts();
+            setTimeout(updateNotificationBadges, 150);
+        } else if (identity.role === 'admin' && session.role === 'admin' && identity.user === session.user) {
+            if (!isAdminPortalPage()) {
+                showAccessDenied();
+                return;
             }
-        } else if (session.role === 'admin') {
-            // Verify admin credentials
-            if (session.user === appData.adminCredentials.username) {
-                appData.currentUser = session.user;
-                appData.currentRole = 'admin';
-                appData.currentUserProfile = null;
-                
-                // Auto-login
-                initializeData();
-                document.getElementById('loginPage').style.display = 'none';
-                document.getElementById('customerPage').style.display = 'none';
-                document.getElementById('adminPage').style.display = 'block';
-                const savedView = loadNavigationState();
-                showAdminTab(savedView?.role === 'admin' && savedView.view ? savedView.view : 'products');
-                loadAdminOrders();
-                
-                setTimeout(() => {
-                    updateNotificationBadges();
-                }, 150);
-                
-                console.log('✓ Admin session restored');
-            }
+            appData.authToken = token;
+            appData.currentUser = session.user;
+            appData.currentRole = 'admin';
+            appData.currentUserProfile = null;
+            initializeData();
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('customerPage').style.display = 'none';
+            document.getElementById('adminPage').style.display = 'block';
+            const savedView = loadNavigationState();
+            showAdminTab(savedView?.role === 'admin' && savedView.view ? savedView.view : 'products');
+            loadAdminOrders();
+            setTimeout(updateNotificationBadges, 150);
+        } else {
+            clearCurrentSession();
         }
     } catch (e) {
         console.error('Error checking saved session:', e);
@@ -549,6 +568,14 @@ function checkSavedSession() {
 // Initialize all data from localStorage on page load
 function initializeData() {
     loadOrders();
+    if (appData.currentRole === 'customer' && appData.currentUser) {
+        const email = normalizeCustomerEmail(appData.currentUser);
+        appData.orders = appData.orders.filter(order =>
+            normalizeCustomerEmail(order.customerEmail) === email
+            || normalizeCustomerEmail(order.customerUsername) === email
+        );
+        saveOrders();
+    }
     loadNotifications();
     loadProductsFromStorage();
     loadCustomers();
@@ -741,7 +768,7 @@ async function saveShopFooterSettings(event) {
         try {
             const response = await fetch(endpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
                 body: payload
             });
             if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) continue;
@@ -910,10 +937,43 @@ function showCustomerSignup() {
     document.getElementById('customerLoginForm').style.display = 'none';
     document.getElementById('customerSignupForm').style.display = 'block';
     document.getElementById('customerSignupErrorMessage').textContent = '';
+    ensureSignupVerificationField(false);
     document.getElementById('customerSignupName').focus();
 }
 
-// Register new customer
+function ensureSignupVerificationField(show) {
+    const form = document.getElementById('customerSignupFormElement');
+    if (!form) return null;
+    let field = document.getElementById('customerSignupVerificationGroup');
+    if (!field) {
+        field = document.createElement('div');
+        field.id = 'customerSignupVerificationGroup';
+        field.className = 'form-group';
+        field.innerHTML = '<label for="customerSignupCode">Email verification code</label><input type="text" id="customerSignupCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit code">';
+        const submitButton = form.querySelector('button[type="submit"]');
+        form.insertBefore(field, submitButton || null);
+    }
+    field.style.display = show ? 'block' : 'none';
+    const codeInput = field.querySelector('input');
+    codeInput.required = Boolean(show);
+    return codeInput;
+}
+
+function establishAuthenticatedSession(result) {
+    appData.authToken = result.token;
+    appData.currentRole = result.role;
+    appData.currentUser = result.user.email || result.user.username;
+    appData.currentUserProfile = result.user.role === 'admin' ? null : result.user;
+    if (appData.currentRole === 'customer') {
+        saveCustomerAccounts({ [appData.currentUser]: appData.currentUserProfile });
+        loadUserCart();
+    }
+    saveCurrentSession();
+    hideCustomerAuth();
+    if (appData.currentRole === 'admin') showAdminDashboard();
+    else showCustomerDashboard();
+}
+
 function normalizeCustomerEmail(value) {
     return String(value || '').trim().toLowerCase();
 }
@@ -976,10 +1036,11 @@ function saveCustomerAccounts(accounts) {
     Object.entries(accounts || {}).forEach(([key, value]) => {
         const email = normalizeCustomerEmail(value?.email || key);
         if (!email) return;
+        const safeProfile = { ...value, email };
+        delete safeProfile.password;
+        delete safeProfile.accountPassword;
         cleaned[email] = {
-            ...value,
-            email,
-            password: value?.password || value?.accountPassword || ''
+            ...safeProfile
         };
     });
 
@@ -1001,49 +1062,21 @@ function saveCurrentSession() {
         savedAt: Date.now()
     };
     localStorage.setItem('kingpinCurrentSession', JSON.stringify(session));
+    if (appData.authToken) sessionStorage.setItem('kingpinAccessToken', appData.authToken);
 }
 
 function rememberQuickLogin() {
-    if (appData.currentRole === 'customer' && appData.currentUser) {
-        localStorage.setItem('kingpinQuickLoginUser', appData.currentUser);
-    }
+    localStorage.removeItem('kingpinQuickLoginUser');
 }
 
 function updateQuickLoginButton() {
     const button = document.getElementById('quickLoginBtn');
     if (!button) return;
-
-    const email = localStorage.getItem('kingpinQuickLoginUser');
-    const accounts = loadCustomerAccounts();
-    const account = email ? accounts[email] : null;
-
-    if (account) {
-        button.textContent = `Quick Login as ${account.fullName || email}`;
-        button.style.display = 'block';
-    } else {
-        localStorage.removeItem('kingpinQuickLoginUser');
-        button.style.display = 'none';
-    }
+    button.style.display = 'none';
 }
 
 function quickLogin() {
-    const email = localStorage.getItem('kingpinQuickLoginUser');
-    const accounts = loadCustomerAccounts();
-    const account = email ? accounts[email] : null;
-
-    if (!account) {
-        updateQuickLoginButton();
-        return;
-    }
-
-    appData.currentUser = email;
-    appData.currentRole = 'customer';
-    appData.currentUserProfile = account;
-    rememberQuickLogin();
-    saveCurrentSession();
-    loadUserCart();
-    hideCustomerAuth();
-    showCustomerDashboard();
+    updateQuickLoginButton();
 }
 
 // Load current session
@@ -1063,10 +1096,12 @@ function loadCurrentSession() {
 // Clear current session
 function clearCurrentSession() {
     localStorage.removeItem('kingpinCurrentSession');
+    sessionStorage.removeItem('kingpinAccessToken');
+    appData.authToken = null;
 }
 
 // Sign up customer
-function signupCustomer(e) {
+async function signupCustomer(e) {
     if (e && typeof e.preventDefault === 'function') {
         e.preventDefault();
     }
@@ -1077,6 +1112,8 @@ function signupCustomer(e) {
     const phone = document.getElementById('customerSignupPhone').value.trim();
     const password = document.getElementById('customerSignupPassword').value;
     const errorMessage = document.getElementById('customerSignupErrorMessage');
+    const codeInput = ensureSignupVerificationField(false);
+    const verificationCode = codeInput?.value.trim() || '';
     
     // Validate inputs
     if (!username || !fullName || !email || !password) {
@@ -1093,41 +1130,28 @@ function signupCustomer(e) {
         return;
     }
 
-    if (password.length < 6) {
-        errorMessage.textContent = 'Password must be at least 6 characters.';
+    if (password.length < 8) {
+        errorMessage.textContent = 'Password must be at least 8 characters.';
         return;
     }
-    
-    // Load existing accounts
-    const accounts = loadCustomerAccounts();
-    const existingAccount = accounts[email];
-    
-    // Check if email already exists
-    if (existingAccount) {
-        document.getElementById('customerSignupErrorMessage').textContent = 'This email is already registered. Please login instead.';
-        return;
+
+    try {
+        if (!verificationCode) {
+            await callAuthApi({ action: 'register', username, fullName, email, phone, password });
+            ensureSignupVerificationField(true);
+            errorMessage.textContent = 'We sent a 6-digit verification code to your email. Enter it here to finish creating your account.';
+            errorMessage.style.display = 'block';
+            document.getElementById('customerSignupCode').focus();
+            return;
+        }
+
+        const result = await callAuthApi({ action: 'verify', email, code: verificationCode });
+        establishAuthenticatedSession(result);
+        showStatusUpdateToast('Account verified. You are now signed in.');
+    } catch (error) {
+        errorMessage.textContent = error.message;
+        errorMessage.style.display = 'block';
     }
-    
-    // Create new account
-    const newAccount = {
-        username: username,
-        email: email,
-        fullName: fullName,
-        phone: phone,
-        password: password,
-        createdAt: new Date().toLocaleDateString()
-    };
-    
-    accounts[email] = newAccount;
-    saveCustomerAccounts(accounts);
-    
-    // Return to login without creating an authenticated session.
-    document.getElementById('customerSignupFormElement')?.reset();
-    if (document.getElementById('customerSignupErrorMessage')) {
-        document.getElementById('customerSignupErrorMessage').textContent = '';
-    }
-    showCustomerLogin();
-    showStatusUpdateToast('Account created successfully. Please log in.');
 }
 
 const customerLoginFormElement = document.getElementById('customerLoginFormElement');
@@ -1141,7 +1165,7 @@ if (customerSignupFormElement) {
 }
 
 // Login customer
-function loginCustomer(e) {
+async function loginCustomer(e) {
     e.preventDefault();
 
     const errorMessage = document.getElementById('customerLoginErrorMessage');
@@ -1166,77 +1190,29 @@ function loginCustomer(e) {
         return;
     }
     
-    // Load accounts from all supported customer storage formats
-    const accounts = loadCustomerAccounts();
-    const account = accounts[email] || Object.values(accounts).find(item => normalizeCustomerEmail(item?.email) === email);
-    
-    // Check if account exists
-    if (!account) {
-        const errorMessage = document.getElementById('customerLoginErrorMessage');
-        if (errorMessage) {
-            errorMessage.textContent = 'Account not found. Please create an account first.';
-            errorMessage.style.display = 'block';
+    try {
+        const result = await callAuthApi({ action: 'login', email, password });
+        establishAuthenticatedSession(result);
+    } catch (error) {
+        errorMessage.textContent = error.message;
+        errorMessage.style.display = 'block';
+        if (loadCustomerAccounts()[email]) {
+            errorMessage.textContent += ' Existing local accounts can be re-registered with this email and verified to keep access to orders.';
         }
-        alert('This email is not yet registered. Please create an account before logging in.');
-        return;
     }
-
-    const savedPassword = String(account.password || '').trim();
-    const enteredPassword = String(password || '').trim();
-
-    if (savedPassword && savedPassword !== enteredPassword) {
-        const errorMessage = document.getElementById('customerLoginErrorMessage');
-        if (errorMessage) {
-            errorMessage.textContent = 'Incorrect password.';
-            errorMessage.style.display = 'block';
-        }
-        alert('Incorrect password. Please check your login details and try again.');
-        return;
-    }
-
-    if (!savedPassword && enteredPassword) {
-        const errorMessage = document.getElementById('customerLoginErrorMessage');
-        if (errorMessage) {
-            errorMessage.textContent = 'This account uses Google sign-in. Please use Google login or reset the password.';
-            errorMessage.style.display = 'block';
-        }
-        alert('This account was created using Google sign-in. Please use Google login instead.');
-        return;
-    }
-    
-    // Login successful
-    appData.currentUser = email;
-    appData.currentRole = 'customer';
-    appData.currentUserProfile = account;
-    rememberQuickLogin();
-    
-    // Save session
-    saveCurrentSession();
-    
-    // Load user's saved cart from localStorage
-    loadUserCart();
-    
-    document.getElementById('customerLoginFormElement')?.reset();
-    document.getElementById('customerLoginErrorMessage').textContent = '';
-    hideCustomerAuth();
-    showCustomerDashboard();
 }
 
 const GOOGLE_CLIENT_ID = '620751674943-strv31pamttvkn3jlftptalegihspstn.apps.googleusercontent.com';
 
 function handleGoogleCredential(response) {
-    try {
-        const payload = JSON.parse(atob(response.credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-        if (!payload.email) throw new Error('Google did not return an email address.');
-        processGmailLogin(payload.email, payload.name || payload.email.split('@')[0]);
-    } catch (error) {
+    processGmailLogin(response.credential).catch(error => {
         console.error('Google sign-in failed:', error);
         const errorMessage = document.getElementById('customerLoginErrorMessage');
         if (errorMessage) {
-            errorMessage.textContent = 'Google sign-in failed. Please try again.';
+            errorMessage.textContent = error.message || 'Google sign-in failed. Please try again.';
             errorMessage.style.display = 'block';
         }
-    }
+    });
 }
 
 function initializeGoogleSignIn() {
@@ -1272,68 +1248,9 @@ function loginWithGmail() {
 }
 
 // Process Gmail Login
-function processGmailLogin(email, googleName = '') {
-    const emailLower = email.toLowerCase().trim();
-    
-    // Validate email format
-    if (!emailLower.includes('@')) {
-        showStatusUpdateToast('❌ Please enter a valid email address');
-        return;
-    }
-    
-    // Load accounts
-    const accounts = loadCustomerAccounts();
-    
-    // Extract name from email
-    const nameFromEmail = emailLower.split('@')[0].replace(/[._]/g, ' ');
-    const fullName = googleName || nameFromEmail.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-    
-    // Check if account exists
-    if (accounts[emailLower]) {
-        // Login existing account
-        appData.currentUser = emailLower;
-        appData.currentRole = 'customer';
-        appData.currentUserProfile = accounts[emailLower];
-        rememberQuickLogin();
-        
-        saveCurrentSession();
-        loadUserCart();
-        
-        document.getElementById('customerLoginFormElement')?.reset();
-        document.getElementById('customerLoginErrorMessage').textContent = '';
-        hideCustomerAuth();
-        showCustomerDashboard();
-        
-        showStatusUpdateToast(`✓ Welcome back, ${accounts[emailLower].fullName}!`);
-    } else {
-        // Create new account
-        const newAccount = {
-            email: emailLower,
-            fullName: fullName,
-            phone: '',
-            loginMethod: 'gmail',
-            createdAt: new Date().toLocaleDateString()
-        };
-        
-        accounts[emailLower] = newAccount;
-        saveCustomerAccounts(accounts);
-        
-        appData.currentUser = emailLower;
-        appData.currentRole = 'customer';
-        appData.currentUserProfile = newAccount;
-        rememberQuickLogin();
-        
-        saveCurrentSession();
-        appData.cart = [];
-        saveUserCart();
-        
-        document.getElementById('customerLoginFormElement')?.reset();
-        document.getElementById('customerLoginErrorMessage').textContent = '';
-        hideCustomerAuth();
-        showCustomerDashboard();
-        
-        showStatusUpdateToast(`✓ Account created and logged in as ${fullName}!`);
-    }
+async function processGmailLogin(credential) {
+    const result = await callAuthApi({ action: 'google-login', credential });
+    establishAuthenticatedSession(result);
 }
 
 // Show admin login form
@@ -1353,7 +1270,7 @@ function hideAdminLogin() {
 }
 
 // Admin login
-function loginAdmin(e) {
+async function loginAdmin(e) {
     e.preventDefault();
 
     const username = document.getElementById('adminUsername').value.trim();
@@ -1362,24 +1279,20 @@ function loginAdmin(e) {
     errorMessage.textContent = '';
     errorMessage.style.display = 'none';
 
-    if (username !== appData.adminCredentials.username || password !== appData.adminCredentials.password) {
-        errorMessage.textContent = 'Incorrect admin username or password.';
+    try {
+        const result = await callAuthApi({ action: 'admin-login', username, password });
+        appData.authToken = result.token;
+        appData.currentUser = result.user.username;
+        appData.currentRole = 'admin';
+        appData.currentUserProfile = null;
+        saveCurrentSession();
+        document.getElementById('adminForm').reset();
+        hideAdminLogin();
+        showAdminDashboard();
+    } catch (error) {
+        errorMessage.textContent = error.message;
         errorMessage.style.display = 'block';
-        return;
     }
-
-    errorMessage.textContent = '';
-    errorMessage.style.display = 'none';
-    appData.currentUser = 'admin';
-    appData.currentRole = 'admin';
-    appData.currentUserProfile = null;
-    
-    // Save session
-    saveCurrentSession();
-    
-    document.getElementById('adminForm').reset();
-    hideAdminLogin();
-    showAdminDashboard();
 }
 
 function togglePassword(inputId, button) {
@@ -1435,7 +1348,7 @@ function logout() {
 }
 
 // Update Admin Credentials
-function updateAdminCredentials(e) {
+async function updateAdminCredentials(e) {
     e.preventDefault();
 
     if (appData.currentRole !== 'admin') {
@@ -1443,23 +1356,14 @@ function updateAdminCredentials(e) {
     }
     
     const currentPass = document.getElementById('currentPassword').value;
-    const newUsername = document.getElementById('newUsername').value || appData.adminCredentials.username;
+    const newUsername = document.getElementById('newUsername').value.trim() || appData.currentUser;
     const newPassword = document.getElementById('newPassword').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
     const message = document.getElementById('credentialsMessage');
 
-    // Verify current password
-    if (currentPass !== appData.adminCredentials.password) {
+    if (newPassword.length < 8) {
         message.className = 'message error';
-        message.textContent = '❌ Current password is incorrect';
-        message.style.display = 'block';
-        return;
-    }
-
-    // Validate new password
-    if (newPassword.length < 6) {
-        message.className = 'message error';
-        message.textContent = '❌ Password must be at least 6 characters';
+        message.textContent = '❌ Password must be at least 8 characters';
         message.style.display = 'block';
         return;
     }
@@ -1471,21 +1375,25 @@ function updateAdminCredentials(e) {
         return;
     }
 
-    // Update credentials
-    appData.adminCredentials.username = newUsername;
-    appData.adminCredentials.password = newPassword;
-
-    message.className = 'message success';
-    message.textContent = '✓ Admin credentials updated successfully! You will need to log in again.';
-    message.style.display = 'block';
-
-    // Reset form
-    document.getElementById('credentialsForm').reset();
-
-    // Log out after 2 seconds
-    setTimeout(() => {
-        logout();
-    }, 2000);
+    try {
+        const result = await callAuthApi({
+            action: 'change-admin-credentials',
+            currentPassword: currentPass,
+            username: newUsername,
+            password: newPassword
+        });
+        appData.authToken = result.token;
+        appData.currentUser = result.user.username;
+        saveCurrentSession();
+        message.className = 'message success';
+        message.textContent = '✓ Admin credentials updated successfully.';
+        message.style.display = 'block';
+        document.getElementById('credentialsForm').reset();
+    } catch (error) {
+        message.className = 'message error';
+        message.textContent = error.message;
+        message.style.display = 'block';
+    }
 }
 
 // Upload Shop Logo
@@ -1653,7 +1561,7 @@ async function saveSharedGcashQRCode() {
             try {
                 const response = await fetch(endpoint, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
                     body: payload
                 });
                 if (!response.ok) {
@@ -2020,6 +1928,63 @@ function toggleCart() {
     }
 }
 
+async function refreshCustomerOrdersFromServer(activeOnly = false) {
+    if (appData.currentRole !== 'customer' || !appData.currentUser) return;
+    const email = normalizeCustomerEmail(appData.currentUser);
+    const ordersById = new Map(appData.orders
+        .filter(order => normalizeCustomerEmail(order.customerEmail) === email || normalizeCustomerEmail(order.customerUsername) === email)
+        .map(order => [String(order.id), order]));
+    const sharedOrders = await fetchSharedOrders({ activeOnly: false });
+    sharedOrders.forEach(order => ordersById.set(String(order.id), order));
+    appData.orders = Array.from(ordersById.values());
+    saveOrders();
+    syncProductionNotifications(appData.orders, 'customer');
+}
+
+function syncProductionNotifications(orders, recipientRole) {
+    const notificationType = recipientRole === 'admin' ? 'admin' : 'customer';
+    const existingEventIds = new Set(appData.notifications.map(notification => notification.productionEventId).filter(Boolean));
+    let changed = false;
+    (orders || []).forEach(order => {
+        (order.productionNotifications || []).forEach(event => {
+            const targetType = ['design-response', 'customer-cancel', 'refund-requested', 'payment-proof'].includes(event.type) ? 'admin' : 'customer';
+            if (targetType !== notificationType || existingEventIds.has(event.id)) return;
+            existingEventIds.add(event.id);
+            appData.notifications.push({
+                id: event.id,
+                productionEventId: event.id,
+                type: targetType,
+                message: `Order #${order.id}: ${event.message}`,
+                orderId: order.id,
+                read: false,
+                timestamp: new Date(event.timestamp).toLocaleString()
+            });
+            changed = true;
+        });
+    });
+    if (changed) {
+        saveNotifications();
+        updateNotificationBadges();
+    }
+}
+
+function startCustomerOrderRefresh() {
+    if (window.kingPinCustomerOrderRefreshTimer) return;
+    window.kingPinCustomerOrderRefreshTimer = setInterval(async () => {
+        if (appData.currentRole !== 'customer' || document.visibilityState === 'hidden') return;
+        const ordersSection = document.getElementById('ordersSection');
+        const historySection = document.getElementById('purchaseHistorySection');
+        if (ordersSection?.style.display !== 'block' && historySection?.style.display !== 'block') return;
+        try {
+            await refreshCustomerOrdersFromServer(false);
+            if (ordersSection?.style.display === 'block') loadCustomerOrders();
+            if (historySection?.style.display === 'block') loadPurchaseHistory();
+        } catch (error) {
+            console.warn('Unable to refresh customer production updates:', error);
+        }
+    }, 20000);
+}
+
 async function viewOrders() {
     appData.notifications.forEach(notification => {
         if (notification.type === 'customer') {
@@ -2037,20 +2002,10 @@ async function viewOrders() {
     saveNavigationState('customer', 'viewOrders');
     await loadSharedGcashQRCode();
     loadCustomerOrders();
-    fetchSharedOrders({ activeOnly: true }).then(sharedOrders => {
-        const sharedById = new Map(sharedOrders.map(order => [String(order.id), order]));
-        const localIds = new Set(appData.orders.map(order => String(order.id)));
-
-        appData.orders = appData.orders.map(order => sharedById.get(String(order.id)) || order);
-        sharedOrders.forEach(order => {
-            if (!localIds.has(String(order.id))) appData.orders.push(order);
-        });
-
-        saveOrders();
-        loadCustomerOrders();
-    }).catch(error => {
+    refreshCustomerOrdersFromServer(false).then(loadCustomerOrders).catch(error => {
         console.warn('Using local orders because shared orders could not be loaded:', error);
     });
+    startCustomerOrderRefresh();
     updateNotificationBadges();
     updateFloatingBackButton();
 }
@@ -2065,20 +2020,10 @@ function viewPurchaseHistory() {
     document.getElementById('customerServiceSection').style.display = 'none';
     saveNavigationState('customer', 'viewPurchaseHistory');
     loadPurchaseHistory();
-    fetchSharedOrders().then(sharedOrders => {
-        const sharedById = new Map(sharedOrders.map(order => [String(order.id), order]));
-        const localIds = new Set(appData.orders.map(order => String(order.id)));
-
-        appData.orders = appData.orders.map(order => sharedById.get(String(order.id)) || order);
-        sharedOrders.forEach(order => {
-            if (!localIds.has(String(order.id))) appData.orders.push(order);
-        });
-
-        saveOrders();
-        loadPurchaseHistory();
-    }).catch(error => {
+    refreshCustomerOrdersFromServer(false).then(loadPurchaseHistory).catch(error => {
         console.warn('Using local orders because shared orders could not be loaded:', error);
     });
+    startCustomerOrderRefresh();
     updateFloatingBackButton();
 }
 
@@ -2451,7 +2396,7 @@ async function saveProducts() {
         try {
             const response = await fetch(endpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
                 body: payload
             });
             if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) continue;
@@ -3941,7 +3886,8 @@ async function processCustomerOrder() {
         };
 
         try {
-            await saveOrderToSharedServer(orderData);
+            const savedOrder = await saveOrderToSharedServer(orderData, 'create');
+            if (savedOrder && typeof savedOrder === 'object') Object.assign(orderData, savedOrder);
         } catch (error) {
             console.error('Unable to deliver order to admin:', error);
             throw new Error('Hindi naipadala ang order sa admin. Pakisubukan muli; hindi muna inalis ang laman ng cart.');
@@ -4162,6 +4108,69 @@ function isOrderInPurchaseHistory(order) {
     return ['completed', 'delivered', 'cancelled'].includes(order.status);
 }
 
+function formatProductionTimestamp(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'Time unavailable' : date.toLocaleString();
+}
+
+function buildProductionTrackingHtml(order, customerView = false) {
+    const tracker = window.KingPinProductionTracking;
+    const status = getOrderProductionStatus(order);
+    const activeStatus = status === 'on-hold' ? order.previousProductionStatus : status;
+    const activeIndex = tracker.PRODUCTION_STAGES.findIndex(stage => stage.id === activeStatus);
+    const timelineHtml = tracker.PRODUCTION_STAGES.map((stage, index) => {
+        const state = index < activeIndex ? 'done' : index === activeIndex ? 'current' : 'upcoming';
+        const marker = index < activeIndex ? '✓' : String(index + 1);
+        return `<div class="production-timeline-step ${state}"><span class="production-timeline-marker">${marker}</span><span>${escapeProductionHtml(stage.label)}</span></div>`;
+    }).join('');
+    const history = Array.isArray(order.productionHistory) ? [...order.productionHistory].slice(-10).reverse() : [];
+    const historyHtml = history.length
+        ? `<ul class="production-history">${history.map(entry => `<li><strong>${escapeProductionHtml(entry.label || getProductionStageLabel(entry.status))}</strong>${entry.remarks ? `: ${escapeProductionHtml(entry.remarks)}` : ''}<time>${escapeProductionHtml(formatProductionTimestamp(entry.timestamp))}</time></li>`).join('')}</ul>`
+        : '<p>No production updates yet.</p>';
+    const paymentStatus = String(order.paymentStatus || 'pending').replace(/-/g, ' ');
+    const designApprovalStatus = String(order.designApproval?.status || 'not-requested').replace(/-/g, ' ');
+    const designUrl = escapeProductionHtml(order.finalDesignUrl || '');
+    const designPreview = order.finalDesignUrl
+        ? /^image\//i.test(String(order.finalDesignType || ''))
+            ? `<img class="production-design-preview" src="${designUrl}" alt="Final jersey design for order #${escapeProductionHtml(order.id)}">`
+            : `<a href="${designUrl}" target="_blank" rel="noopener">View final jersey design</a>`
+        : '';
+    const approvalActions = customerView && status === 'design-approval' && order.designApproval?.status === 'pending'
+        ? `<div class="production-approval-actions"><button type="button" class="btn btn-primary btn-small" onclick="submitCustomerDesignDecision(${Number(order.id) || 0}, 'approved')">Approve Design</button><button type="button" class="btn btn-secondary btn-small" onclick="submitCustomerDesignDecision(${Number(order.id) || 0}, 'revision-requested')">Request Revision</button></div>`
+        : '';
+    const latestNotification = order.productionNotifications?.slice(-1)[0];
+
+    return `<section class="production-tracking-panel ${customerView ? 'customer-production-tracking' : ''}">
+        <h3>Production Tracking</h3>
+        ${status === 'on-hold' || status === 'cancelled' ? `<p class="production-exception-status">${escapeProductionHtml(getProductionStageLabel(status))}</p>` : ''}
+        <div class="production-timeline-wrap"><div class="production-timeline">${timelineHtml}</div></div>
+        <p><strong>Current stage:</strong> ${escapeProductionHtml(getProductionStageLabel(status))}</p>
+        <p><strong>Payment verification:</strong> ${escapeProductionHtml(paymentStatus)}</p>
+        ${order.estimatedCompletionDate ? `<p><strong>Estimated completion:</strong> ${escapeProductionHtml(order.estimatedCompletionDate)}</p>` : ''}
+        ${order.productionRemarks ? `<p><strong>Latest remarks:</strong> ${escapeProductionHtml(order.productionRemarks)}</p>` : ''}
+        ${latestNotification ? `<p class="production-update-notice"><strong>Latest update:</strong> ${escapeProductionHtml(latestNotification.message)} <time>${escapeProductionHtml(formatProductionTimestamp(latestNotification.timestamp))}</time></p>` : ''}
+        ${order.finalDesignUrl ? `<div class="production-final-design"><strong>Final design</strong><p>Approval: ${escapeProductionHtml(designApprovalStatus)}</p>${designPreview}${order.designApproval?.remarks ? `<p>${escapeProductionHtml(order.designApproval.remarks)}</p>` : ''}${approvalActions}</div>` : ''}
+        <h4>Production Updates</h4>${historyHtml}
+    </section>`;
+}
+
+async function submitCustomerDesignDecision(orderId, decision) {
+    let remarks = '';
+    if (decision === 'revision-requested') {
+        remarks = prompt('What should be revised in the design?')?.trim() || '';
+        if (!remarks) return;
+    }
+    try {
+        const updatedOrder = await saveCustomerDesignDecision(orderId, decision, remarks);
+        appData.orders = appData.orders.map(order => String(order.id) === String(orderId) ? updatedOrder : order);
+        saveOrders();
+        loadCustomerOrders();
+        showStatusUpdateToast(decision === 'approved' ? 'Design approved.' : 'Revision request sent to the shop.');
+    } catch (error) {
+        showStatusUpdateToast(error.message);
+    }
+}
+
 function loadCustomerOrders() {
     const ordersList = document.getElementById('ordersList');
     if (!ordersList) return;
@@ -4225,33 +4234,12 @@ function loadCustomerOrders() {
             ? `<p style="color: #4caf50;">✓ Proof uploaded</p><img src="${paymentProof}" alt="GCash payment proof">`
             : '<p style="color: #ffb74d;">Proof not uploaded yet</p>';
         
-        // Determine status progress
-        const statuses = ['pending', 'processing', 'ready-for-delivery', 'delivered'];
-        const statusProgress = {
-            pending: 0,
-            processing: 1,
-            completed: 3,
-            delivered: 3,
-            'ready-for-delivery': 2
-        };
-        const statusLabels = ['Order Received', 'Production', 'Ready for Delivery', 'Delivered'];
-        const currentStatusIndex = statusProgress[order.status] ?? 0;
-        
-        let statusHtml = '<div class="order-tracking">';
-        statuses.forEach((status, index) => {
-            const isActive = index <= currentStatusIndex;
-            const statusLabel = statusLabels[index];
-            statusHtml += `<div class="tracking-step ${isActive ? 'active' : ''}">
-                <div class="tracking-circle">${index + 1}</div>
-                <div class="tracking-label">${statusLabel}</div>
-            </div>`;
-        });
-        statusHtml += '</div>';
+        const productionTrackingHtml = buildProductionTrackingHtml(order, true);
         
         orderItem.innerHTML = `
             <div class="order-header">
                 <span class="order-id">Order #${order.id}</span>
-                <span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span>
+                <span class="order-status ${getOrderProductionStatus(order)}">${escapeProductionHtml(getProductionStageLabel(getOrderProductionStatus(order)))}</span>
             </div>
             <div class="order-details">
                 <p><strong>Customer:</strong> ${order.customerName}</p>
@@ -4265,7 +4253,7 @@ function loadCustomerOrders() {
                 ${teamOrderSizes}
                 ${order.measurements ? `<p><strong>Measurements:</strong> Chest: ${order.measurements.chest}cm, Waist: ${order.measurements.waist}cm, Length: ${order.measurements.length}cm</p>` : ''}
             </div>
-            ${statusHtml}
+            ${productionTrackingHtml}
             <div class="order-total">Total: ₱${order.totalAmount.toFixed(2)}</div>
             <button type="button" class="btn btn-small view-receipt-button" onclick="viewCustomerReceipt(${order.id})">View Receipt</button>
             ${paymentMethod === 'gcash' && orderGcashQr ? `<div class="order-gcash-qr"><strong>GCash Installment QR:</strong><button type="button" class="btn btn-small qr-view-button" onclick="openGcashQrViewer('${orderGcashQr}')">View larger</button><img src="${orderGcashQr}" alt="GCash installment QR code" onclick="openGcashQrViewer('${orderGcashQr}')"></div>` : ''}
@@ -4525,6 +4513,7 @@ async function requestOrderAction(orderId, requestType, reason) {
         return;
     }
 
+    const originalOrder = { ...order };
     order.requestType = requestType;
     order.requestReason = reason;
     order.requestDate = new Date().toLocaleString();
@@ -4532,31 +4521,42 @@ async function requestOrderAction(orderId, requestType, reason) {
     if (requestType === 'cancel') {
         order.status = 'cancelled';
         order.requestStatus = 'approved';
-
-        saveOrderToHistory({ ...order }, false);
-
-        saveOrders();
         try {
-            await saveOrderToSharedServer(order);
-            sendOrderNotification(order, 'cancelled');
+            const savedOrder = await saveOrderToSharedServer(order, 'customer-update');
+            if (savedOrder && typeof savedOrder === 'object') {
+                Object.assign(order, savedOrder);
+                applyServerOrderUpdate(savedOrder);
+                saveOrderToHistory({ ...savedOrder }, false);
+            }
         } catch (error) {
-            console.error('Unable to sync customer cancellation:', error);
+            Object.assign(order, originalOrder);
+            saveOrders();
+            loadCustomerOrders();
+            showStatusUpdateToast('Cancellation could not be saved. Please try again.');
+            return;
         }
-        addNotification('admin', `⚠️ Customer cancelled order #${orderId}.`, orderId);
-        addNotification('customer', `✓ Your order #${orderId} has been cancelled successfully.`, orderId);
-        saveNotifications();
         loadCustomerOrders();
-        loadAdminOrders();
         showStatusUpdateToast(`✓ Order #${orderId} has been cancelled.`);
         return;
     }
 
     order.requestStatus = 'pending';
-    saveOrders();
 
-    addNotification('admin', `⚠️ ${requestLabel} request for order #${orderId}.`, orderId);
-    addNotification('customer', `✓ Your ${requestLabel.toLowerCase()} request for order #${orderId} was submitted.`, orderId);
-    saveNotifications();
+    try {
+        const savedOrder = await saveOrderToSharedServer(order, 'customer-update');
+        if (savedOrder && typeof savedOrder === 'object') {
+            Object.assign(order, savedOrder);
+            applyServerOrderUpdate(savedOrder);
+        }
+    } catch (error) {
+        Object.assign(order, originalOrder);
+        saveOrders();
+        loadCustomerOrders();
+        console.error('Unable to sync customer refund request:', error);
+        showStatusUpdateToast('Request could not be synced. Please try again.');
+        return;
+    }
+
     loadCustomerOrders();
     showStatusUpdateToast(`✓ ${requestLabel} request submitted.`);
 }
@@ -4629,10 +4629,9 @@ function uploadOrderPaymentProof(orderId, input) {
         order.paymentStatus = 'downpayment-received';
         let sharedSaveSucceeded = false;
         try {
-            await saveOrderToSharedServer(order);
+            const savedOrder = await saveOrderToSharedServer(order, 'customer-update');
             sharedSaveSucceeded = true;
-            order.gcashPaymentProofUrl = `/.netlify/functions/order-design?orderId=${order.id}&media=gcash-proof`;
-            delete order.gcashPaymentProof;
+            if (savedOrder && typeof savedOrder === 'object') Object.assign(order, savedOrder);
         } catch (error) {
             console.error('Payment proof was not shared with admin:', error);
         }
@@ -5222,8 +5221,9 @@ async function loadAdminOrders() {
         const localOnlyOrders = appData.orders.filter(order => !sharedIds.has(String(order.id)));
         appData.orders = [...sharedOrders, ...localOnlyOrders];
         saveOrders();
+        syncProductionNotifications(sharedOrders, 'admin');
         localOnlyOrders.forEach(order => {
-            saveOrderToSharedServer(order).catch(error => {
+            saveOrderToSharedServer(order, 'admin-migrate').catch(error => {
                 console.error('Unable to migrate local order to shared storage:', error);
             });
         });
@@ -5242,6 +5242,7 @@ async function loadAdminOrders() {
             sharedOrders.forEach(order => ordersById.set(String(order.id), order));
             appData.orders = Array.from(ordersById.values());
             saveOrders();
+            syncProductionNotifications(sharedOrders, 'admin');
             renderAdminOrders();
         }).catch(error => {
             console.warn('Unable to import legacy shared orders yet:', error);
@@ -5249,28 +5250,58 @@ async function loadAdminOrders() {
     }
 }
 
+function escapeProductionHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+}
+
+function getOrderProductionStatus(order) {
+    return window.KingPinProductionTracking.normalizeProductionStatus(order);
+}
+
+function getProductionStageLabel(status) {
+    const tracker = window.KingPinProductionTracking;
+    return tracker.PRODUCTION_STAGES.find(stage => stage.id === status)?.label || (status === 'on-hold' ? 'On Hold' : 'Cancelled');
+}
+
 function renderAdminOrders() {
     const ordersList = document.getElementById('adminOrdersList');
     if (!ordersList) return;
     ordersList.innerHTML = '';
 
-    const activeOrders = [...appData.orders]
-        .filter(order => !['completed', 'delivered', 'cancelled'].includes(order.status))
-        .sort((firstOrder, secondOrder) => {
+    const allOrders = [...appData.orders].sort((firstOrder, secondOrder) => {
             const firstValue = Number(firstOrder.id) || 0;
             const secondValue = Number(secondOrder.id) || 0;
             return secondValue - firstValue;
         });
+    const stages = window.KingPinProductionTracking.PRODUCTION_STAGES;
+    const productionStatus = order => getOrderProductionStatus(order);
+    const isDelayed = order => Boolean(order.estimatedCompletionDate)
+        && order.estimatedCompletionDate < new Date().toISOString().slice(0, 10)
+        && !['completed', 'cancelled'].includes(productionStatus(order));
 
-    if (activeOrders.length === 0) {
-        ordersList.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No active or cancelled orders yet</td></tr>';
+    document.getElementById('productionPendingCount').textContent = allOrders.filter(order => ['order-placed', 'payment-verification', 'design-approval'].includes(productionStatus(order))).length;
+    document.getElementById('productionInProgressCount').textContent = allOrders.filter(order => ['printing', 'quality-checking'].includes(productionStatus(order))).length;
+    document.getElementById('productionReadyCount').textContent = allOrders.filter(order => productionStatus(order) === 'ready-for-release').length;
+    document.getElementById('productionCompletedCount').textContent = allOrders.filter(order => productionStatus(order) === 'completed').length;
+    document.getElementById('productionDelayedCount').textContent = allOrders.filter(isDelayed).length;
+
+    const stageFilter = document.getElementById('productionStageFilter')?.value || 'all';
+    const ordersToRender = stageFilter === 'all'
+        ? allOrders
+        : allOrders.filter(order => productionStatus(order) === stageFilter);
+
+    if (ordersToRender.length === 0) {
+        ordersList.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No orders at this production stage.</td></tr>';
         return;
     }
 
-    activeOrders.forEach(order => {
+    ordersToRender.forEach(order => {
         const itemCount = Array.isArray(order.items) ? order.items.length : 0;
-        const customerName = order.customerName || 'N/A';
-        const totalAmount = order.totalAmount || 0;
+        const customerName = escapeProductionHtml(order.customerName || 'N/A');
+        const totalAmount = Number(order.totalAmount) || 0;
+        const status = productionStatus(order);
+        const currentStageIndex = stages.findIndex(stage => stage.id === status);
+        const progress = currentStageIndex < 0 ? 0 : Math.round((currentStageIndex / (stages.length - 1)) * 100);
 
         const row = document.createElement('tr');
         row.innerHTML = `
@@ -5279,128 +5310,125 @@ function renderAdminOrders() {
             <td><span class="admin-order-item-count">${itemCount} ${itemCount === 1 ? 'item' : 'items'}</span>${order.teamOrder?.isTeamOrder ? '<small class="admin-order-team-label">Team order</small>' : ''}</td>
             <td><strong>₱${totalAmount.toFixed(2)}</strong></td>
             <td><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
+            <td class="production-stage-cell"><span class="production-stage-label">${escapeProductionHtml(getProductionStageLabel(status))}</span>${isDelayed(order) ? '<small class="production-delayed-label">Delayed</small>' : ''}<div class="production-progress-track" aria-label="${progress}% complete"><span style="width:${progress}%"></span></div></td>
             <td>${order.date}</td>
-            <td>
-                <select class="status-dropdown" onchange="changeOrderStatus(${order.id}, this.value)">
-                    <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Order Received</option>
-                    <option value="processing" ${order.status === 'processing' ? 'selected' : ''}>Production</option>
-                    <option value="ready-for-delivery" ${order.status === 'ready-for-delivery' ? 'selected' : ''}>Ready for Delivery</option>
-                    <option value="delivered" ${order.status === 'completed' || order.status === 'delivered' ? 'selected' : ''}>Delivered</option>
-                    <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
-                </select>
-                <button type="button" class="btn btn-small admin-order-view-details" onclick="viewOrderDetails(${Number(order.id) || 0})">View Details</button>
-            </td>
+            <td><button type="button" class="btn btn-small admin-order-view-details" onclick="viewOrderDetails(${Number(order.id) || 0})">View Details</button><button type="button" class="btn btn-small" onclick="viewOrderDetails(${Number(order.id) || 0})">Update Production</button></td>
         `;
-        document.getElementById('adminOrdersList').appendChild(row);
+        ordersList.appendChild(row);
     });
 }
 
 // Change Order Status
-async function changeOrderStatus(orderId, newStatus) {
-    const order = appData.orders.find(o => String(o.id) === String(orderId));
-    if (!order) return;
-
-    const oldStatus = order.status;
-    order.status = newStatus;
-    
-    // Save to localStorage
+function applyServerOrderUpdate(updatedOrder) {
+    const existingIndex = appData.orders.findIndex(order => String(order.id) === String(updatedOrder.id));
+    if (existingIndex === -1) appData.orders.push(updatedOrder);
+    else appData.orders[existingIndex] = updatedOrder;
     saveOrders();
+    if (appData.currentRole === 'customer') syncProductionNotifications([updatedOrder], 'customer');
+    if (appData.currentRole === 'admin') renderAdminOrders();
+    if (appData.currentRole === 'customer') loadCustomerOrders();
+}
 
-    // Share the new status so the customer sees the updated progress.
-    const statusSelect = document.querySelector(`select.status-dropdown[onchange*="changeOrderStatus(${orderId},"]`);
-    if (statusSelect) statusSelect.disabled = true;
-
-    renderAdminOrders();
-
+async function submitAdminProductionStage(orderId) {
+    const stageSelect = document.getElementById(`productionStageSelect-${orderId}`);
+    const estimatedCompletionDate = document.getElementById(`productionEstimate-${orderId}`)?.value || '';
+    const remarks = document.getElementById(`productionRemarks-${orderId}`)?.value || '';
+    if (!stageSelect) return;
     try {
-        await saveOrderToSharedServer(order);
+        const updatedOrder = await saveAdminOrderOperation(orderId, 'production-stage', {
+            productionStatus: stageSelect.value,
+            estimatedCompletionDate,
+            remarks
+        });
+        applyServerOrderUpdate(updatedOrder);
+        viewOrderDetails(orderId);
+        showStatusUpdateToast(`Order #${orderId} updated to ${getProductionStageLabel(updatedOrder.productionStatus)}.`);
     } catch (error) {
-        console.error('Unable to sync updated order status:', error);
-        order.status = oldStatus;
-        saveOrders();
-        renderAdminOrders();
-        showStatusUpdateToast('Order status could not be saved. Please try again.');
+        showStatusUpdateToast(error.message);
+    }
+}
+
+async function saveAdminProductionDetails(orderId) {
+    const estimatedCompletionDate = document.getElementById(`productionEstimate-${orderId}`)?.value || '';
+    const remarks = document.getElementById(`productionRemarks-${orderId}`)?.value || '';
+    try {
+        const updatedOrder = await saveAdminOrderOperation(orderId, 'production-details', { estimatedCompletionDate, remarks });
+        applyServerOrderUpdate(updatedOrder);
+        viewOrderDetails(orderId);
+        showStatusUpdateToast(`Production details for order #${orderId} saved.`);
+    } catch (error) {
+        showStatusUpdateToast(error.message);
+    }
+}
+
+async function verifyAdminOrderPayment(orderId) {
+    const remarks = document.getElementById(`productionRemarks-${orderId}`)?.value || '';
+    try {
+        const updatedOrder = await saveAdminOrderOperation(orderId, 'verify-payment', { remarks });
+        applyServerOrderUpdate(updatedOrder);
+        viewOrderDetails(orderId);
+        showStatusUpdateToast(`Payment verified for order #${orderId}.`);
+    } catch (error) {
+        showStatusUpdateToast(error.message);
+    }
+}
+
+async function uploadFinalOrderDesign(orderId, input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+        showStatusUpdateToast('Final design must be under 4 MB.');
+        input.value = '';
         return;
     }
-
-    if (isOrderInPurchaseHistory(order)) {
-        saveOrderToHistory({ ...order });
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+        showStatusUpdateToast('Upload a PNG, JPG, WEBP, GIF, or PDF design.');
+        input.value = '';
+        return;
     }
-    
-    // Add notification for customer
-    const statusMessages = {
-        'processing': `Your order #${orderId} is now being processed`,
-        'ready-for-delivery': `Your order #${orderId} is ready for delivery`,
-        'completed': `Your order #${orderId} has been completed and is ready!`,
-        'delivered': `Your order #${orderId} has been delivered`,
-        'cancelled': `Your order #${orderId} has been cancelled`
-    };
-    
-    if (statusMessages[newStatus]) {
-    addNotification('customer', statusMessages[newStatus], orderId);
-    saveNotifications();
-
-    console.log('📧 Calling sendOrderNotification:', {
-        orderId: orderId,
-        customerEmail: order.customerEmail,
-        newStatus: newStatus
-    });
-
-    sendOrderNotification(order, newStatus);
+    try {
+        const design = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Could not read the final design file.'));
+            reader.readAsDataURL(file);
+        });
+        const remarks = document.getElementById(`productionRemarks-${orderId}`)?.value || '';
+        const updatedOrder = await saveAdminOrderOperation(orderId, 'design-upload', { design, fileName: file.name, fileType: file.type, remarks });
+        applyServerOrderUpdate(updatedOrder);
+        viewOrderDetails(orderId);
+        showStatusUpdateToast(`Final design uploaded for order #${orderId}.`);
+    } catch (error) {
+        showStatusUpdateToast(error.message);
+    } finally {
+        input.value = '';
+    }
 }
-    
-    // Real-time update for admin - highlight the changed row
-    const orderRows = document.querySelectorAll('tr');
-    orderRows.forEach(row => {
-        const orderIdCell = row.querySelector('td');
-        if (orderIdCell && orderIdCell.textContent.includes('#' + orderId)) {
-            // Add flash animation
-            row.style.backgroundColor = '#4a7c59';
-            row.style.transition = 'background-color 0.5s ease';
-            setTimeout(() => {
-                row.style.backgroundColor = '';
-            }, 1000);
-        }
-    });
-    
-    // Show real-time toast notification
-    showStatusUpdateToast(`Order #${orderId} status changed to ${newStatus.toUpperCase()}`);
-    
-    // Refresh only after the shared save completes, preventing stale data from overwriting the new status.
-    await loadAdminOrders();
-    
-    // Update customer view if they have the Notifications tab open
-    setTimeout(() => {
-        if (document.getElementById('notificationsSection').style.display === 'block') {
-            loadCustomerNotifications();
-        }
-    }, 100);
+
+async function changeOrderStatus(orderId, newStatus) {
+    const statusMap = {
+        pending: 'order-placed',
+        processing: 'printing',
+        'ready-for-delivery': 'ready-for-release',
+        delivered: 'completed',
+        completed: 'completed',
+        cancelled: 'cancelled'
+    };
+    const targetStatus = statusMap[newStatus];
+    if (!targetStatus) return;
+    try {
+        const updatedOrder = await saveAdminOrderOperation(orderId, 'production-stage', { productionStatus: targetStatus });
+        applyServerOrderUpdate(updatedOrder);
+        showStatusUpdateToast(`Order #${orderId} moved to ${targetStatus.replace(/-/g, ' ')}.`);
+    } catch (error) {
+        showStatusUpdateToast(error.message);
+    }
 }
 
 // Update Order Status (legacy function - kept for compatibility)
 function updateOrderStatus(orderId) {
-    const order = appData.orders.find(o => o.id === orderId);
-    if (!order) return;
-
-    const statuses = ['design-approval', 'printing', 'completed'];
-    const currentIndex = statuses.indexOf(order.status);
-    const nextStatus = statuses[(currentIndex + 1) % statuses.length];
-
-    order.status = nextStatus;
-    
-    // Update in history if exists
-    let history = JSON.parse(localStorage.getItem('orderHistory')) || [];
-    const historyOrder = history.find(h => h.id === orderId);
-    if (historyOrder) {
-        historyOrder.status = nextStatus;
-        localStorage.setItem('orderHistory', JSON.stringify(history));
-    }
-    
-    // Send notification
-    sendOrderNotification(order, nextStatus);
-    
-    loadAdminOrders();
-    alert(`Order #${orderId} status updated to: ${nextStatus.toUpperCase().replace('-', ' ')}\n\nNotification sent to customer`);
+    return changeOrderStatus(orderId, 'processing');
 }
 
 // View Order Details Modal
@@ -5509,6 +5537,26 @@ function viewOrderDetails(orderStr) {
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
         const paymentProof = getOrderMediaSource(order, 'gcashPaymentProof');
         const paymentHtml = `<div class="admin-order-customer-info"><h3>Payment</h3><div class="admin-order-customer-field"><strong>Method:</strong> ${paymentMethod.toUpperCase()}</div><div class="admin-order-customer-field"><strong>Status:</strong> ${String(order.paymentStatus || 'pending').replace('-', ' ')}</div>${order.gcashDownpaymentAmount ? `<div class="admin-order-customer-field"><strong>Downpayment:</strong> ₱${Number(order.gcashDownpaymentAmount).toFixed(2)}</div>` : ''}${paymentMethod === 'gcash' ? paymentProof ? `<div class="admin-order-customer-field"><strong>Proof:</strong> Uploaded<br><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="GCash payment proof for order #${order.id}" style="max-width:240px; max-height:180px; object-fit:contain; margin-top:8px; border:1px solid #4caf50; border-radius:4px;"></a></div>` : '<div class="admin-order-customer-field">Payment proof not uploaded yet</div>' : ''}</div>`;
+        const currentProductionStatus = getOrderProductionStatus(order);
+        const stageOptions = [...window.KingPinProductionTracking.PRODUCTION_STAGES, { id: 'on-hold', label: 'On Hold' }, { id: 'cancelled', label: 'Cancelled' }]
+            .map(stage => `<option value="${stage.id}" ${stage.id === currentProductionStatus ? 'selected' : ''}>${escapeDetailText(stage.label)}</option>`).join('');
+        const adminProductionHtml = appData.currentRole === 'admin'
+            ? `<section class="production-admin-controls-wrap">
+                <h3>Production Management</h3>
+                <div class="production-admin-controls">
+                    <label>Production stage<select id="productionStageSelect-${Number(order.id) || 0}">${stageOptions}</select></label>
+                    <label>Estimated completion<input type="date" id="productionEstimate-${Number(order.id) || 0}" value="${escapeDetailText(order.estimatedCompletionDate || '')}"></label>
+                    <label class="production-admin-remarks">Production remarks<textarea id="productionRemarks-${Number(order.id) || 0}" maxlength="1000">${escapeDetailText(order.productionRemarks || '')}</textarea></label>
+                    <div class="production-admin-actions">
+                        <button type="button" class="btn btn-primary btn-small" onclick="submitAdminProductionStage(${Number(order.id) || 0})">Update Production Status</button>
+                        <button type="button" class="btn btn-secondary btn-small" onclick="saveAdminProductionDetails(${Number(order.id) || 0})">Save ETA / Remarks</button>
+                        ${order.paymentStatus === 'verified' ? '' : `<button type="button" class="btn btn-secondary btn-small" onclick="verifyAdminOrderPayment(${Number(order.id) || 0})">Verify Payment</button>`}
+                    </div>
+                    <label class="production-admin-remarks">Upload final design<input id="finalDesignFile-${Number(order.id) || 0}" type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" onchange="uploadFinalOrderDesign(${Number(order.id) || 0}, this)"></label>
+                </div>
+                <p><strong>Design approval:</strong> ${escapeDetailText(String(order.designApproval?.status || 'not-requested').replace(/-/g, ' '))}</p>
+            </section>${buildProductionTrackingHtml(order)}`
+            : '';
         
         const contentHtml = `
             <div style="padding: 15px 0;">
@@ -5536,6 +5584,7 @@ function viewOrderDetails(orderStr) {
                 </div>
 
                 ${teamOrderHtml}
+                ${adminProductionHtml}
                 
                 <div>
                     <h3>Order Items</h3>
@@ -5557,68 +5606,6 @@ function viewOrderDetails(orderStr) {
 
 function closeOrderDetailsModal() {
     document.getElementById('orderDetailsModal').style.display = 'none';
-}
-
-// Send Order Notification
-function sendOrderNotification(order, newStatus) {
-    const statusMessages = {
-        'processing': 'Your order is now being processed.',
-        'completed': 'Great news! Your order has been completed and is ready for delivery.',
-        'delivered': 'Your order has been delivered.',
-        'cancelled': 'Your order has been cancelled.'
-    };
-
-    const notificationData = {
-        orderId: order.id,
-        customerEmail: order.customerEmail,
-        customerPhone: order.customerPhone,
-        status: newStatus,
-        message: statusMessages[newStatus] || 'Your order status has been updated.',
-        timestamp: new Date().toLocaleString(),
-        notificationType: 'order-update'
-    };
-
-    // Save notification to local storage
-    let notifications = JSON.parse(localStorage.getItem('notifications')) || [];
-    notifications.push(notificationData);
-    localStorage.setItem('notifications', JSON.stringify(notifications));
-
-    // Send the email through the PHP/PHPMailer endpoint used by XAMPP.
-    if (!notificationData.customerEmail || notificationData.customerEmail === 'N/A') {
-        console.warn('Order status email skipped: customer email is missing.', notificationData);
-        return;
-    }
-
-    const emailEndpoints = [
-        '/.netlify/functions/order-status',
-        new URL('api/notification/order-status.php', window.location.href).toString()
-    ];
-
-    const sendEmail = async () => {
-        for (const emailEndpoint of emailEndpoints) {
-            try {
-                const response = await fetch(emailEndpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(notificationData)
-                });
-                const result = await response.json();
-                if (response.ok && result.success === true) return result;
-            } catch (error) {
-                console.warn(`Unable to send order email through ${emailEndpoint}:`, error);
-            }
-        }
-        throw new Error('Order status email was not sent');
-    };
-
-    sendEmail()
-    .then(result => {
-        console.log('✅ Order email result:', result);
-    })
-    .catch(error => {
-        console.error('❌ Order email failed:', error);
-        showStatusUpdateToast('Order updated, but email could not be sent');
-    });
 }
 
 // Close modal when clicking outside

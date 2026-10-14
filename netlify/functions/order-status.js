@@ -1,4 +1,6 @@
 const nodemailer = require('nodemailer');
+const { connectLambda, getStore } = require('@netlify/blobs');
+const { authenticateEvent } = require('./lib/auth');
 
 function jsonResponse(statusCode, body) {
     return {
@@ -9,8 +11,13 @@ function jsonResponse(statusCode, body) {
 }
 
 exports.handler = async function handler(event) {
+    connectLambda(event);
     if (event.httpMethod === 'OPTIONS') return jsonResponse(204, {});
     if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'Method not allowed' });
+
+    const authentication = authenticateEvent(event);
+    if (!authentication.ok) return jsonResponse(authentication.statusCode, { error: authentication.error });
+    if (authentication.claims.role !== 'admin') return jsonResponse(403, { error: 'Admin access required.' });
 
     const smtpUser = process.env.SMTP_USER;
     const smtpPass = process.env.SMTP_PASS;
@@ -22,13 +29,21 @@ exports.handler = async function handler(event) {
 
     try {
         const data = JSON.parse(event.body || '{}');
-        if (!data.customerEmail || !data.orderId) {
-            return jsonResponse(400, { error: 'Customer email or order ID is missing' });
+        if (!data.orderId || !data.eventId) {
+            return jsonResponse(400, { error: 'Order ID and production event ID are required.' });
         }
 
-        const status = String(data.status || 'updated').replace(/-/g, ' ');
-        const subject = `KingPin Order #${data.orderId} Status Update`;
-        const html = `<h2>KingPin Order Update</h2><p>Your order <strong>#${data.orderId}</strong> has been updated.</p><p><strong>New Status:</strong> ${status}</p><p>${data.message || 'Your order status has been updated.'}</p><p>Thank you for choosing KingPin!</p>`;
+        const store = getStore('kingpin-order-index');
+        const order = await store.get(`order-${String(data.orderId)}`, { type: 'json' });
+        if (!order) return jsonResponse(404, { error: 'Order not found.' });
+        const productionEvent = (order.productionNotifications || []).find(item => item.id === data.eventId);
+        if (!productionEvent) return jsonResponse(403, { error: 'The production event is not associated with this order.' });
+        const sentEmailIds = Array.isArray(order.productionEmailEventIds) ? order.productionEmailEventIds : [];
+        if (sentEmailIds.includes(data.eventId)) return jsonResponse(200, { success: true, duplicate: true });
+
+        const status = String(productionEvent.message || 'updated');
+        const subject = `KingPin Order #${order.id} Status Update`;
+        const html = `<h2>KingPin Order Update</h2><p>Your order <strong>#${order.id}</strong> has been updated.</p><p><strong>New Status:</strong> ${status}</p><p>${order.productionRemarks || ''}</p><p>Thank you for choosing KingPin!</p>`;
 
         if (smtpUser && smtpPass) {
             const transporter = nodemailer.createTransport({
@@ -37,11 +52,13 @@ exports.handler = async function handler(event) {
             });
             await transporter.sendMail({
                 from: process.env.SMTP_FROM || smtpUser,
-                to: data.customerEmail,
-                bcc: data.customerEmail === smtpUser ? undefined : smtpUser,
+                to: order.customerEmail,
+                bcc: order.customerEmail === smtpUser ? undefined : smtpUser,
                 subject,
                 html
             });
+            order.productionEmailEventIds = [...sentEmailIds, data.eventId];
+            await store.setJSON(`order-${String(order.id)}`, order);
             return jsonResponse(200, { success: true, message: 'Order status email sent successfully' });
         }
 
@@ -53,8 +70,8 @@ exports.handler = async function handler(event) {
             },
             body: JSON.stringify({
                 from: resendFromEmail,
-                to: [data.customerEmail],
-                bcc: data.customerEmail === resendFromEmail ? undefined : [resendFromEmail],
+                to: [order.customerEmail],
+                bcc: order.customerEmail === resendFromEmail ? undefined : [resendFromEmail],
                 subject,
                 html
             })
@@ -63,6 +80,8 @@ exports.handler = async function handler(event) {
             console.error('Resend email error:', await response.text());
             return jsonResponse(502, { error: 'Email provider rejected the message' });
         }
+        order.productionEmailEventIds = [...sentEmailIds, data.eventId];
+        await store.setJSON(`order-${String(order.id)}`, order);
         return jsonResponse(200, { success: true, message: 'Order status email sent successfully' });
     } catch (error) {
         console.error('Order status email error:', error);
