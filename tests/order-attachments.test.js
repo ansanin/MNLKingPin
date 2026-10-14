@@ -74,15 +74,15 @@ async function testOrderDesignAttachments() {
 
     assert.strictEqual(response.statusCode, 200);
     const legacyOrders = await ordersStore.get('orders', { type: 'json' });
-    const storedOrders = await orderIndexStore.get('orders', { type: 'json' });
+    const storedOrder = await orderIndexStore.get('order-200', { type: 'json' });
     assert.strictEqual(legacyOrders.length, 1);
     assert.ok(legacyOrders[0].items[0].details.uploadedFile);
-    assert.strictEqual(storedOrders.length, 1);
-    assert.ok(storedOrders[0].items[0].details.uploadedFileUrl);
-    assert.ok(storedOrders[0].gcashQRCodeUrl);
-    assert.ok(storedOrders[0].gcashPaymentProofUrl);
-    assert.strictEqual(storedOrders[0].gcashQRCode, undefined);
-    assert.strictEqual(storedOrders[0].gcashPaymentProof, undefined);
+    assert.ok(storedOrder.items[0].details.uploadedFileUrl);
+    assert.ok(storedOrder.gcashQRCodeUrl);
+    assert.ok(storedOrder.gcashPaymentProofUrl);
+    assert.strictEqual(storedOrder.gcashQRCode, undefined);
+    assert.strictEqual(storedOrder.gcashPaymentProof, undefined);
+    assert.deepStrictEqual(await orderIndexStore.get('active-order-ids', { type: 'json' }), [200]);
 
     const activeResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
     const firstActiveOrders = JSON.parse(activeResponse.body).orders;
@@ -96,7 +96,9 @@ async function testOrderDesignAttachments() {
     assert.ok(savedOrders.find(order => order.id === 200).items[0].details.uploadedFileUrl);
     assert.ok(savedOrders.find(order => order.id === 100).gcashQRCodeUrl);
     assert.ok(savedOrders.find(order => order.id === 100).gcashPaymentProofUrl);
-    assert.strictEqual((await orderIndexStore.get('orders', { type: 'json' })).length, 3);
+    assert.strictEqual((await orderIndexStore.get('order-100', { type: 'json' })).id, 100);
+    assert.strictEqual((await orderIndexStore.get('order-150', { type: 'json' })).id, 150);
+    assert.deepStrictEqual(await orderIndexStore.get('active-order-ids', { type: 'json' }), [100, 150, 200]);
 
     const cachedActiveResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
     const activeOrders = JSON.parse(cachedActiveResponse.body).orders;

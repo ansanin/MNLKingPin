@@ -65,6 +65,31 @@ function isActiveOrder(order) {
     return !['completed', 'delivered', 'cancelled'].includes(String(order.status || '').toLowerCase());
 }
 
+function orderRecordKey(orderId) {
+    return `order-${String(orderId)}`;
+}
+
+async function readOrderRecords(store, orderIds) {
+    const records = await Promise.all(orderIds.map(orderId => store.get(orderRecordKey(orderId), { type: 'json' })));
+    return records.filter(order => order && order.id);
+}
+
+async function writeOrderRecord(store, order) {
+    await store.setJSON(orderRecordKey(order.id), order);
+
+    const allOrderIds = (await store.get('all-order-ids', { type: 'json' })) || [];
+    if (!allOrderIds.some(orderId => String(orderId) === String(order.id))) allOrderIds.push(order.id);
+    const retainedOrderIds = allOrderIds.slice(-500);
+    await store.setJSON('all-order-ids', retainedOrderIds);
+
+    const activeOrderIds = (await store.get('active-order-ids', { type: 'json' })) || [];
+    const nextActiveOrderIds = activeOrderIds.filter(orderId =>
+        String(orderId) !== String(order.id) && retainedOrderIds.some(retainedId => String(retainedId) === String(orderId))
+    );
+    if (isActiveOrder(order)) nextActiveOrderIds.push(order.id);
+    await store.setJSON('active-order-ids', nextActiveOrderIds.slice(-500));
+}
+
 exports.handler = async function handler(event) {
     connectLambda(event);
     if (event.httpMethod === 'OPTIONS') return jsonResponse(204, {});
@@ -76,43 +101,39 @@ exports.handler = async function handler(event) {
 
         if (event.httpMethod === 'GET') {
             const activeOnly = event.queryStringParameters?.scope === 'active';
-            const indexedOrders = (await orderIndexStore.get('orders', { type: 'json' })) || [];
             if (activeOnly) {
-                const activeOrders = indexedOrders.filter(isActiveOrder);
+                const activeOrderIds = (await orderIndexStore.get('active-order-ids', { type: 'json' })) || [];
+                const activeOrders = await readOrderRecords(orderIndexStore, activeOrderIds);
                 const normalizedOrders = await Promise.all(activeOrders.map(order => removeInlineDesignFiles(order, designStore)));
-                const normalizedById = new Map(normalizedOrders.map(result => [String(result.order.id), result.order]));
-                const responseOrders = indexedOrders.map(order => normalizedById.get(String(order.id)) || order);
-                if (normalizedOrders.some(result => result.changed)) {
-                    await orderIndexStore.setJSON('orders', responseOrders);
-                }
-                const activeResponseOrders = responseOrders.filter(isActiveOrder);
-                return jsonResponse(200, { orders: activeResponseOrders });
+                const responseOrders = normalizedOrders.map(result => result.order).filter(isActiveOrder);
+                await Promise.all(responseOrders.map(order => orderIndexStore.setJSON(orderRecordKey(order.id), order)));
+                return jsonResponse(200, { orders: responseOrders });
             }
 
             const legacyOrders = (await store.get('orders', { type: 'json' })) || [];
             const previousIndexedOrders = (await store.get('orders-v2', { type: 'json' })) || [];
+            const previousArrayIndex = (await orderIndexStore.get('orders', { type: 'json' })) || [];
+            const existingOrderIds = (await orderIndexStore.get('all-order-ids', { type: 'json' })) || [];
+            const existingIndexedOrders = await readOrderRecords(orderIndexStore, existingOrderIds);
             const orderById = new Map(legacyOrders.map(order => [String(order.id), order]));
             previousIndexedOrders.forEach(order => orderById.set(String(order.id), order));
-            indexedOrders.forEach(order => orderById.set(String(order.id), order));
+            previousArrayIndex.forEach(order => orderById.set(String(order.id), order));
+            existingIndexedOrders.forEach(order => orderById.set(String(order.id), order));
             const selectedOrders = Array.from(orderById.values());
             const normalizedOrders = await Promise.all(selectedOrders.map(order => removeInlineDesignFiles(order, designStore)));
             const responseOrders = normalizedOrders.map(result => result.order);
-            await orderIndexStore.setJSON('orders', responseOrders);
+            const retainedOrders = responseOrders.slice(-500);
+            await Promise.all(retainedOrders.map(order => orderIndexStore.setJSON(orderRecordKey(order.id), order)));
+            await orderIndexStore.setJSON('all-order-ids', retainedOrders.map(order => order.id));
+            await orderIndexStore.setJSON('active-order-ids', retainedOrders.filter(isActiveOrder).map(order => order.id));
             return jsonResponse(200, { orders: responseOrders });
         }
         if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'Method not allowed' });
 
         const order = JSON.parse(event.body || '{}');
         if (!order.id || !order.customerEmail) return jsonResponse(400, { error: 'A valid order is required' });
-        const orders = (await orderIndexStore.get('orders', { type: 'json' })) || [];
         const normalizedOrder = (await removeInlineDesignFiles(order, designStore)).order;
-        const existingIndex = orders.findIndex(savedOrder => String(savedOrder.id) === String(normalizedOrder.id));
-        if (existingIndex >= 0) {
-            orders[existingIndex] = normalizedOrder;
-        } else {
-            orders.push(normalizedOrder);
-        }
-        await orderIndexStore.setJSON('orders', orders.slice(-500));
+        await writeOrderRecord(orderIndexStore, normalizedOrder);
         return jsonResponse(200, { ok: true });
     } catch (error) {
         console.error('Netlify orders function error:', error);
