@@ -46,7 +46,7 @@ If the admin later forgets the password, update `KINGPIN_ADMIN_USERNAME`/`KINGPI
 2. Admin uploads the final design and advances to Design Approval.
 3. The customer approves it or submits a revision note from My Orders.
 4. The server rejects Printing / Production until approval is recorded, then enforces the remaining stage order. On Hold and Cancelled are exception states.
-5. Stage changes save history, ETA/remarks, an in-app event, and a best-effort email. Email failure does not undo a saved order update.
+5. Stage changes save history, ETA/remarks, and an in-app event synchronously; email is handed to a Netlify Background Function so SMTP/Resend latency does not delay the admin response. Email failure does not undo a saved order update.
 
 The existing `status` field remains synchronized for receipts and purchase history. New tracking fields are additive; there is no SQL migration.
 

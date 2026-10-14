@@ -1,5 +1,4 @@
 const { connectLambda, getStore } = require('@netlify/blobs');
-const nodemailer = require('nodemailer');
 const { authenticateEvent, signAccessToken } = require('./lib/auth');
 const { PRODUCTION_STAGES, normalizeProductionStatus, validateProductionTransition } = require('../../js/production-tracking');
 
@@ -168,30 +167,26 @@ async function persistOrder(indexStore, designStore, order) {
     return normalized;
 }
 
-async function sendProductionEmail(order, status, remarks) {
-    const email = String(order.customerEmail || '').trim();
-    if (!email) return;
-    const label = stageLabel(status);
-    const safeRemarks = String(remarks || '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-    const subject = `KingPin Order #${order.id}: ${label}`;
-    const html = `<h2>Production update</h2><p>Order <strong>#${order.id}</strong> is now at <strong>${label}</strong>.</p>${safeRemarks ? `<p>${safeRemarks}</p>` : ''}${order.estimatedCompletionDate ? `<p>Estimated completion: ${order.estimatedCompletionDate}</p>` : ''}`;
+async function enqueueProductionEmail(event, orderId, eventId) {
+    const headers = event.headers || {};
+    const authorization = headers.authorization || headers.Authorization || '';
+    const host = headers.host || headers.Host;
+    const baseUrl = process.env.DEPLOY_URL || process.env.URL || (host ? `https://${host}` : '');
+    if (!authorization || !baseUrl) {
+        console.warn('Production email was not queued: function origin or admin authorization is unavailable.');
+        return;
+    }
 
     try {
-        if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-            const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } });
-            await transporter.sendMail({ from: process.env.SMTP_FROM || process.env.SMTP_USER, to: email, subject, html });
-            return;
-        }
-        if (process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL) {
-            const response = await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ from: process.env.RESEND_FROM_EMAIL, to: [email], subject, html })
-            });
-            if (!response.ok) console.error('Production email provider rejected the message:', await response.text());
-        }
+        const endpoint = new URL('/.netlify/functions/production-email-background', baseUrl);
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { Authorization: authorization, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId, eventId })
+        });
+        if (!response.ok) console.error('Production email background task was not queued:', response.status);
     } catch (error) {
-        console.error('Production email failed after the order was saved:', error);
+        console.error('Production email background task could not be queued after save:', error);
     }
 }
 
@@ -250,6 +245,7 @@ exports.handler = async function handler(event) {
 
         const payload = JSON.parse(event.body || '{}');
         const action = String(payload.action || '');
+        let emailEventId = '';
         if (action === 'create') {
             if (claims.role !== 'customer') return jsonResponse(403, { error: 'Customer access required.' });
             const order = payload.order;
@@ -334,11 +330,22 @@ exports.handler = async function handler(event) {
                 order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
                 order.productionNotifications.push({ id: require('crypto').randomUUID(), type: 'customer-cancel', message: `Customer cancelled this order: ${order.requestReason}`, timestamp: new Date().toISOString(), read: false });
                 order.productionNotifications.push({ id: require('crypto').randomUUID(), type: 'customer-confirmation', message: 'Your order was cancelled successfully.', timestamp: new Date().toISOString(), read: false });
+                emailEventId = require('crypto').randomUUID();
+                order.productionNotifications.push({
+                    id: emailEventId,
+                    type: 'stage-update',
+                    status: 'cancelled',
+                    statusLabel: 'Cancelled',
+                    remarks: order.requestReason,
+                    message: 'The customer cancelled this order.',
+                    timestamp: new Date().toISOString(),
+                    read: false
+                });
                 changed = true;
             }
             if (!changed) return jsonResponse(400, { error: 'No supported customer update was provided.' });
             const savedOrder = await persistOrder(orderIndexStore, designStore, order);
-            if (incoming.status === 'cancelled') await sendProductionEmail(savedOrder, 'cancelled', order.requestReason);
+            if (emailEventId) await enqueueProductionEmail(event, savedOrder.id, emailEventId);
             return jsonResponse(200, { ok: true, order: decorateOrderMedia(savedOrder, claims) });
         }
 
@@ -361,7 +368,6 @@ exports.handler = async function handler(event) {
         if (!storedOrder) return jsonResponse(404, { error: 'Order not found.' });
         const order = normalizeStoredOrder(storedOrder);
         const operation = String(payload.operation || '');
-        let notifyStatus = '';
         let notifyRemarks = '';
 
         if (operation === 'verify-payment') {
@@ -378,9 +384,18 @@ exports.handler = async function handler(event) {
             }
             addProductionHistory(order, 'payment-verified', order.productionStatus, 'admin', String(payload.remarks || 'Payment verified.'));
             order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
-            order.productionNotifications.push({ id: require('crypto').randomUUID(), type: 'stage-update', message: 'The admin verified your payment.', timestamp: new Date().toISOString(), read: false });
-            notifyStatus = order.productionStatus;
             notifyRemarks = String(payload.remarks || 'Payment verified.');
+            emailEventId = require('crypto').randomUUID();
+            order.productionNotifications.push({
+                id: emailEventId,
+                type: 'stage-update',
+                status: order.productionStatus,
+                statusLabel: stageLabel(order.productionStatus),
+                remarks: notifyRemarks,
+                message: 'The admin verified your payment.',
+                timestamp: new Date().toISOString(),
+                read: false
+            });
         } else if (operation === 'production-stage') {
             const nextStatus = String(payload.productionStatus || '');
             const validation = validateProductionTransition(order, nextStatus);
@@ -397,8 +412,17 @@ exports.handler = async function handler(event) {
             addProductionHistory(order, 'stage-change', nextStatus, 'admin', notifyRemarks);
             if (nextStatus === 'completed') order.completedAt = new Date().toISOString();
             order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
-            order.productionNotifications.push({ id: require('crypto').randomUUID(), type: 'stage-update', message: `Production stage updated to ${stageLabel(nextStatus)}.${notifyRemarks ? ` Remarks: ${notifyRemarks}` : ''}`, timestamp: new Date().toISOString(), read: false });
-            notifyStatus = nextStatus;
+            emailEventId = require('crypto').randomUUID();
+            order.productionNotifications.push({
+                id: emailEventId,
+                type: 'stage-update',
+                status: nextStatus,
+                statusLabel: stageLabel(nextStatus),
+                remarks: notifyRemarks,
+                message: `Production stage updated to ${stageLabel(nextStatus)}.${notifyRemarks ? ` Remarks: ${notifyRemarks}` : ''}`,
+                timestamp: new Date().toISOString(),
+                read: false
+            });
         } else if (operation === 'production-details') {
             if (!validEstimate(payload.estimatedCompletionDate)) return jsonResponse(400, { error: 'Enter a valid estimated completion date.' });
             const nextEstimate = String(payload.estimatedCompletionDate || '');
@@ -427,7 +451,7 @@ exports.handler = async function handler(event) {
         }
 
         const savedOrder = await persistOrder(orderIndexStore, designStore, order);
-        if (notifyStatus) await sendProductionEmail(savedOrder, notifyStatus, notifyRemarks);
+        if (emailEventId) await enqueueProductionEmail(event, savedOrder.id, emailEventId);
         return jsonResponse(200, { ok: true, order: decorateOrderMedia(savedOrder, claims) });
     } catch (error) {
         console.error('Netlify orders function error:', error);
