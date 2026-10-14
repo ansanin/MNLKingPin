@@ -5465,7 +5465,7 @@ function viewOrderDetails(orderStr) {
                         : '';
 
                     uploadedDesignHtml = `<div class="admin-order-uploaded-design">
-                        <strong style="color: #28703d;">📤 Customer uploaded design</strong><br>
+                        <strong>📤 Customer uploaded design</strong><br>
                         Item: ${details.itemDescription || 'N/A'} | Type: ${getUploadedDesignTypeLabel(details.clothingType)}<br>
                         File: ${fileName}${fileLink}${preview}
                     </div>`;
