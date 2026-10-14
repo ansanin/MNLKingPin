@@ -30,6 +30,8 @@ No secret belongs in `index.html`, `js/app.js`, or a committed `.env` file. Acco
 
 The first successful environment-backed admin login bootstraps the admin. Admin credential changes are then stored as a scrypt password hash in the `kingpin-auth` Blob store.
 
+If the admin later forgets the password, update `KINGPIN_ADMIN_USERNAME`/`KINGPIN_ADMIN_PASSWORD` in Netlify and redeploy. The environment credentials are a server-only recovery path: a successful recovery login replaces the stored admin hash with the configured password hash. Keep those Netlify values private and available to the site owner.
+
 ## Existing Data and Accounts
 
 - Existing Netlify order stores and legacy order arrays are read and indexed without deleting the original records. Legacy statuses are mapped into production stages when first read.

@@ -181,22 +181,29 @@ exports.handler = async function handler(event) {
 
         if (data.action === 'admin-login') {
             const savedAdmin = await store.get('admin-credentials', { type: 'json' });
-            if (savedAdmin) {
-                if (!safeEqual(data.username || '', savedAdmin.username) || !await verifyPassword(data.password || '', savedAdmin.passwordHash)) {
-                    return jsonResponse(401, { error: 'Admin username or password is incorrect.' });
-                }
-                return jsonResponse(200, {
-                    ok: true,
-                    token: signAccessToken({ sub: savedAdmin.username, role: 'admin' }),
-                    user: { username: savedAdmin.username },
-                    role: 'admin'
-                });
+            const recoveryUsername = process.env.KINGPIN_ADMIN_USERNAME;
+            const recoveryPassword = process.env.KINGPIN_ADMIN_PASSWORD;
+            if (!savedAdmin && (!recoveryUsername || !recoveryPassword)) {
+                return jsonResponse(503, { error: 'Admin login is not configured on the server.' });
             }
-            const username = process.env.KINGPIN_ADMIN_USERNAME;
-            const password = process.env.KINGPIN_ADMIN_PASSWORD;
-            if (!username || !password) return jsonResponse(503, { error: 'Admin login is not configured on the server.' });
-            if (!safeEqual(data.username || '', username) || !safeEqual(data.password || '', password)) {
+
+            const matchesSavedCredentials = Boolean(savedAdmin)
+                && safeEqual(data.username || '', savedAdmin.username)
+                && await verifyPassword(data.password || '', savedAdmin.passwordHash);
+            const matchesEnvironmentRecovery = Boolean(recoveryUsername && recoveryPassword)
+                && safeEqual(data.username || '', recoveryUsername)
+                && safeEqual(data.password || '', recoveryPassword);
+            if (!matchesSavedCredentials && !matchesEnvironmentRecovery) {
                 return jsonResponse(401, { error: 'Admin username or password is incorrect.' });
+            }
+
+            const username = matchesSavedCredentials ? savedAdmin.username : recoveryUsername;
+            if (matchesEnvironmentRecovery && !matchesSavedCredentials) {
+                await store.setJSON('admin-credentials', {
+                    username,
+                    passwordHash: await hashPassword(recoveryPassword),
+                    updatedAt: new Date().toISOString()
+                });
             }
             return jsonResponse(200, {
                 ok: true,

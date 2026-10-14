@@ -100,8 +100,12 @@ async function run() {
     ...postEvent(loggedInAdmin.token, { action: 'change-admin-credentials', currentPassword: 'test-admin-password', username: 'new-admin', password: 'updated-admin-password' })
   });
   assert.strictEqual(changeResponse.statusCode, 200);
-  assert.strictEqual((await authHandler(postEvent('', { action: 'admin-login', username: 'test-admin', password: 'test-admin-password' }))).statusCode, 401);
+  assert.strictEqual((await authHandler(postEvent('', { action: 'admin-login', username: 'test-admin', password: 'wrong-password' }))).statusCode, 401);
   assert.strictEqual((await authHandler(postEvent('', { action: 'admin-login', username: 'new-admin', password: 'updated-admin-password' }))).statusCode, 200);
+  const recoveredAdmin = await authHandler(postEvent('', { action: 'admin-login', username: 'test-admin', password: 'test-admin-password' }));
+  assert.strictEqual(recoveredAdmin.statusCode, 200);
+  assert.strictEqual(JSON.parse(recoveredAdmin.body).user.username, 'test-admin');
+  assert.strictEqual((await authHandler(postEvent('', { action: 'admin-login', username: 'new-admin', password: 'updated-admin-password' }))).statusCode, 401);
 
   const registration = await authHandler(postEvent('', {
     action: 'register',
