@@ -42,6 +42,20 @@ async function removeInlineDesignFiles(order, designStore) {
     let changed = false;
 
     for (const [itemIndex, item] of (normalized.items || []).entries()) {
+        for (const imageField of ['image', 'productImage', 'sizeChartImage']) {
+            if (typeof item[imageField] === 'string' && item[imageField].startsWith('data:')) {
+                delete item[imageField];
+                changed = true;
+            }
+        }
+        if (Array.isArray(item.images)) {
+            const filteredImages = item.images.filter(image => !(typeof image === 'string' && image.startsWith('data:')));
+            if (filteredImages.length !== item.images.length) {
+                item.images = filteredImages;
+                changed = true;
+            }
+        }
+
         if (item.designType !== 'uploaded' || !item.details) continue;
 
         const uploadedFile = String(item.details.uploadedFile || '');
@@ -106,7 +120,9 @@ exports.handler = async function handler(event) {
                 const activeOrders = await readOrderRecords(orderIndexStore, activeOrderIds);
                 const normalizedOrders = await Promise.all(activeOrders.map(order => removeInlineDesignFiles(order, designStore)));
                 const responseOrders = normalizedOrders.map(result => result.order).filter(isActiveOrder);
-                await Promise.all(responseOrders.map(order => orderIndexStore.setJSON(orderRecordKey(order.id), order)));
+                await Promise.all(normalizedOrders
+                    .filter(result => result.changed)
+                    .map(result => orderIndexStore.setJSON(orderRecordKey(result.order.id), result.order)));
                 return jsonResponse(200, { orders: responseOrders });
             }
 

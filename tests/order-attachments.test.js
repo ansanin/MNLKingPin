@@ -43,6 +43,8 @@ async function testOrderDesignAttachments() {
             id: 1,
             type: 'custom-design',
             designType: 'uploaded',
+            image: imageData,
+            images: [imageData],
             details: { uploadedFile: imageData, fileName: 'legacy.webp', fileType: 'image/webp' }
         }],
         gcashQRCode: imageData,
@@ -65,6 +67,8 @@ async function testOrderDesignAttachments() {
                 id: 2,
                 type: 'custom-design',
                 designType: 'uploaded',
+                image: imageData,
+                images: [imageData],
                 details: { uploadedFile: imageData, fileName: 'design.webp', fileType: 'image/webp' }
                 }],
                 gcashQRCode: imageData,
@@ -82,6 +86,8 @@ async function testOrderDesignAttachments() {
     assert.ok(storedOrder.gcashPaymentProofUrl);
     assert.strictEqual(storedOrder.gcashQRCode, undefined);
     assert.strictEqual(storedOrder.gcashPaymentProof, undefined);
+    assert.strictEqual(storedOrder.items[0].image, undefined);
+    assert.deepStrictEqual(storedOrder.items[0].images, []);
     assert.deepStrictEqual(await orderIndexStore.get('active-order-ids', { type: 'json' }), [200]);
 
     const activeResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
@@ -96,6 +102,8 @@ async function testOrderDesignAttachments() {
     assert.ok(savedOrders.find(order => order.id === 200).items[0].details.uploadedFileUrl);
     assert.ok(savedOrders.find(order => order.id === 100).gcashQRCodeUrl);
     assert.ok(savedOrders.find(order => order.id === 100).gcashPaymentProofUrl);
+    assert.strictEqual(savedOrders.find(order => order.id === 100).items[0].image, undefined);
+    assert.deepStrictEqual(savedOrders.find(order => order.id === 100).items[0].images, []);
     assert.strictEqual((await orderIndexStore.get('order-100', { type: 'json' })).id, 100);
     assert.strictEqual((await orderIndexStore.get('order-150', { type: 'json' })).id, 150);
     assert.deepStrictEqual(await orderIndexStore.get('active-order-ids', { type: 'json' }), [100, 150, 200]);
