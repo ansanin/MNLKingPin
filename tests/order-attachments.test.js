@@ -46,6 +46,12 @@ async function testOrderDesignAttachments() {
             details: { uploadedFile: imageData, fileName: 'legacy.webp', fileType: 'image/webp' }
         }]
     }]);
+    await ordersStore.setJSON('orders-v2', [{
+        id: 150,
+        customerEmail: 'previous-release@example.com',
+        status: 'pending',
+        items: [{ id: 3, type: 'custom-design', designType: 'custom', name: 'Previous release custom design' }]
+    }]);
 
     const response = await ordersHandler({
         httpMethod: 'POST',
@@ -72,19 +78,19 @@ async function testOrderDesignAttachments() {
 
     const activeResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
     const firstActiveOrders = JSON.parse(activeResponse.body).orders;
-    assert.strictEqual(firstActiveOrders.length, 1);
-    assert.strictEqual(firstActiveOrders[0].id, 200);
+    assert.strictEqual(firstActiveOrders.length, 2);
+    assert.deepStrictEqual(firstActiveOrders.map(order => order.id).sort(), [150, 200]);
 
     const historyResponse = await ordersHandler({ httpMethod: 'GET' });
     const savedOrders = JSON.parse(historyResponse.body).orders;
-    assert.strictEqual(savedOrders.length, 2);
+    assert.strictEqual(savedOrders.length, 3);
     assert.ok(savedOrders.find(order => order.id === 100).items[0].details.uploadedFileUrl);
     assert.ok(savedOrders.find(order => order.id === 200).items[0].details.uploadedFileUrl);
-    assert.strictEqual((await orderIndexStore.get('orders', { type: 'json' })).length, 2);
+    assert.strictEqual((await orderIndexStore.get('orders', { type: 'json' })).length, 3);
 
     const cachedActiveResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
     const activeOrders = JSON.parse(cachedActiveResponse.body).orders;
-    assert.strictEqual(activeOrders.length, 2);
+    assert.strictEqual(activeOrders.length, 3);
     assert.ok(activeOrders.every(order => order.status === 'pending'));
     assert.ok(activeOrders.find(order => order.id === 100).items[0].details.uploadedFileUrl);
     assert.ok(activeOrders.find(order => order.id === 200).items[0].details.uploadedFileUrl);

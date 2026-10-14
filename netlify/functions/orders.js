@@ -52,7 +52,16 @@ exports.handler = async function handler(event) {
             const activeOnly = event.queryStringParameters?.scope === 'active';
             const indexedOrders = (await orderIndexStore.get('orders', { type: 'json' })) || [];
             if (activeOnly) {
-                const activeOrders = indexedOrders.filter(isActiveOrder);
+                const previousIndexedOrders = (await store.get('orders-v2', { type: 'json' })) || [];
+                const cachedLegacyOrders = (await store.get('legacy-active-orders', { type: 'json' })) || [];
+                const orderById = new Map();
+                [...cachedLegacyOrders, ...previousIndexedOrders].filter(isActiveOrder).forEach(order => {
+                    orderById.set(String(order.id), order);
+                });
+                indexedOrders.filter(isActiveOrder).forEach(order => {
+                    orderById.set(String(order.id), order);
+                });
+                const activeOrders = Array.from(orderById.values());
                 return jsonResponse(200, { orders: activeOrders });
             }
 
