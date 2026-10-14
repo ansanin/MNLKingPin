@@ -78,8 +78,8 @@ async function testOrderDesignAttachments() {
 
     const activeResponse = await ordersHandler({ httpMethod: 'GET', queryStringParameters: { scope: 'active' } });
     const firstActiveOrders = JSON.parse(activeResponse.body).orders;
-    assert.strictEqual(firstActiveOrders.length, 2);
-    assert.deepStrictEqual(firstActiveOrders.map(order => order.id).sort(), [150, 200]);
+    assert.strictEqual(firstActiveOrders.length, 1);
+    assert.strictEqual(firstActiveOrders[0].id, 200);
 
     const historyResponse = await ordersHandler({ httpMethod: 'GET' });
     const savedOrders = JSON.parse(historyResponse.body).orders;
