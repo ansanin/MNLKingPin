@@ -70,8 +70,10 @@ async function run() {
   process.env.KINGPIN_AUTH_SECRET = originalSecret;
   assert.strictEqual(authWithMissingSecret.statusCode, 401);
   const token = signAccessToken({ sub: 'customer@example.com', role: 'customer' });
+  const [tokenHeader, tokenPayload, tokenSignature] = token.split('.');
+  const changedSignature = `${tokenSignature[0] === 'a' ? 'b' : 'a'}${tokenSignature.slice(1)}`;
   assert.strictEqual(verifyAccessToken(token).sub, 'customer@example.com');
-  assert.strictEqual(verifyAccessToken(token.slice(0, -1) + (token.endsWith('a') ? 'b' : 'a')), null);
+  assert.strictEqual(verifyAccessToken(`${tokenHeader}.${tokenPayload}.${changedSignature}`), null);
   assert.strictEqual(authenticateEvent({ headers: { authorization: `Bearer ${token}` } }).claims.role, 'customer');
   assert.strictEqual(authenticateEvent({ headers: {} }).ok, false);
 

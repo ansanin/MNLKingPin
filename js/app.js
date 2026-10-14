@@ -4269,6 +4269,51 @@ function closeGcashQrViewer() {
 }
 
 // Load Purchase History (Completed/Delivered/Cancelled Orders)
+function buildPurchaseHistoryProducts(order) {
+    const items = Array.isArray(order.items) ? order.items : [];
+    if (!items.length) {
+        const legacyProducts = Array.isArray(order.products) ? order.products : [];
+        const legacyName = order.productName || order.product || '';
+        const fallbackItems = legacyProducts.length ? legacyProducts : legacyName ? [{ name: legacyName, quantity: 1 }] : [];
+        if (!fallbackItems.length) return '<p class="purchase-history-products-empty">Product details are unavailable for this order.</p>';
+        return `<div class="purchase-history-products"><strong>Products Ordered</strong>${fallbackItems.map(item => `<div class="purchase-history-product-row"><span>${escapeProductionHtml(item.name || item.productName || 'Jersey product')}</span><span>Qty: ${Number(item.quantity) || 1}</span></div>`).join('')}</div>`;
+    }
+
+    const rows = items.map(item => {
+        const itemName = String(item.name || item.productName || 'Jersey product');
+        const product = (appData.products || []).find(savedProduct =>
+            (item.id && Number(savedProduct.id) === Number(item.id)) || savedProduct.name === itemName
+        );
+        const productImages = Array.isArray(product?.images) ? product.images : product?.image ? [product.image] : [];
+        const candidateImage = item.image || item.productImage || item.images?.[0] || productImages[0] || '';
+        const safeImage = /^(?:data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+|https?:\/\/|\/)/i.test(String(candidateImage))
+            ? escapeProductionHtml(candidateImage)
+            : '';
+        const customization = item.customization || {};
+        const options = [
+            customization.size ? `Top: ${customization.size}` : '',
+            customization.bottomSize ? `Bottom: ${customization.bottomSize}` : '',
+            customization.color ? `Color: ${customization.color}` : '',
+            customization.name ? `Name: ${customization.name}` : '',
+            customization.number ? `Number: #${customization.number}` : ''
+        ].filter(Boolean).map(escapeProductionHtml).join(' · ');
+        const quantity = Math.max(1, Number(item.quantity) || 1);
+        const unitPrice = Number(item.price ?? product?.price);
+        const itemTotal = Number.isFinite(unitPrice) ? `₱${(unitPrice * quantity).toFixed(2)}` : '';
+
+        return `<div class="purchase-history-product-row">
+            ${safeImage ? `<img src="${safeImage}" alt="${escapeProductionHtml(itemName)}" class="purchase-history-product-image">` : ''}
+            <div class="purchase-history-product-copy">
+                <strong>${escapeProductionHtml(itemName)}</strong>
+                <span>Qty: ${quantity}${itemTotal ? ` · ${itemTotal}` : ''}</span>
+                ${options ? `<small>${options}</small>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+
+    return `<div class="purchase-history-products"><strong>Products Ordered</strong>${rows}</div>`;
+}
+
 function loadPurchaseHistory() {
     const historyList = document.getElementById('purchaseHistoryList');
     if (!historyList) return;
@@ -4289,23 +4334,7 @@ function loadPurchaseHistory() {
     }
 
     purchaseHistory.forEach(order => {
-        // Build items list with customization
-        const itemsList = order.items.map(item => {
-            let customStr = '';
-            if (item.customization) {
-                customStr = ' [';
-                if (item.customization.size) customStr += `Top: ${item.customization.size}`;
-                if (item.customization.bottomSize) customStr += `${item.customization.size ? ', ' : ''}Bottom: ${item.customization.bottomSize}`;
-                if (item.customization.name || item.customization.number) {
-                    if (item.customization.size || item.customization.bottomSize) customStr += ', ';
-                    if (item.customization.name) customStr += `${item.customization.name}`;
-                    if (item.customization.name && item.customization.number) customStr += ' ';
-                    if (item.customization.number) customStr += `#${item.customization.number}`;
-                }
-                customStr += ']';
-            }
-            return `${item.name} (x${item.quantity})${customStr}`;
-        }).join(', ');
+        const productsHtml = buildPurchaseHistoryProducts(order);
         
         const historyItem = document.createElement('div');
         historyItem.className = 'order-item';
@@ -4318,12 +4347,12 @@ function loadPurchaseHistory() {
             <div class="order-details">
                 <p><strong>Customer:</strong> ${order.customerName}</p>
                 <p><strong>Email:</strong> ${order.customerEmail}</p>
-                <p><strong>Products:</strong> ${itemsList}</p>
                 <p><strong>Delivery Address:</strong> ${order.customerAddress}</p>
                 <p><strong>Order Date:</strong> ${order.date}</p>
                 <p><strong>Payment Method:</strong> ${(order.paymentMethod || 'gcash').toUpperCase()}</p>
                 ${order.measurements ? `<p><strong>Measurements:</strong> Chest: ${order.measurements.chest}cm, Waist: ${order.measurements.waist}cm, Length: ${order.measurements.length}cm</p>` : ''}
             </div>
+            ${productsHtml}
             <div class="order-total">Total: ₱${order.totalAmount.toFixed(2)}</div>
             <button type="button" class="btn btn-small view-receipt-button" onclick="viewCustomerReceipt(${order.id})">View Receipt</button>
             ${getOrderReviewsSection(order)}
