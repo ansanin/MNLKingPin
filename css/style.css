@@ -6170,16 +6170,23 @@ body.light-mode .footer-social-link:focus-visible {
     }
 
     #customerPage .design-mode-buttons {
-        grid-template-columns: minmax(0, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
         margin-bottom: 20px;
     }
 
     #customerPage .design-mode-btn {
+        display: flex;
         width: 100%;
         min-width: 0;
-        padding: 12px 10px;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 6px;
         overflow-wrap: anywhere;
+        font-size: .84rem;
+        line-height: 1.2;
+        text-align: center;
     }
 
     #customerPage .design-mode-content {
