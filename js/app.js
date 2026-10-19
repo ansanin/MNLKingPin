@@ -2583,6 +2583,7 @@ function displayProducts(products) {
         };
 
         const productImages = getProductGalleryImages(product);
+        const availableSizes = getAvailableProductSizes(product);
         productCard.innerHTML = `
             <div class="product-image-gallery" aria-label="${product.name} photos">
                 ${productImages.map(image => `<img src="${image.src}" alt="${image.alt}" class="product-image${image.isSizeChart ? ' size-chart-product-image' : ''}" loading="eager" decoding="async">`).join('')}
@@ -2591,6 +2592,7 @@ function displayProducts(products) {
                 <h3>${product.name}</h3>
                 <p style="color: #4a9eff; font-weight: 600; margin-bottom: 8px;">${typeLabels[product.type] || product.type}</p>
                 <p style="color: #a0a0a0; font-size: 0.85em; margin-bottom: 8px;">Premium Quality Jersey</p>
+                <p class="product-available-sizes">Sizes: ${availableSizes.length ? availableSizes.join(', ') : 'Not set'}</p>
                 <div class="product-price">₱${product.price.toFixed(2)}</div>
                 <div class="product-stock ${stockClass}">${stockText}</div>
                 <button class="btn btn-primary btn-small" ${isOutOfStock ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''} onclick="openProductModal(${JSON.stringify(product).replace(/"/g, '&quot;')}); event.stopPropagation();">${isOutOfStock ? 'Out of Stock' : 'View Details'}</button>
@@ -2642,9 +2644,10 @@ function openProductModal(product) {
     if (sizeSelect) sizeSelect.value = '';
     if (productSizeSelect) {
         const availableSizes = getAvailableProductSizes(product);
-        const fallbackSizes = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
-        const sizes = availableSizes.length ? availableSizes : fallbackSizes;
-        productSizeSelect.innerHTML = '<option value="">-- Select Size --</option>' + sizes.map(size => `<option value="${size}">${size}</option>`).join('');
+        productSizeSelect.innerHTML = availableSizes.length
+            ? '<option value="">-- Select Size --</option>' + availableSizes.map(size => `<option value="${size}">${size}</option>`).join('')
+            : '<option value="">No available sizes</option>';
+        productSizeSelect.disabled = availableSizes.length === 0;
         productSizeSelect.value = '';
     }
     const chartContainer = document.getElementById('modalProductSizeChart');
@@ -5043,8 +5046,7 @@ function openEditProductModal(index) {
     document.getElementById('editProductPrice').value = product.price;
     document.getElementById('editProductStock').value = product.stock;
     document.getElementById('editProductDescription').value = product.description || '';
-    const legacySizes = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
-    document.getElementById('editProductAvailableSizes').value = getAvailableProductSizes(product).join(', ') || legacySizes.join(', ');
+    document.getElementById('editProductAvailableSizes').value = getAvailableProductSizes(product).join(', ');
     
     // Show current product image preview
     const imagePreview = document.getElementById('editProductImagePreview');
