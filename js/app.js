@@ -2605,7 +2605,26 @@ function displayProducts(products) {
 }
 
 // Open Product Modal
-function openProductModal(product) {
+async function openProductModal(product) {
+    const requestedProduct = product;
+    try {
+        sharedProductsRequest = null;
+        const latestProducts = await fetchSharedProducts();
+        appData.products = latestProducts;
+        localStorage.setItem('kingpinProducts', JSON.stringify(latestProducts));
+        product = latestProducts.find(item =>
+            String(item.id) === String(requestedProduct.id) || item.name === requestedProduct.name
+        ) || requestedProduct;
+
+        if (document.getElementById('searchProducts') && document.getElementById('categoryFilter')) {
+            filterProducts();
+        } else {
+            displayProducts(latestProducts);
+        }
+    } catch (error) {
+        console.warn('Unable to refresh products before opening details:', error);
+    }
+
     appData.selectedProduct = product;
     const modalGallery = document.getElementById('modalProductGallery');
     if (modalGallery) {
