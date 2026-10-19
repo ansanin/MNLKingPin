@@ -602,7 +602,7 @@ function fetchSharedProducts() {
         ? ['api/products.php', 'api/products']
         : ['api/products', '/.netlify/functions/products', 'api/products.php'];
 
-    sharedProductsRequest = (async () => {
+    const request = (async () => {
         let lastError = new Error('Product API is not available on this host');
 
         for (const endpoint of endpoints) {
@@ -628,12 +628,15 @@ function fetchSharedProducts() {
         const data = await staticResponse.json();
         if (!Array.isArray(data.products)) throw lastError;
         return data.products;
-    })().catch(error => {
-        sharedProductsRequest = null;
-        throw error;
     });
 
-    return sharedProductsRequest;
+    const sharedRequest = request.finally(() => {
+        if (sharedProductsRequest === sharedRequest) {
+            sharedProductsRequest = null;
+        }
+    });
+    sharedProductsRequest = sharedRequest;
+    return sharedRequest;
 }
 
 function loadProductsFromStorage() {
