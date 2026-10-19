@@ -2405,6 +2405,7 @@ async function saveProducts() {
             const result = await response.json();
             if (result.ok === true) {
                 console.log('Products synced to shared server.');
+                sharedProductsRequest = null;
                 return true;
             }
         } catch (error) {
@@ -5046,7 +5047,10 @@ function openEditProductModal(index) {
     document.getElementById('editProductPrice').value = product.price;
     document.getElementById('editProductStock').value = product.stock;
     document.getElementById('editProductDescription').value = product.description || '';
-    document.getElementById('editProductAvailableSizes').value = getAvailableProductSizes(product).join(', ');
+    const productSizes = getAvailableProductSizes(product);
+    document.getElementById('editProductAvailableSizes').value = productSizes.length
+        ? productSizes.join(', ')
+        : 'XS, S, M, L, XL, 2XL, 3XL, 4XL, 5XL, 6XL';
     
     // Show current product image preview
     const imagePreview = document.getElementById('editProductImagePreview');
