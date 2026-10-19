@@ -63,6 +63,9 @@ function switchToAdminLogin() {
 }
 
 let sharedProductsRequest = null;
+let customerProductsRefreshRequest = null;
+let customerProductsRefreshTimer = null;
+let lastCustomerProductsRefresh = 0;
 
 function applyTheme(theme) {
     const isLight = theme === 'light';
@@ -2452,7 +2455,66 @@ async function loadProducts() {
 
     displayProducts(appData.products);
     setupSearchAndFilter();
+    startCustomerProductsRefresh();
 }
+
+function startCustomerProductsRefresh() {
+    if (appData.currentRole !== 'customer' || customerProductsRefreshTimer !== null) return;
+    customerProductsRefreshTimer = setInterval(refreshCustomerProducts, 15000);
+}
+
+async function refreshCustomerProducts() {
+    if (appData.currentRole !== 'customer' || document.visibilityState === 'hidden') return;
+    if (customerProductsRefreshRequest) return customerProductsRefreshRequest;
+    if (Date.now() - lastCustomerProductsRefresh < 10000) return;
+
+    lastCustomerProductsRefresh = Date.now();
+    sharedProductsRequest = null;
+    customerProductsRefreshRequest = fetchSharedProducts()
+        .then(products => {
+            if (JSON.stringify(products) === JSON.stringify(appData.products)) return;
+
+            appData.products = products;
+            localStorage.setItem('kingpinProducts', JSON.stringify(products));
+
+            if (document.getElementById('searchProducts') && document.getElementById('categoryFilter')) {
+                filterProducts();
+            } else {
+                displayProducts(products);
+            }
+
+            const selectedProduct = appData.selectedProduct;
+            if (!selectedProduct || document.getElementById('productModal').style.display !== 'block') return;
+
+            const latestProduct = products.find(item =>
+                String(item.id) === String(selectedProduct.id) || item.name === selectedProduct.name
+            );
+            if (!latestProduct) return;
+
+            appData.selectedProduct = latestProduct;
+            const sizeSelect = document.getElementById('modalProductSize');
+            const selectedSize = sizeSelect.value;
+            const availableSizes = getAvailableProductSizes(latestProduct);
+            sizeSelect.innerHTML = availableSizes.length
+                ? '<option value="">-- Select Size --</option>' + availableSizes.map(size => `<option value="${size}">${size}</option>`).join('')
+                : '<option value="">No available sizes</option>';
+            sizeSelect.disabled = availableSizes.length === 0;
+            sizeSelect.value = availableSizes.includes(selectedSize) ? selectedSize : '';
+        })
+        .catch(error => {
+            console.warn('Unable to refresh shared customer products:', error);
+        })
+        .finally(() => {
+            customerProductsRefreshRequest = null;
+        });
+
+    return customerProductsRefreshRequest;
+}
+
+window.addEventListener('focus', refreshCustomerProducts);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshCustomerProducts();
+});
 
 function loadDefaultProducts() {
     // Sample products - Premium Quality Jerseys
