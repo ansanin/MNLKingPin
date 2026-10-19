@@ -244,37 +244,18 @@ function addBottomsToCart() {
 function setupFileUploadPreview() {
     const fileInput = document.getElementById('uploadDesignFile');
     const previewContainer = document.getElementById('uploadDesignFilesPreview');
+    const fileCount = document.getElementById('uploadDesignFileCount');
     const dropZone = document.getElementById('uploadDesignDropZone');
     
     if (!fileInput || fileInput.dataset.previewSetup === 'true') return;
     fileInput.dataset.previewSetup = 'true';
     
-    const showFiles = files => {
-        const selectedFiles = Array.from(files || []);
-        if (selectedFiles.length > 6) {
-            alert('Choose up to 6 design files per order.');
-            fileInput.value = '';
-            designData.uploadedDesignFiles = [];
-            previewContainer.innerHTML = '';
-            return;
-        }
-        if (selectedFiles.some(file => !file.type.startsWith('image/') && file.type !== 'application/pdf')) {
-            alert('Only image files and PDFs are supported.');
-            fileInput.value = '';
-            designData.uploadedDesignFiles = [];
-            previewContainer.innerHTML = '';
-            return;
-        }
-        if (selectedFiles.some(file => file.size > 10 * 1024 * 1024)) {
-            alert('Each file must be 10MB or smaller.');
-            fileInput.value = '';
-            designData.uploadedDesignFiles = [];
-            previewContainer.innerHTML = '';
-            return;
-        }
-        designData.uploadedDesignFiles = selectedFiles;
+    const renderSelectedFiles = () => {
         previewContainer.innerHTML = '';
-        selectedFiles.forEach(file => {
+        fileCount.textContent = designData.uploadedDesignFiles.length
+            ? `${designData.uploadedDesignFiles.length} file${designData.uploadedDesignFiles.length === 1 ? '' : 's'} selected`
+            : '';
+        designData.uploadedDesignFiles.forEach((file, fileIndex) => {
             const preview = document.createElement('div');
             preview.className = 'upload-design-file-preview';
             if (file.type.startsWith('image/')) {
@@ -286,8 +267,38 @@ function setupFileUploadPreview() {
             const name = document.createElement('span');
             name.textContent = file.name;
             preview.appendChild(name);
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'upload-design-file-remove';
+            removeButton.setAttribute('aria-label', `Remove ${file.name}`);
+            removeButton.textContent = 'Remove';
+            removeButton.addEventListener('click', () => {
+                designData.uploadedDesignFiles.splice(fileIndex, 1);
+                renderSelectedFiles();
+            });
+            preview.appendChild(removeButton);
             previewContainer.appendChild(preview);
         });
+    };
+
+    const showFiles = files => {
+        const addedFiles = Array.from(files || []);
+        if (!addedFiles.length) return;
+        if (addedFiles.some(file => !file.type.startsWith('image/') && file.type !== 'application/pdf')) {
+            alert('Only image files and PDFs are supported.');
+            return;
+        }
+        if (addedFiles.some(file => file.size > 10 * 1024 * 1024)) {
+            alert('Each file must be 10MB or smaller.');
+            return;
+        }
+
+        const existingKeys = new Set(designData.uploadedDesignFiles.map(file => `${file.name}:${file.size}:${file.lastModified}`));
+        const uniqueAddedFiles = addedFiles.filter(file => !existingKeys.has(`${file.name}:${file.size}:${file.lastModified}`));
+        const selectedFiles = [...designData.uploadedDesignFiles, ...uniqueAddedFiles];
+        designData.uploadedDesignFiles = selectedFiles;
+        fileInput.value = '';
+        renderSelectedFiles();
     };
 
     fileInput.addEventListener('change', () => showFiles(fileInput.files));
@@ -412,6 +423,7 @@ async function addUploadedDesignToCart() {
         document.getElementById('uploadClothingType').value = '';
         document.getElementById('uploadItemDescription').value = '';
         document.getElementById('uploadDesignFilesPreview').innerHTML = '';
+        document.getElementById('uploadDesignFileCount').textContent = '';
         designData.uploadedDesignFiles = [];
         
         // Switch back to shop

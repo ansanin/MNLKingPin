@@ -299,13 +299,14 @@
                     
                     <div class="upload-design-container">
                         <div class="form-group">
-                            <label for="uploadDesignFile" style="font-weight: 600; color: #d4af37;">📁 Design File:</label>
+                            <label for="uploadDesignFile" style="font-weight: 600; color: #d4af37;">📁 Design Photos / Files:</label>
                             <input type="file" id="uploadDesignFile" accept="image/*,.pdf" multiple required>
                             <div id="uploadDesignDropZone" class="upload-design-drop-zone" role="button" tabindex="0" aria-label="Choose or drop design photos">
-                                <span>Drop design photos here or click to choose</span>
+                                <span>Add photos: drop here or click to choose more</span>
                             </div>
+                            <small id="uploadDesignFileCount" class="upload-design-file-count" aria-live="polite"></small>
                             <div id="uploadDesignFilesPreview" class="upload-design-files-preview"></div>
-                            <small style="color: #a0a0a0; display: block; margin-top: 5px;">Supported: JPG, PNG, PDF (Max 10MB)</small>
+                            <small style="color: #a0a0a0; display: block; margin-top: 5px;">Select several at once or add more in later selections. Supported: JPG, PNG, PDF (Max 10MB each).</small>
                         </div>
 
                         <div class="form-row">
@@ -322,11 +323,6 @@
                                 <label for="uploadItemDescription">Item Description:</label>
                                 <input type="text" id="uploadItemDescription" placeholder="e.g., Basketball Jersey" required>
                             </div>
-                        </div>
-
-                        <div id="uploadDesignPreview" class="upload-design-preview" style="display: none;">
-                            <h4 style="color: #d4af37; margin-bottom: 10px;">Preview:</h4>
-                            <div id="uploadDesignPreviewImages" class="upload-design-files-preview"></div>
                         </div>
 
                         <button type="button" class="btn btn-secondary" onclick="addUploadedDesignToCart()">Add Uploaded Design to Cart</button>

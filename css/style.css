@@ -6748,6 +6748,20 @@ body.light-mode .footer-social-link:focus-visible {
     text-align: center;
 }
 
+.upload-design-file-count {
+    color: #d4af37;
+    display: block;
+    margin-top: 8px;
+}
+
+.upload-design-file-remove {
+    background: transparent;
+    border: 1px solid #8d793b;
+    color: #e5c85c;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
 .team-size-chart,
 .product-size-chart {
     margin-top: 10px;
