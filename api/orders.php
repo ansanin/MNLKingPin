@@ -29,11 +29,37 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$order = json_decode(file_get_contents('php://input'), true);
+$payload = json_decode(file_get_contents('php://input'), true);
+$order = is_array($payload['order'] ?? null) ? $payload['order'] : $payload;
 if (!is_array($order) || empty($order['id']) || empty($order['customerEmail'])) {
     http_response_code(400);
     echo json_encode(['error' => 'A valid order is required']);
     exit;
+}
+
+$teamOrder = $order['teamOrder'] ?? [];
+if (!empty($teamOrder['isTeamOrder'])) {
+    $totalPlayers = filter_var($teamOrder['totalPlayers'] ?? null, FILTER_VALIDATE_INT);
+    $teamNotes = trim((string) ($teamOrder['teamNotes'] ?? ''));
+    if ($totalPlayers === false || $totalPlayers < 5) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Team orders require at least 5 players.']);
+        exit;
+    }
+    if ($teamNotes === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'Exact player sizes and team notes are required.']);
+        exit;
+    }
+
+    $order['teamOrder']['teamNotes'] = $teamNotes;
+    $teamTotal = 0;
+    foreach (($order['items'] ?? []) as $item) {
+        $price = (float) ($item['price'] ?? 0);
+        $quantity = max(1, (int) ($item['quantity'] ?? 1));
+        if ($price > 0) $teamTotal += $price * $quantity * $totalPlayers;
+    }
+    $order['totalAmount'] = $teamTotal;
 }
 
 $directory = dirname($storageFile);

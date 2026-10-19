@@ -5,7 +5,7 @@
 const designData = {
     currentDesignMode: 'customize',
     currentClothingType: 'tops',
-    uploadedDesignFile: null,
+    uploadedDesignFiles: [],
     presets: [
         {
             id: 1,
@@ -243,39 +243,72 @@ function addBottomsToCart() {
 // Setup File Upload Preview
 function setupFileUploadPreview() {
     const fileInput = document.getElementById('uploadDesignFile');
-    const previewContainer = document.getElementById('uploadDesignPreview');
-    const previewImage = document.getElementById('uploadDesignPreviewImage');
+    const previewContainer = document.getElementById('uploadDesignFilesPreview');
+    const dropZone = document.getElementById('uploadDesignDropZone');
     
-    if (!fileInput) return;
+    if (!fileInput || fileInput.dataset.previewSetup === 'true') return;
+    fileInput.dataset.previewSetup = 'true';
     
-    fileInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        
-        if (file) {
-            // Validate file size (10MB max)
-            if (file.size > 10 * 1024 * 1024) {
-                alert('File size exceeds 10MB limit');
-                fileInput.value = '';
-                previewContainer.style.display = 'none';
-                return;
-            }
-            
-            // Store file and show preview
-            designData.uploadedDesignFile = file;
-            const reader = new FileReader();
-            
-            reader.onload = function(e) {
-                if (file.type.startsWith('image/')) {
-                    previewImage.src = e.target.result;
-                    previewContainer.style.display = 'block';
-                } else {
-                    previewContainer.style.display = 'none';
-                }
-            };
-            
-            reader.readAsDataURL(file);
+    const showFiles = files => {
+        const selectedFiles = Array.from(files || []);
+        if (selectedFiles.length > 6) {
+            alert('Choose up to 6 design files per order.');
+            fileInput.value = '';
+            designData.uploadedDesignFiles = [];
+            previewContainer.innerHTML = '';
+            return;
         }
-    });
+        if (selectedFiles.some(file => !file.type.startsWith('image/') && file.type !== 'application/pdf')) {
+            alert('Only image files and PDFs are supported.');
+            fileInput.value = '';
+            designData.uploadedDesignFiles = [];
+            previewContainer.innerHTML = '';
+            return;
+        }
+        if (selectedFiles.some(file => file.size > 10 * 1024 * 1024)) {
+            alert('Each file must be 10MB or smaller.');
+            fileInput.value = '';
+            designData.uploadedDesignFiles = [];
+            previewContainer.innerHTML = '';
+            return;
+        }
+        designData.uploadedDesignFiles = selectedFiles;
+        previewContainer.innerHTML = '';
+        selectedFiles.forEach(file => {
+            const preview = document.createElement('div');
+            preview.className = 'upload-design-file-preview';
+            if (file.type.startsWith('image/')) {
+                const image = document.createElement('img');
+                image.alt = file.name;
+                image.src = URL.createObjectURL(file);
+                preview.appendChild(image);
+            }
+            const name = document.createElement('span');
+            name.textContent = file.name;
+            preview.appendChild(name);
+            previewContainer.appendChild(preview);
+        });
+    };
+
+    fileInput.addEventListener('change', () => showFiles(fileInput.files));
+    if (dropZone) {
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                fileInput.click();
+            }
+        });
+        ['dragenter', 'dragover'].forEach(type => dropZone.addEventListener(type, event => {
+            event.preventDefault();
+            dropZone.classList.add('drag-over');
+        }));
+        ['dragleave', 'drop'].forEach(type => dropZone.addEventListener(type, event => {
+            event.preventDefault();
+            dropZone.classList.remove('drag-over');
+        }));
+        dropZone.addEventListener('drop', event => showFiles(event.dataTransfer.files));
+    }
 }
 
 function readDesignFileAsDataUrl(file) {
@@ -327,30 +360,43 @@ async function prepareUploadedDesignFile(file) {
 
 // Add Uploaded Design to Cart
 async function addUploadedDesignToCart() {
-    const file = designData.uploadedDesignFile;
+    const files = designData.uploadedDesignFiles;
     const clothingType = document.getElementById('uploadClothingType').value;
     const itemDescription = document.getElementById('uploadItemDescription').value;
     
-    if (!file || !clothingType || !itemDescription) {
-        alert('Please upload a file, select item type, and provide a description');
+    if (!files.length || !clothingType || !itemDescription) {
+        alert('Please upload at least one file, select item type, and provide a description');
         return;
     }
 
     try {
-        const uploadedDesign = await prepareUploadedDesignFile(file);
+        const uploadedFiles = await Promise.all(files.map(async file => {
+            const prepared = await prepareUploadedDesignFile(file);
+            return {
+                uploadedFile: prepared.data,
+                fileName: prepared.fileName,
+                fileType: prepared.fileType
+            };
+        }));
+        if (uploadedFiles.reduce((total, file) => total + file.uploadedFile.length, 0) > 4500000) {
+            throw new Error('The combined design files are too large. Choose fewer or smaller photos.');
+        }
+        const firstImage = uploadedFiles.find(file => file.fileType.startsWith('image/'));
         const cartItem = {
             id: Date.now(),
             name: `${itemDescription} (Custom Upload)`,
             type: 'custom-design',
             quantity: 1,
             price: 600, // Price for uploaded custom design
+            image: firstImage?.uploadedFile || '',
             designType: 'uploaded',
             details: {
                 clothingType: clothingType,
                 itemDescription: itemDescription,
-                uploadedFile: uploadedDesign.data,
-                fileName: uploadedDesign.fileName,
-                fileType: uploadedDesign.fileType,
+                uploadedFile: uploadedFiles[0].uploadedFile,
+                uploadedFiles,
+                fileName: uploadedFiles.map(file => file.fileName).join(', '),
+                fileType: uploadedFiles[0].fileType,
                 uploadDate: new Date().toLocaleString()
             }
         };
@@ -365,8 +411,8 @@ async function addUploadedDesignToCart() {
         document.getElementById('uploadDesignFile').value = '';
         document.getElementById('uploadClothingType').value = '';
         document.getElementById('uploadItemDescription').value = '';
-        document.getElementById('uploadDesignPreview').style.display = 'none';
-        designData.uploadedDesignFile = null;
+        document.getElementById('uploadDesignFilesPreview').innerHTML = '';
+        designData.uploadedDesignFiles = [];
         
         // Switch back to shop
         document.getElementById('designSection').style.display = 'none';

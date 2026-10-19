@@ -13,6 +13,7 @@ exports.handler = async function handler(event) {
     connectLambda(event);
     const orderId = String(event.queryStringParameters?.orderId || '');
     const itemIndex = String(event.queryStringParameters?.itemIndex || '');
+    const fileIndex = String(event.queryStringParameters?.fileIndex ?? '');
     const mediaType = String(event.queryStringParameters?.media || '');
     const accessTicket = String(event.queryStringParameters?.access || '');
     const isOrderMedia = ['gcash-qr', 'gcash-proof', 'final-design'].includes(mediaType);
@@ -31,6 +32,7 @@ exports.handler = async function handler(event) {
             String(ticketClaims.mediaOrderId) !== orderId
             || ticketClaims.media !== (isOrderMedia ? mediaType : 'item-design')
             || (!isOrderMedia && String(ticketClaims.itemIndex) !== itemIndex)
+            || (!isOrderMedia && String(ticketClaims.fileIndex || '') !== fileIndex)
         )) return jsonResponse(403, { error: 'This media ticket does not grant access to the requested file.' });
 
         const orderStore = getStore('kingpin-order-index');
@@ -52,7 +54,9 @@ exports.handler = async function handler(event) {
         const store = getStore('kingpin-order-designs');
         const key = mediaType === 'final-design'
             ? `order-final-design-${orderId}`
-            : isOrderMedia ? `order-media-${orderId}-${mediaType}` : `order-design-${orderId}-${itemIndex}`;
+            : isOrderMedia ? `order-media-${orderId}-${mediaType}` : fileIndex !== ''
+                ? `order-design-${orderId}-${itemIndex}-${fileIndex}`
+                : `order-design-${orderId}-${itemIndex}`;
         const dataUrl = await store.get(key, { type: 'text' });
         const match = String(dataUrl || '').match(/^data:(image\/(?:png|jpeg|gif|webp)|application\/pdf);base64,([a-z0-9+/=]+)$/i);
         if (!match) return jsonResponse(404, { error: 'Order design not found' });

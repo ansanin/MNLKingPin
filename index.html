@@ -300,7 +300,11 @@
                     <div class="upload-design-container">
                         <div class="form-group">
                             <label for="uploadDesignFile" style="font-weight: 600; color: #d4af37;">📁 Design File:</label>
-                            <input type="file" id="uploadDesignFile" accept="image/*,.pdf" required>
+                            <input type="file" id="uploadDesignFile" accept="image/*,.pdf" multiple required>
+                            <div id="uploadDesignDropZone" class="upload-design-drop-zone" role="button" tabindex="0" aria-label="Choose or drop design photos">
+                                <span>Drop design photos here or click to choose</span>
+                            </div>
+                            <div id="uploadDesignFilesPreview" class="upload-design-files-preview"></div>
                             <small style="color: #a0a0a0; display: block; margin-top: 5px;">Supported: JPG, PNG, PDF (Max 10MB)</small>
                         </div>
 
@@ -322,7 +326,7 @@
 
                         <div id="uploadDesignPreview" class="upload-design-preview" style="display: none;">
                             <h4 style="color: #d4af37; margin-bottom: 10px;">Preview:</h4>
-                            <img id="uploadDesignPreviewImage" class="upload-design-preview-image" src="" alt="Design Preview">
+                            <div id="uploadDesignPreviewImages" class="upload-design-files-preview"></div>
                         </div>
 
                         <button type="button" class="btn btn-secondary" onclick="addUploadedDesignToCart()">Add Uploaded Design to Cart</button>
@@ -501,6 +505,8 @@
                                     <option value="">-- Select category --</option>
                                     <option value="Basketball">Basketball</option>
                                     <option value="Volleyball">Volleyball</option>
+                                    <option value="Soccer">Soccer</option>
+                                    <option value="Badminton">Badminton</option>
                                     <option value="Football">Football</option>
                                     <option value="Esports">Esports</option>
                                     <option value="School Team">School Team</option>
@@ -513,109 +519,27 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="teamPlayers">Number of Players:</label>
-                                <input type="number" id="teamPlayers" min="2" placeholder="e.g., 12" onchange="renderTeamSizeRows()">
+                                <input type="number" id="teamPlayers" min="5" placeholder="At least 5 players">
                             </div>
                             <div class="form-group">
-                                <label for="teamSizes">Player Sizes (Upper and Bottom):</label>
-                                <input type="hidden" id="teamSizes">
-                                <div id="teamSizeRows" style="display: grid; gap: 8px; margin-top: 8px;"></div>
+                                <label>Size Chart:</label>
+                                <div id="teamSizeChart" class="team-size-chart">Choose a team category to view its size chart.</div>
                             </div>
                         </div>
 
                         <div class="form-group">
-                            <label for="teamNotes">Team Notes:</label>
-                            <textarea id="teamNotes" rows="3" placeholder="Add required size, design, or delivery notes for the team order..."></textarea>
+                            <label for="teamNotes">Team Notes (required):</label>
+                            <textarea id="teamNotes" rows="3" placeholder="Required: each player's exact size, any size adjustments, and other order notes..."></textarea>
                         </div>
                     </div>
-
-                    <!-- Collapsible measurement and size information -->
-                    <section class="checkout-info-section measurements-section">
-                        <button type="button" class="checkout-info-toggle" aria-expanded="false" aria-controls="checkoutMeasurementsPanel" onclick="toggleCheckoutInfoPanel('checkoutMeasurementsPanel', this)">
-                            <span>📏 Measurements</span><span class="checkout-info-chevron" aria-hidden="true">+</span>
-                        </button>
-                        <div id="checkoutMeasurementsPanel" class="checkout-info-panel" hidden>
-                            <p class="info-text">Provide measurements in centimeters for accurate sizing.</p>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="chestMeasurement">Chest (cm):</label>
-                                    <input type="number" id="chestMeasurement" placeholder="e.g., 90" min="0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="waistMeasurement">Waist (cm):</label>
-                                    <input type="number" id="waistMeasurement" placeholder="e.g., 75" min="0">
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label for="lengthMeasurement">Length/Height (cm):</label>
-                                <input type="number" id="lengthMeasurement" placeholder="e.g., 170" min="0">
-                            </div>
-                        </div>
-                    </section>
 
                     <section class="checkout-info-section measurements-section">
                         <button type="button" class="checkout-info-toggle" aria-expanded="false" aria-controls="checkoutSizingPanel" onclick="toggleCheckoutInfoPanel('checkoutSizingPanel', this)">
                             <span>👕 Size Information</span><span class="checkout-info-chevron" aria-hidden="true">+</span>
                         </button>
                         <div id="checkoutSizingPanel" class="checkout-info-panel" hidden>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="checkoutSize">Top / Upper Size:</label>
-                                    <select id="checkoutSize">
-                                        <option value="">-- Select Size --</option>
-                                        <option value="XS">XS</option>
-                                        <option value="S">S</option>
-                                        <option value="M">M</option>
-                                        <option value="L">L</option>
-                                        <option value="XL">XL</option>
-                                        <option value="2XL">2XL</option>
-                                        <option value="3XL">3XL</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="checkoutBottomSize">Bottom / Lower Size:</label>
-                                    <select id="checkoutBottomSize">
-                                        <option value="">-- Select if ordering bottoms --</option>
-                                        <option value="XS">XS</option>
-                                        <option value="S">S</option>
-                                        <option value="M">M</option>
-                                        <option value="L">L</option>
-                                        <option value="XL">XL</option>
-                                        <option value="2XL">2XL</option>
-                                        <option value="3XL">3XL</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="checkoutColor">Order Color:</label>
-                                    <select id="checkoutColor">
-                                        <option value="">-- Select Color --</option>
-                                        <option value="Red">Red</option>
-                                        <option value="Blue">Blue</option>
-                                        <option value="Black">Black</option>
-                                        <option value="White">White</option>
-                                        <option value="Yellow">Yellow</option>
-                                        <option value="Green">Green</option>
-                                        <option value="Orange">Orange</option>
-                                        <option value="Purple">Purple</option>
-                                        <option value="Gray">Gray</option>
-                                        <option value="Navy">Navy Blue</option>
-                                        <option value="Maroon">Maroon</option>
-                                        <option value="Pink">Pink</option>
-                                        <option value="Cyan">Cyan</option>
-                                        <option value="Gold">Gold</option>
-                                        <option value="Silver">Silver</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="size-chart-helper">
-                                <h4>Size Chart Helper</h4>
-                                <div id="suggestedSize" class="size-suggestion" style="display: none;">
-                                    <p><strong>Suggested Size:</strong> <span id="suggestedSizeText"></span></p>
-                                    <p id="sizeNotes" style="color: #a0a0a0; font-size: 0.9em;"></p>
-                                </div>
-                                <button type="button" class="btn btn-secondary" onclick="calculateSuggestedSize()">Get Size Suggestion</button>
-                            </div>
+                            <p>Choose a product to see its available sizes and size chart. For team orders, select a team category and provide each player's exact size in Team Notes.</p>
+                            <div id="checkoutSizeChart" class="team-size-chart"></div>
                         </div>
                     </section>
 
@@ -715,6 +639,8 @@
                                     <option value="">-- Select Type --</option>
                                     <option value="basketball">Basketball Jersey</option>
                                     <option value="volleyball">Volleyball Jersey</option>
+                                    <option value="soccer">Soccer Uniform</option>
+                                    <option value="badminton">Badminton Uniform</option>
                                     <option value="longsleeve">Warmer/Longsleeve</option>
                                     <option value="varsity">Varsity Jacket</option>
                                     <option value="rider">Rider Jersey</option>
@@ -743,7 +669,7 @@
                         </div>
                         
                         <!-- Color Availability -->
-                        <div class="form-group">
+                        <div class="form-group" style="display: none;">
                             <label>🎨 Available Colors in Stock:</label>
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 10px;">
                                 <label style="display: flex; align-items: center; gap: 8px;">
@@ -795,6 +721,12 @@
                             <small style="color: #a0a0a0; display: block; margin-top: 10px;">Select all colors available for this product</small>
                         </div>
                         
+                        <div class="form-group">
+                            <label for="productAvailableSizes">Available Sizes:</label>
+                            <input type="text" id="productAvailableSizes" placeholder="e.g., S, M, L, XL, 2XL" required>
+                            <small>Enter only the sizes available for this product, separated by commas (up to 6XL).</small>
+                        </div>
+
                         <div class="form-group">
                             <label for="productImage">Product Images (Multiple):</label>
                             <input type="file" id="productImage" accept="image/*" multiple required>
@@ -880,6 +812,8 @@
                                         <option value="">-- Select Type --</option>
                                         <option value="basketball">Basketball Jersey</option>
                                         <option value="volleyball">Volleyball Jersey</option>
+                                        <option value="soccer">Soccer Uniform</option>
+                                        <option value="badminton">Badminton Uniform</option>
                                         <option value="longsleeve">Warmer/Longsleeve</option>
                                         <option value="varsity">Varsity Jacket</option>
                                         <option value="rider">Rider Jersey</option>
@@ -905,8 +839,8 @@
                                 <textarea id="editProductDescription" rows="3"></textarea>
                             </div>
                             
-                            <!-- Color Availability in Edit Modal -->
-                            <div class="form-group">
+                            <!-- Legacy color availability retained for existing product data. -->
+                            <div class="form-group" style="display: none;">
                                 <label>🎨 Available Colors in Stock:</label>
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 10px;">
                                     <label style="display: flex; align-items: center; gap: 8px;">
@@ -958,6 +892,12 @@
                                 <small style="color: #a0a0a0; display: block; margin-top: 10px;">Select all colors available for this product</small>
                             </div>
                             
+                            <div class="form-group">
+                                <label for="editProductAvailableSizes">Available Sizes:</label>
+                                <input type="text" id="editProductAvailableSizes" placeholder="e.g., S, M, L, XL, 2XL" required>
+                                <small>Enter only the sizes available for this product, separated by commas.</small>
+                            </div>
+
                             <div class="form-group">
                                 <label for="editProductImage">Change Product Images (optional - select multiple):</label>
                                 <div style="margin-top: 10px;">
@@ -1303,6 +1243,11 @@
                     <h2 id="modalProductName"></h2>
                     <p id="modalProductCategory"></p>
                     <p id="modalProductDescription"></p>
+                    <div class="form-group product-size-picker">
+                        <label for="modalProductSize">Available Size:</label>
+                        <select id="modalProductSize" required></select>
+                    </div>
+                    <div id="modalProductSizeChart" class="product-size-chart"></div>
                     <p class="price">Price: <strong>₱<span id="modalProductPrice"></span></strong></p>
                     <p class="stock" id="modalProductStock"></p>
                     
@@ -1407,11 +1352,11 @@
         </div>
     </div>
 
-    <script src="js/team-order.js?v=20261003-team-order-2"></script>
+    <script src="js/team-order.js?v=20261019-team-order-3"></script>
     <script src="js/production-tracking.js?v=20261015-production-1"></script>
-    <script src="js/order-media.js?v=20261015-proof-persistence-1"></script>
-    <script src="js/app.js?v=20261015-proof-persistence-1"></script>
-    <script src="js/design-interface.js?v=20261003-team-order-2"></script>
+    <script src="js/order-media.js?v=20261019-multi-design-1"></script>
+    <script src="js/app.js?v=20261019-team-order-3"></script>
+    <script src="js/design-interface.js?v=20261019-multi-design-1"></script>
     <script>
         // Force initialization when page loads
         document.addEventListener('DOMContentLoaded', () => {

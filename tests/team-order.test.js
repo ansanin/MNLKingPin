@@ -1,5 +1,10 @@
 const assert = require('assert');
-const { normalizeTeamOrderInput, buildTeamOrderLabel, buildTeamSizeSummary } = require('../js/team-order.js');
+const { MIN_TEAM_PLAYERS, isValidTeamPlayerCount, normalizeTeamOrderInput, buildTeamOrderLabel, buildTeamSizeSummary } = require('../js/team-order.js');
+
+assert.strictEqual(MIN_TEAM_PLAYERS, 5);
+assert.strictEqual(isValidTeamPlayerCount(4), false);
+assert.strictEqual(isValidTeamPlayerCount(5), true);
+assert.strictEqual(isValidTeamPlayerCount(5.5), false);
 
 const teamInput = {
   isTeamOrder: true,

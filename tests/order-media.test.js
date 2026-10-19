@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { getOrderMediaSource, getUploadedDesignImageSource } = require('../js/order-media.js');
+const { getOrderMediaSource, getUploadedDesignImageSource, getUploadedDesignImageSources } = require('../js/order-media.js');
 
 const orderId = 1234;
 const ticket = 'header.payload.signature';
@@ -18,6 +18,24 @@ assert.strictEqual(getUploadedDesignImageSource({
   designType: 'uploaded',
   details: { uploadedFileUrl: designUrl }
 }, orderId, 1), '');
+const secondDesignUrl = `/.netlify/functions/order-design?orderId=${orderId}&itemIndex=0&fileIndex=1&access=${ticket}`;
+assert.deepStrictEqual(getUploadedDesignImageSources({
+  designType: 'uploaded',
+  details: { uploadedFiles: [
+    { uploadedFileUrl: `/.netlify/functions/order-design?orderId=${orderId}&itemIndex=0&fileIndex=0&access=${ticket}` },
+    { uploadedFileUrl: secondDesignUrl }
+  ] }
+}, orderId, 0), [
+  `/.netlify/functions/order-design?orderId=${orderId}&itemIndex=0&fileIndex=0&access=${ticket}`,
+  secondDesignUrl
+]);
+assert.deepStrictEqual(getUploadedDesignImageSources({
+  designType: 'uploaded',
+  details: { uploadedFiles: [
+    { uploadedFile: 'data:image/png;base64,AA==' },
+    { uploadedFile: 'data:application/pdf;base64,AA==' }
+  ] }
+}, orderId, 0), ['data:image/png;base64,AA==']);
 assert.strictEqual(getOrderMediaSource({ id: orderId, gcashPaymentProof: 'data:image/png;base64,AA==' }, 'gcashPaymentProof'), 'data:image/png;base64,AA==');
 
 console.log('order media tests passed');

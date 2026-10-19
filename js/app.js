@@ -365,7 +365,10 @@ async function callAuthApi(payload) {
 async function fetchSharedOrders({ activeOnly = false } = {}) {
     const scope = activeOnly ? 'active' : 'all';
     const query = `?scope=${scope}`;
-    const endpoints = [`api/orders${query}`, '/.netlify/functions/orders' + query];
+    const isLocalServer = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    const endpoints = isLocalServer
+        ? [`api/orders.php${query}`, `api/orders${query}`, '/.netlify/functions/orders' + query]
+        : [`api/orders${query}`, '/.netlify/functions/orders' + query, `api/orders.php${query}`];
     for (const endpoint of endpoints) {
         try {
             const response = await fetch(endpoint, { cache: 'no-store', headers: getAuthenticatedHeaders() });
@@ -380,7 +383,10 @@ async function fetchSharedOrders({ activeOnly = false } = {}) {
 }
 
 async function saveOrderToSharedServer(order, action = 'customer-update') {
-    const endpoints = ['api/orders', '/.netlify/functions/orders'];
+    const isLocalServer = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    const endpoints = isLocalServer
+        ? ['api/orders.php', 'api/orders', '/.netlify/functions/orders']
+        : ['api/orders', '/.netlify/functions/orders', 'api/orders.php'];
     for (const endpoint of endpoints) {
         try {
             const response = await fetch(endpoint, {
@@ -2236,20 +2242,13 @@ function loadCustomerNotifications() {
 function getIncompleteCartItems(fallbackSize = '', fallbackColor = '') {
     return (appData.cart || []).filter(item => {
         if (item.type === 'custom-design') return false;
-        return !(item.customization?.size || fallbackSize) || !(item.customization?.color || fallbackColor);
+        return !(item.customization?.size || fallbackSize);
     });
 }
 
 function checkout() {
     if (appData.cart.length === 0) {
         alert('Your cart is empty!');
-        return;
-    }
-
-    const incompleteItems = getIncompleteCartItems();
-    if (incompleteItems.length > 0) {
-        const itemNames = [...new Set(incompleteItems.map(item => item.name))].join(', ');
-        alert(`Kulang ang size o kulay ng mga item na ito: ${itemNames}. Piliin muna ang required options bago mag-checkout.`);
         return;
     }
 
@@ -2638,8 +2637,22 @@ function openProductModal(product) {
     document.getElementById('modalProductQuantity').max = product.stock;
     
     const sizeSelect = document.getElementById('customSize');
+    const productSizeSelect = document.getElementById('modalProductSize');
     const colorSelect = document.getElementById('customColor');
     if (sizeSelect) sizeSelect.value = '';
+    if (productSizeSelect) {
+        const availableSizes = getAvailableProductSizes(product);
+        const fallbackSizes = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
+        const sizes = availableSizes.length ? availableSizes : fallbackSizes;
+        productSizeSelect.innerHTML = '<option value="">-- Select Size --</option>' + sizes.map(size => `<option value="${size}">${size}</option>`).join('');
+        productSizeSelect.value = '';
+    }
+    const chartContainer = document.getElementById('modalProductSizeChart');
+    if (chartContainer) {
+        chartContainer.innerHTML = product.sizeChartImage
+            ? `<img src="${product.sizeChartImage}" alt="${product.name} size chart" class="product-size-chart-image">`
+            : '<span>No size chart has been uploaded for this product.</span>';
+    }
     if (colorSelect) {
         colorSelect.innerHTML = '<option value="">-- Select Color --</option>';
         const availableColors = product.availableColors || [];
@@ -2909,7 +2922,7 @@ function addToCart() {
     const quantity = Number(document.getElementById('modalProductQuantity').value);
     const customName = '';
     const customNumber = '';
-    const customSizeElement = document.getElementById('customSize');
+    const customSizeElement = document.getElementById('modalProductSize') || document.getElementById('customSize');
     const customColorElement = document.getElementById('customColor');
     const customSize = customSizeElement ? customSizeElement.value.trim() : '';
     const customColor = customColorElement ? customColorElement.value.trim() : '';
@@ -2938,10 +2951,10 @@ function addToCart() {
     // Check if product with same customization already in cart
     const existingItem = appData.cart.find(item => 
         item.id === appData.selectedProduct.id &&
-        item.customization.size === customSize &&
-        item.customization.color === customColor &&
-        item.customization.name === customName &&
-        item.customization.number === customNumber
+        item.customization?.size === customSize &&
+        item.customization?.color === customColor &&
+        item.customization?.name === customName &&
+        item.customization?.number === customNumber
     );
     
     if (existingItem) {
@@ -2990,7 +3003,7 @@ function placeOrderDirect() {
     const quantity = Number(document.getElementById('modalProductQuantity').value);
     const customName = '';
     const customNumber = '';
-    const customSizeElement = document.getElementById('customSize');
+    const customSizeElement = document.getElementById('modalProductSize') || document.getElementById('customSize');
     const customColorElement = document.getElementById('customColor');
     const customSize = customSizeElement ? customSizeElement.value.trim() : '';
     const customColor = customColorElement ? customColorElement.value.trim() : '';
@@ -3095,6 +3108,66 @@ function getUploadedDesignImageSource(item, orderId, itemIndex) {
     return window.KingPinOrderMedia.getUploadedDesignImageSource(item, orderId, itemIndex);
 }
 
+function getUploadedDesignImageSources(item, orderId, itemIndex) {
+    return window.KingPinOrderMedia.getUploadedDesignImageSources(item, orderId, itemIndex);
+}
+
+function getCartSubtotal() {
+    return appData.cart.reduce((sum, item) => sum + (Number(item.price) * (Number(item.quantity) || 1)), 0);
+}
+
+function getCartTotal() {
+    const isTeamOrder = Boolean(document.getElementById('isTeamOrder')?.checked);
+    const playerCount = Number(document.getElementById('teamPlayers')?.value) || 0;
+    return isTeamOrder ? getCartSubtotal() * playerCount : getCartSubtotal();
+}
+
+function getTeamPlayerMultiplier() {
+    return Boolean(document.getElementById('isTeamOrder')?.checked)
+        ? Number(document.getElementById('teamPlayers')?.value) || 0
+        : 1;
+}
+
+function getAvailableProductSizes(product) {
+    const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
+    const sizes = Array.isArray(product?.availableSizes)
+        ? product.availableSizes
+        : typeof product?.availableSizes === 'string'
+            ? product.availableSizes.split(',')
+            : [];
+    return sizes.map(size => normalizeProductSize(size)).filter(size => sizeOptions.includes(size));
+}
+
+function normalizeProductSize(size) {
+    const normalized = String(size || '').trim().toUpperCase();
+    return normalized === 'XXL' ? '2XL' : normalized === 'XXXL' ? '3XL' : normalized;
+}
+
+function getUnsupportedProductSizes(value) {
+    const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
+    return String(value || '').split(',').map(size => normalizeProductSize(size)).filter(size => size && !sizeOptions.includes(size));
+}
+
+function renderTeamCategorySizeChart() {
+    const category = document.getElementById('teamType')?.value || '';
+    const productTypes = {
+        Basketball: ['basketball'],
+        Volleyball: ['volleyball'],
+        Soccer: ['soccer', 'football'],
+        Badminton: ['badminton'],
+        Football: ['football', 'soccer']
+    };
+    const types = productTypes[category] || [];
+    const product = appData.products.find(item => types.includes(String(item.type || '').toLowerCase()) && item.sizeChartImage);
+    const chart = product?.sizeChartImage
+        ? `<img src="${product.sizeChartImage}" alt="${category} size chart" class="team-size-chart-image">`
+        : `<span>${category ? `No ${category} size chart has been uploaded yet.` : 'Choose a team category to view its size chart.'}</span>`;
+    ['teamSizeChart', 'checkoutSizeChart'].forEach(id => {
+        const target = document.getElementById(id);
+        if (target) target.innerHTML = chart;
+    });
+}
+
 function getOrderMediaSource(order, field) {
     return window.KingPinOrderMedia.getOrderMediaSource(order, field);
 }
@@ -3113,7 +3186,7 @@ function updateCartDisplay() {
     let total = 0;
 
     appData.cart.forEach((item, index) => {
-        const itemTotal = item.price * item.quantity;
+        const itemTotal = item.price * item.quantity * getTeamPlayerMultiplier();
         total += itemTotal;
 
         // Build customization display
@@ -3149,6 +3222,10 @@ function updateCartDisplay() {
                 customizationHTML += `<span>Type: <strong>${getUploadedDesignTypeLabel(details.clothingType)}</strong></span>`;
                 customizationHTML += `<span>Item: <strong>${details.itemDescription}</strong></span>`;
                 customizationHTML += `<span>File: <strong>${details.fileName}</strong></span>`;
+                const designImages = getUploadedDesignImageSources(item);
+                if (designImages.length) {
+                    customizationHTML += `<div class="cart-uploaded-design-images">${designImages.map((image, imageIndex) => `<img src="${image}" alt="Uploaded design ${imageIndex + 1}">`).join('')}</div>`;
+                }
             }
             customizationHTML += '</div>';
         } else if (item.customization) {
@@ -3188,7 +3265,7 @@ function updateCartDisplay() {
         cartItems.appendChild(cartItem);
     });
 
-    cartTotal.textContent = total.toFixed(2);
+    cartTotal.textContent = getCartTotal().toFixed(2);
 }
 
 // Open Edit Customization Modal
@@ -3328,7 +3405,7 @@ function filterProducts() {
 // Update Checkout Display
 function updateCheckoutDisplay() {
     const checkoutItems = document.getElementById('checkoutItemsList');
-    const total = appData.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const total = getCartTotal();
     const accounts = loadCustomerAccounts();
     const profile = appData.currentUserProfile || accounts[appData.currentUser] || {};
     const customerName = document.getElementById('customerName');
@@ -3364,7 +3441,7 @@ function updateCheckoutDisplay() {
     checkoutItems.innerHTML = '';
     
     appData.cart.forEach(item => {
-        const itemTotal = item.price * item.quantity;
+        const itemTotal = item.price * item.quantity * getTeamPlayerMultiplier();
         
         // Build customization display
         let customHTML = '';
@@ -3491,7 +3568,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    const customSize = document.getElementById('customSize');
+    const customSize = document.getElementById('modalProductSize') || document.getElementById('customSize');
     if (customSize) {
         customSize.addEventListener('change', function() {
             const selectedSize = this.value;
@@ -3528,91 +3605,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const teamPlayersField = document.getElementById('teamPlayers');
     if (teamPlayersField) {
         if (isTeamOrderCheckbox?.checked) {
-            teamPlayersField.value = teamPlayersField.value || '2';
+            teamPlayersField.value = teamPlayersField.value || String(MIN_TEAM_PLAYERS);
         }
-        teamPlayersField.addEventListener('input', renderTeamSizeRows);
-        teamPlayersField.addEventListener('change', renderTeamSizeRows);
+        teamPlayersField.addEventListener('input', () => {
+            updateCartDisplay();
+            updateCheckoutDisplay();
+        });
     }
+
+    document.getElementById('teamType')?.addEventListener('change', renderTeamCategorySizeChart);
 
     toggleTeamOrderFields();
 });
-
-function renderTeamSizeRows() {
-    const teamPlayersField = document.getElementById('teamPlayers');
-    const teamSizeRows = document.getElementById('teamSizeRows');
-    const teamSizesHidden = document.getElementById('teamSizes');
-    if (!teamPlayersField || !teamSizeRows || !teamSizesHidden) return;
-
-    const playerCount = Math.max(0, Number(teamPlayersField.value) || 0);
-    const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
-    const existingValues = {};
-
-    try {
-        const parsed = JSON.parse(teamSizesHidden.value || '[]');
-        if (Array.isArray(parsed)) {
-            parsed.forEach(item => {
-                if (item && Number(item.player) > 0) {
-                    existingValues[Number(item.player)] = {
-                        topSize: String(item.topSize || item.upperSize || item.size || ''),
-                        bottomSize: String(item.bottomSize || '')
-                    };
-                }
-            });
-        }
-    } catch (error) {
-        // Ignore malformed values and rebuild the inputs.
-    }
-
-    teamSizeRows.innerHTML = '';
-
-    if (playerCount <= 0) {
-        teamSizeRows.innerHTML = '<small style="color: #a0a0a0;">Enter the number of players to generate the size fields.</small>';
-        teamSizesHidden.value = '';
-        return;
-    }
-
-    for (let index = 1; index <= playerCount; index += 1) {
-        const row = document.createElement('div');
-        row.className = 'team-player-size-row';
-        const savedSizes = existingValues[index] || {};
-        row.innerHTML = `
-            <strong>Player ${index}</strong>
-            <select data-player-index="${index}" data-size-type="topSize" aria-label="Player ${index} upper size">
-                <option value="">Upper size</option>
-                ${sizeOptions.map(option => `<option value="${option}" ${savedSizes.topSize === option ? 'selected' : ''}>${option}</option>`).join('')}
-            </select>
-            <select data-player-index="${index}" data-size-type="bottomSize" aria-label="Player ${index} bottom size">
-                <option value="">Bottom size</option>
-                ${sizeOptions.map(option => `<option value="${option}" ${savedSizes.bottomSize === option ? 'selected' : ''}>${option}</option>`).join('')}
-            </select>
-        `;
-        teamSizeRows.appendChild(row);
-    }
-
-    const rows = teamSizeRows.querySelectorAll('select[data-player-index]');
-    rows.forEach(select => {
-        select.addEventListener('change', syncTeamSizeValues);
-    });
-
-    syncTeamSizeValues();
-}
-
-function syncTeamSizeValues() {
-    const teamSizeRows = document.getElementById('teamSizeRows');
-    const teamSizesHidden = document.getElementById('teamSizes');
-    if (!teamSizeRows || !teamSizesHidden) return;
-
-    const sizesByPlayer = new Map();
-    teamSizeRows.querySelectorAll('select[data-player-index]').forEach(select => {
-        const player = Number(select.dataset.playerIndex);
-        if (!sizesByPlayer.has(player)) {
-            sizesByPlayer.set(player, { player, topSize: '', bottomSize: '' });
-        }
-        sizesByPlayer.get(player)[select.dataset.sizeType] = select.value;
-    });
-
-    teamSizesHidden.value = JSON.stringify([...sizesByPlayer.values()].filter(item => item.topSize || item.bottomSize));
-}
 
 function toggleTeamOrderFields() {
     const checkbox = document.getElementById('isTeamOrder');
@@ -3633,21 +3637,20 @@ function toggleTeamOrderFields() {
     fields.forEach(field => {
         if (field) {
             field.disabled = !isChecked;
+            field.required = isChecked && field.id !== 'teamPlayers';
         }
     });
 
-    if (teamPlayersField && isChecked && (!teamPlayersField.value || Number(teamPlayersField.value) < 2)) {
-        teamPlayersField.value = '2';
+    if (teamPlayersField) {
+        teamPlayersField.min = String(MIN_TEAM_PLAYERS);
+        if (isChecked && (!teamPlayersField.value || Number(teamPlayersField.value) < MIN_TEAM_PLAYERS)) {
+            teamPlayersField.value = String(MIN_TEAM_PLAYERS);
+        }
     }
 
-    const teamSizeRows = document.getElementById('teamSizeRows');
-    if (teamSizeRows) {
-        teamSizeRows.style.opacity = isChecked ? '1' : '0.5';
-    }
-
-    if (isChecked) {
-        renderTeamSizeRows();
-    }
+    renderTeamCategorySizeChart();
+    updateCartDisplay();
+    updateCheckoutDisplay();
 }
 
 function placeCustomerOrder(event) {
@@ -3702,13 +3705,12 @@ async function processCustomerOrder() {
     const checkoutBottomSize = document.getElementById('checkoutBottomSize') ? document.getElementById('checkoutBottomSize').value.trim() : '';
     const checkoutColor = document.getElementById('checkoutColor') ? document.getElementById('checkoutColor').value.trim() : '';
     const paymentMethod = document.getElementById('paymentMethod').value;
-    const teamSizeValues = document.getElementById('teamSizes') ? document.getElementById('teamSizes').value : '';
     const teamOrderInput = normalizeTeamOrderInput({
         isTeamOrder: document.getElementById('isTeamOrder') ? document.getElementById('isTeamOrder').checked : false,
         teamName: document.getElementById('teamName') ? document.getElementById('teamName').value : '',
         teamType: document.getElementById('teamType') ? document.getElementById('teamType').value : '',
         totalPlayers: document.getElementById('teamPlayers') ? document.getElementById('teamPlayers').value : 0,
-        teamSizes: teamSizeValues,
+        teamSizes: [],
         teamNotes: document.getElementById('teamNotes') ? document.getElementById('teamNotes').value : ''
     });
     
@@ -3751,16 +3753,8 @@ async function processCustomerOrder() {
     if (teamOrderInput.isTeamOrder) {
         if (!teamOrderInput.teamName) missingFields.push('team name');
         if (!teamOrderInput.teamType) missingFields.push('team category');
-        if (!Number.isInteger(teamOrderInput.totalPlayers) || teamOrderInput.totalPlayers < 2) {
-            missingFields.push('at least 2 team players');
-        } else {
-            const sizesByPlayer = new Map(teamOrderInput.teamSizes.map(item => [item.player, item]));
-            const hasBothSizesForEveryPlayer = Array.from({ length: teamOrderInput.totalPlayers }, (_, index) => {
-                const sizes = sizesByPlayer.get(index + 1);
-                return Boolean(sizes?.topSize && sizes?.bottomSize);
-            }).every(Boolean);
-            if (!hasBothSizesForEveryPlayer) missingFields.push('upper and bottom sizes for every team player');
-        }
+        if (!isValidTeamPlayerCount(teamOrderInput.totalPlayers)) missingFields.push(`at least ${MIN_TEAM_PLAYERS} team players`);
+        if (!teamOrderInput.teamNotes) missingFields.push('exact sizes and required team notes');
     }
 
     const incompleteItems = getIncompleteCartItems(checkoutSize, checkoutColor);
@@ -3829,15 +3823,14 @@ async function processCustomerOrder() {
     }
 
     try {
-        const totalAmount = appData.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const totalAmount = getCartTotal();
         const downpaymentAmount = paymentMethod === 'gcash' ? Number(totalAmount) / 2 : 0;
         const normalizedCart = appData.cart.map(item => {
-            const teamSizeSummary = teamOrderInput.isTeamOrder ? buildTeamSizeSummary(teamOrderInput.teamSizes) : '';
             const nextCustomization = {
                 ...(item.customization || {}),
                 name: checkoutName || item.customization?.name || '',
                 number: checkoutNumber || item.customization?.number || '',
-                size: teamSizeSummary || checkoutSize || item.customization?.size || '',
+                size: checkoutSize || item.customization?.size || '',
                 bottomSize: checkoutBottomSize || item.customization?.bottomSize || '',
                 color: checkoutColor || item.customization?.color || ''
             };
@@ -3859,9 +3852,9 @@ async function processCustomerOrder() {
             items: normalizedCart,
             totalAmount: totalAmount,
             measurements: {
-                chest: document.getElementById('chestMeasurement').value || 'Not provided',
-                waist: document.getElementById('waistMeasurement').value || 'Not provided',
-                length: document.getElementById('lengthMeasurement').value || 'Not provided'
+                chest: document.getElementById('chestMeasurement')?.value || 'Not provided',
+                waist: document.getElementById('waistMeasurement')?.value || 'Not provided',
+                length: document.getElementById('lengthMeasurement')?.value || 'Not provided'
             },
             teamOrder: teamOrderInput,
             teamOrderLabel: buildTeamOrderLabel(teamOrderInput),
@@ -3984,23 +3977,23 @@ function viewCustomerReceipt(orderId) {
 }
 
 function showOrderReceipt(order, isPreview = false, preserveCurrentView = false) {
-    const itemsHtml = order.items.map(item => {
+    const itemsHtml = order.items.map((item, itemIndex) => {
         const customization = item.customization || {};
         const color = customization.color || customization.colour || 'Not specified';
         const nameText = customization.name ? ` / ${customization.name}` : '';
         const numberText = customization.number ? ` #${customization.number}` : '';
         const colorText = color && color !== 'Not specified' ? ` / Color: ${color}` : '';
         const sizeText = `${customization.size ? ` / Top Size: ${customization.size}` : ''}${customization.bottomSize ? ` / Bottom Size: ${customization.bottomSize}` : ''}`;
-        const uploadedDesignImage = getUploadedDesignImageSource(item);
-        const uploadedDesignPreview = uploadedDesignImage
-            ? `<a href="${uploadedDesignImage}" target="_blank" rel="noopener noreferrer"><img src="${uploadedDesignImage}" alt="Uploaded customer design" style="display: block; max-width: 220px; max-height: 180px; object-fit: contain; margin: 8px 0; border: 1px solid #777; border-radius: 4px;"></a>`
-            : '';
+        const uploadedDesignImages = getUploadedDesignImageSources(item, order.id, itemIndex);
+        const uploadedDesignPreview = uploadedDesignImages.map((image, imageIndex) =>
+            `<a href="${image}" target="_blank" rel="noopener noreferrer"><img src="${image}" alt="Uploaded customer design ${imageIndex + 1}" style="display: inline-block; max-width: 220px; max-height: 180px; object-fit: contain; margin: 8px 8px 0 0; border: 1px solid #777; border-radius: 4px;"></a>`
+        ).join('');
 
         return `
             <div style="padding: 8px 0; border-bottom: 1px solid #444;">
                 <div style="display: flex; justify-content: space-between; gap: 15px;">
                     <span>${item.name} × ${item.quantity}${sizeText}${nameText}${numberText}${colorText}</span>
-                    <strong>₱${(item.price * item.quantity).toFixed(2)}</strong>
+                    <strong>₱${(item.price * item.quantity * (order.teamOrder?.isTeamOrder ? Number(order.teamOrder.totalPlayers) || 0 : 1)).toFixed(2)}</strong>
                 </div>
                 ${uploadedDesignPreview}
             </div>
@@ -4009,6 +4002,9 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
     const measurements = order.measurements || {};
     const teamSizesHtml = order.teamOrder && Array.isArray(order.teamOrder.teamSizes) && order.teamOrder.teamSizes.length
         ? `<div style="margin-top: 12px; padding: 10px; border: 1px solid #d4af37; border-radius: 6px; background: rgba(212, 175, 55, 0.08);"><strong>Team Player Sizes:</strong><br>${buildTeamSizeSummary(order.teamOrder.teamSizes)}</div>`
+        : '';
+    const teamNotesHtml = order.teamOrder?.teamNotes
+        ? `<div style="margin-top: 12px; padding: 10px; border: 1px solid #d4af37; border-radius: 6px;"><strong>Team Notes:</strong><br>${escapeProductionHtml(order.teamOrder.teamNotes)}</div>`
         : '';
 
     document.getElementById('orderDetailsContent').innerHTML = `
@@ -4026,7 +4022,7 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
                 <div><strong>Delivery Location:</strong> ${order.customerAddress}</div>
             </div>
             <div class="customer-receipt-items"><h3>Order Items</h3>${itemsHtml}</div>
-            ${teamSizesHtml ? `<div class="customer-receipt-payment">${teamSizesHtml}</div>` : ''}
+            ${teamSizesHtml || teamNotesHtml ? `<div class="customer-receipt-payment">${teamSizesHtml}${teamNotesHtml}</div>` : ''}
             <div class="customer-receipt-payment">
                 <div><strong>Payment Method:</strong> ${order.paymentMethod.toUpperCase()}</div>
                 <div><strong>Payment Status:</strong> ${order.paymentStatus.replace('-', ' ')}</div>
@@ -4199,10 +4195,9 @@ function loadCustomerOrders() {
             return `${item.name} (x${item.quantity})${customStr}`;
         }).join(', ');
         const uploadedDesignsHtml = order.items.map((item, itemIndex) => {
-            const imageSource = getUploadedDesignImageSource(item, order.id, itemIndex);
-            return imageSource
-                ? `<img src="${imageSource}" alt="Uploaded customer design" style="display: block; max-width: 180px; max-height: 140px; object-fit: contain; margin: 8px 0; border: 1px solid #5b6268; border-radius: 4px;">`
-                : '';
+            return getUploadedDesignImageSources(item, order.id, itemIndex).map((imageSource, imageIndex) =>
+                `<img src="${imageSource}" alt="Uploaded customer design ${imageIndex + 1}" style="display: inline-block; max-width: 180px; max-height: 140px; object-fit: contain; margin: 8px 8px 0 0; border: 1px solid #5b6268; border-radius: 4px;">`
+            ).join('');
         }).join('');
         
         const orderItem = document.createElement('div');
@@ -4213,6 +4208,9 @@ function loadCustomerOrders() {
             : '';
         const teamOrderSizes = order.teamOrder && Array.isArray(order.teamOrder.teamSizes) && order.teamOrder.teamSizes.length
             ? `<p style="margin: 8px 0 0; color: #d4af37;">Team sizes: ${buildTeamSizeSummary(order.teamOrder.teamSizes)}</p>`
+            : '';
+        const teamOrderNotes = order.teamOrder?.teamNotes
+            ? `<p class="customer-order-team-notes"><strong>Team Notes:</strong> ${escapeProductionHtml(order.teamOrder.teamNotes)}</p>`
             : '';
 
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
@@ -4240,6 +4238,7 @@ function loadCustomerOrders() {
                 <p><strong>Payment Method:</strong> ${(order.paymentMethod || 'gcash').toUpperCase()}</p>
                 ${teamOrderBadge}
                 ${teamOrderSizes}
+                ${teamOrderNotes}
                 ${order.measurements ? `<p><strong>Measurements:</strong> Chest: ${order.measurements.chest}cm, Waist: ${order.measurements.waist}cm, Length: ${order.measurements.length}cm</p>` : ''}
             </div>
             ${productionTrackingHtml}
@@ -4772,9 +4771,9 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
     const imageFiles = Array.from(document.getElementById('productImage').files);
     const sizeChartFile = document.getElementById('productSizeChartImage').files[0];
     
-    // Get selected colors
-    const selectedColorCheckboxes = document.querySelectorAll('input[name="productColors"]:checked');
-    const availableColors = Array.from(selectedColorCheckboxes).map(cb => cb.value);
+    const availableSizes = document.getElementById('productAvailableSizes').value
+        .split(',').map(size => normalizeProductSize(size)).filter(Boolean);
+    const unsupportedSizes = getUnsupportedProductSizes(document.getElementById('productAvailableSizes').value);
 
     if (imageFiles.length === 0) {
         uploadMessage.className = 'message error';
@@ -4783,9 +4782,23 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
         return;
     }
     
-    if (availableColors.length === 0) {
+    if (availableSizes.length === 0) {
         uploadMessage.className = 'message error';
-        uploadMessage.textContent = 'Please select at least one color';
+        uploadMessage.textContent = 'Please enter at least one available size';
+        uploadMessage.style.display = 'block';
+        return;
+    }
+
+    if (unsupportedSizes.length) {
+        uploadMessage.className = 'message error';
+        uploadMessage.textContent = `Unsupported sizes: ${unsupportedSizes.join(', ')}. Use XS through 6XL.`;
+        uploadMessage.style.display = 'block';
+        return;
+    }
+
+    if (['basketball', 'volleyball', 'soccer', 'badminton'].includes(type) && !sizeChartFile) {
+        uploadMessage.className = 'message error';
+        uploadMessage.textContent = 'Upload a size chart photo for this sports product';
         uploadMessage.style.display = 'block';
         return;
     }
@@ -4795,7 +4808,7 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
         sizeChartFile ? prepareProductImage(sizeChartFile) : Promise.resolve(null)
     ]).then(([images, sizeChartImage]) => {
         const newProduct = {
-            id: appData.products.length + 1,
+            id: appData.products.reduce((highest, product) => Math.max(highest, Number(product.id) || 0), 0) + 1,
             name: productName,
             type: type,
             price: price,
@@ -4804,30 +4817,31 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
             image: images[0],
             images,
             sizeChartImage,
-            availableColors: availableColors
+            availableSizes
         };
 
         console.log('Adding new product:', newProduct);
         appData.products.push(newProduct);
         console.log('Total products after add:', appData.products.length);
-        saveProductsWithoutBlocking();
+        saveProducts().then(() => {
+            displayProducts(appData.products);
+            uploadMessage.className = 'message success';
+            uploadMessage.textContent = 'Product added and synced for customers.';
+            uploadMessage.style.display = 'block';
+        }).catch(error => {
+            uploadMessage.className = 'message error';
+            uploadMessage.textContent = `Product was added locally but could not sync for customers: ${error.message}`;
+            uploadMessage.style.display = 'block';
+        });
         
         // Add product to table INSTANTLY (real-time display)
         addProductToInventoryTable(newProduct, appData.products.length - 1);
-        
-        uploadMessage.className = 'message success';
-        uploadMessage.textContent = '✓ Product added successfully! Total products: ' + appData.products.length;
-        uploadMessage.style.display = 'block';
         
         // Reset form
         document.getElementById('addProductForm').reset();
         document.getElementById('productImagePreview').innerHTML = '';
         document.getElementById('productSizeChartPreview').innerHTML = '';
         
-        // Hide message after 2 seconds
-        setTimeout(() => {
-            uploadMessage.style.display = 'none';
-        }, 2000);
     }).catch(error => {
         uploadMessage.className = 'message error';
         uploadMessage.textContent = error.message;
@@ -5024,6 +5038,8 @@ function openEditProductModal(index) {
     document.getElementById('editProductPrice').value = product.price;
     document.getElementById('editProductStock').value = product.stock;
     document.getElementById('editProductDescription').value = product.description || '';
+    const legacySizes = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
+    document.getElementById('editProductAvailableSizes').value = getAvailableProductSizes(product).join(', ') || legacySizes.join(', ');
     
     // Show current product image preview
     const imagePreview = document.getElementById('editProductImagePreview');
@@ -5089,9 +5105,9 @@ function saveProductEdit() {
     const sizeChartFile = document.getElementById('editProductSizeChartImage').files[0];
     const removeSizeChart = document.getElementById('removeProductSizeChart').checked;
     
-    // Get selected colors
-    const selectedColorCheckboxes = document.querySelectorAll('input[name="editProductColors"]:checked');
-    const availableColors = Array.from(selectedColorCheckboxes).map(cb => cb.value);
+    const availableSizes = document.getElementById('editProductAvailableSizes').value
+        .split(',').map(size => normalizeProductSize(size)).filter(Boolean);
+    const unsupportedSizes = getUnsupportedProductSizes(document.getElementById('editProductAvailableSizes').value);
     
     const messageDiv = document.getElementById('editProductMessage');
     
@@ -5110,9 +5126,16 @@ function saveProductEdit() {
         return;
     }
     
-    if (availableColors.length === 0) {
+    if (availableSizes.length === 0) {
         messageDiv.className = 'message error';
-        messageDiv.textContent = '❌ Please select at least one color';
+        messageDiv.textContent = 'Enter at least one available size';
+        messageDiv.style.display = 'block';
+        return;
+    }
+
+    if (unsupportedSizes.length) {
+        messageDiv.className = 'message error';
+        messageDiv.textContent = `Unsupported sizes: ${unsupportedSizes.join(', ')}. Use XS through 6XL.`;
         messageDiv.style.display = 'block';
         return;
     }
@@ -5148,15 +5171,20 @@ function saveProductEdit() {
         product.image = images[0];
         product.images = images;
         product.sizeChartImage = sizeChartImage;
-        product.availableColors = availableColors;
+        product.availableSizes = availableSizes;
 
-        saveProductsWithoutBlocking();
-        messageDiv.className = 'message success';
-        messageDiv.textContent = '✓ Product updated successfully!';
-        messageDiv.style.display = 'block';
-        loadAdminInventoryProducts();
-
-        setTimeout(() => closeEditProductModal(), 1500);
+        saveProducts().then(() => {
+            messageDiv.className = 'message success';
+            messageDiv.textContent = 'Product updated and synced for customers.';
+            messageDiv.style.display = 'block';
+            loadAdminInventoryProducts();
+            displayProducts(appData.products);
+            setTimeout(() => closeEditProductModal(), 1500);
+        }).catch(error => {
+            messageDiv.className = 'message error';
+            messageDiv.textContent = `Product update could not sync for customers: ${error.message}`;
+            messageDiv.style.display = 'block';
+        });
     }).catch(error => {
         messageDiv.className = 'message error';
         messageDiv.textContent = error.message;
@@ -5496,29 +5524,35 @@ function viewOrderDetails(orderStr) {
                 let uploadedDesignHtml = '';
                 if (item.designType === 'uploaded' && item.details) {
                     const details = item.details;
-                    const fileName = String(details.fileName || 'customer-design').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-                    const uploadedFile = String(details.uploadedFile || details.uploadedFileUrl || '');
-                    const isStoredAttachment = /^\/\.netlify\/functions\/order-design\?orderId=\d+&itemIndex=\d+$/.test(uploadedFile);
-                    const isImage = /^data:image\/(png|jpeg|gif|webp);base64,/i.test(uploadedFile)
-                        || (isStoredAttachment && String(details.fileType || '').startsWith('image/'));
-                    const isPdf = /^data:application\/pdf;base64,/i.test(uploadedFile)
-                        || (isStoredAttachment && details.fileType === 'application/pdf');
-                    const fileLink = isImage || isPdf
-                        ? `<a href="${uploadedFile}" download="${fileName}" style="display: inline-block; margin-top: 8px; color: #1769aa; font-weight: 700;">Download ${isPdf ? 'PDF' : 'image'}: ${fileName}</a>`
-                        : '<span style="display: block; margin-top: 8px; color: #a66;">Attachment is unavailable. Ask the customer to upload the design again.</span>';
-                    const preview = isImage
-                        ? `<img src="${uploadedFile}" alt="Customer design: ${fileName}" style="display: block; max-width: 100%; max-height: 420px; object-fit: contain; margin-top: 10px; border: 1px solid #ccc; border-radius: 4px;">`
-                        : '';
+                    const files = Array.isArray(details.uploadedFiles) && details.uploadedFiles.length
+                        ? details.uploadedFiles
+                        : [{ uploadedFile: details.uploadedFile || details.uploadedFileUrl, fileName: details.fileName, fileType: details.fileType }];
+                    const attachments = files.map(file => {
+                        const fileName = String(file.fileName || 'customer-design').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+                        const uploadedFile = String(file.uploadedFile || file.uploadedFileUrl || '');
+                        const isStoredAttachment = uploadedFile.startsWith('/.netlify/functions/order-design?');
+                        const isImage = /^data:image\/(png|jpeg|gif|webp);base64,/i.test(uploadedFile)
+                            || (isStoredAttachment && String(file.fileType || '').startsWith('image/'));
+                        const isPdf = /^data:application\/pdf;base64,/i.test(uploadedFile)
+                            || (isStoredAttachment && file.fileType === 'application/pdf');
+                        const fileLink = isImage || isPdf
+                            ? `<a href="${uploadedFile}" download="${fileName}" style="display: inline-block; margin: 8px 8px 0 0; color: #1769aa; font-weight: 700;">Download ${isPdf ? 'PDF' : 'image'}: ${fileName}</a>`
+                            : '';
+                        const preview = isImage
+                            ? `<img src="${uploadedFile}" alt="Customer design: ${fileName}" style="display: inline-block; max-width: 100%; max-height: 260px; object-fit: contain; margin: 10px 8px 0 0; border: 1px solid #ccc; border-radius: 4px;">`
+                            : '';
+                        return fileLink + preview;
+                    }).join('');
 
                     uploadedDesignHtml = `<div class="admin-order-uploaded-design">
                         <strong>📤 Customer uploaded design</strong><br>
                         Item: ${details.itemDescription || 'N/A'} | Type: ${getUploadedDesignTypeLabel(details.clothingType)}<br>
-                        File: ${fileName}${fileLink}${preview}
+                        ${attachments}
                     </div>`;
                 }
                 return `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #eee;">
                     <strong>${item.name}</strong> (Qty: ${item.quantity})<br>
-                    Price: ₱${(item.price).toFixed(2)} each = ₱${(item.price * item.quantity).toFixed(2)}
+                    Price: ₱${(item.price).toFixed(2)} each = ₱${(item.price * item.quantity * (order.teamOrder?.isTeamOrder ? Number(order.teamOrder.totalPlayers) || 0 : 1)).toFixed(2)}
                     ${customStr}
                     ${productImageHtml}
                     ${uploadedDesignHtml}

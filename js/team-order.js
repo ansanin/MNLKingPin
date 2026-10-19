@@ -1,4 +1,11 @@
 (function (global) {
+    const MIN_TEAM_PLAYERS = 5;
+
+    function isValidTeamPlayerCount(value) {
+        const playerCount = Number(value);
+        return Number.isInteger(playerCount) && playerCount >= MIN_TEAM_PLAYERS;
+    }
+
     function parseTeamSizes(value) {
         if (Array.isArray(value)) {
             return value
@@ -95,12 +102,16 @@
     }
 
     const api = {
+        MIN_TEAM_PLAYERS,
+        isValidTeamPlayerCount,
         normalizeTeamOrderInput,
         buildTeamOrderLabel,
         buildTeamSizeSummary,
         parseTeamSizes
     };
 
+    global.MIN_TEAM_PLAYERS = api.MIN_TEAM_PLAYERS;
+    global.isValidTeamPlayerCount = api.isValidTeamPlayerCount;
     global.normalizeTeamOrderInput = api.normalizeTeamOrderInput;
     global.buildTeamOrderLabel = api.buildTeamOrderLabel;
     global.buildTeamSizeSummary = api.buildTeamSizeSummary;

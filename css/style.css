@@ -6701,3 +6701,67 @@ body.light-mode .footer-social-link:focus-visible {
         padding: 4px;
     }
 }
+
+.upload-design-drop-zone {
+    border: 2px dashed #8d793b;
+    border-radius: 4px;
+    color: #d4af37;
+    cursor: pointer;
+    margin-top: 10px;
+    padding: 18px;
+    text-align: center;
+}
+
+.upload-design-drop-zone.drag-over {
+    background: rgba(212, 175, 55, 0.12);
+    border-color: #f0ce68;
+}
+
+.upload-design-files-preview,
+.cart-uploaded-design-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.upload-design-file-preview {
+    align-items: center;
+    border: 1px solid #454545;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-width: 150px;
+    padding: 6px;
+}
+
+.upload-design-file-preview img,
+.cart-uploaded-design-images img {
+    height: 96px;
+    object-fit: contain;
+    width: 96px;
+}
+
+.upload-design-file-preview span {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: center;
+}
+
+.team-size-chart,
+.product-size-chart {
+    margin-top: 10px;
+}
+
+.team-size-chart-image,
+.product-size-chart-image {
+    display: block;
+    height: auto;
+    max-height: 360px;
+    max-width: 100%;
+    object-fit: contain;
+}
+
+.product-size-picker {
+    margin: 16px 0;
+}

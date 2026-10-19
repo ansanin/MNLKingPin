@@ -38,6 +38,7 @@ const customerToken = signAccessToken({ sub: 'customer@example.com', role: 'cust
 
 async function testOrderDesignAttachments() {
     const imageData = `data:image/webp;base64,${Buffer.from('sample design').toString('base64')}`;
+    const secondImageData = `data:image/png;base64,${Buffer.from('second design').toString('base64')}`;
     const ordersStore = blobModule.getStore('kingpin-orders');
     const orderIndexStore = blobModule.getStore('kingpin-order-index');
     await ordersStore.setJSON('orders', [{
@@ -75,7 +76,15 @@ async function testOrderDesignAttachments() {
                 designType: 'uploaded',
                 image: imageData,
                 images: [imageData],
-                details: { uploadedFile: imageData, fileName: 'design.webp', fileType: 'image/webp' }
+                details: {
+                    uploadedFile: imageData,
+                    uploadedFiles: [
+                        { uploadedFile: imageData, fileName: 'front.webp', fileType: 'image/webp' },
+                        { uploadedFile: secondImageData, fileName: 'back.png', fileType: 'image/png' }
+                    ],
+                    fileName: 'front.webp, back.png',
+                    fileType: 'image/webp'
+                }
                 }],
                 gcashQRCode: imageData,
                 gcashPaymentProof: imageData
@@ -88,6 +97,8 @@ async function testOrderDesignAttachments() {
     assert.strictEqual(legacyOrders.length, 1);
     assert.ok(legacyOrders[0].items[0].details.uploadedFile);
     assert.ok(storedOrder.items[0].details.uploadedFileUrl);
+    assert.strictEqual(storedOrder.items[0].details.uploadedFiles.length, 2);
+    assert.ok(storedOrder.items[0].details.uploadedFiles[1].uploadedFileUrl.includes('fileIndex=1'));
     assert.ok(storedOrder.gcashQRCodeUrl);
     assert.ok(storedOrder.gcashPaymentProofUrl);
     assert.strictEqual(storedOrder.gcashQRCode, undefined);
@@ -132,6 +143,15 @@ async function testOrderDesignAttachments() {
     assert.strictEqual(imageResponse.headers['Content-Type'], 'image/webp');
     assert.strictEqual(Buffer.from(imageResponse.body, 'base64').toString(), 'sample design');
 
+    const secondDesignUrl = new URL(customerOrder.items[0].details.uploadedFiles[1].uploadedFileUrl, 'https://kingpin.example');
+    const secondImageResponse = await orderDesignHandler({
+        httpMethod: 'GET',
+        headers: {},
+        queryStringParameters: Object.fromEntries(secondDesignUrl.searchParams)
+    });
+    assert.strictEqual(secondImageResponse.statusCode, 200);
+    assert.strictEqual(Buffer.from(secondImageResponse.body, 'base64').toString(), 'second design');
+
     const proofUrl = new URL(customerOrder.gcashPaymentProofUrl, 'https://kingpin.example');
     const proofResponse = await orderDesignHandler({
         httpMethod: 'GET',
@@ -149,6 +169,31 @@ async function testOrderDesignAttachments() {
     });
     assert.strictEqual(qrResponse.statusCode, 200);
     assert.strictEqual(Buffer.from(qrResponse.body, 'base64').toString(), 'sample design');
+
+    const undersizedTeamOrder = await ordersHandler({
+        httpMethod: 'POST',
+        headers: { authorization: `Bearer ${customerToken}` },
+        body: JSON.stringify({ action: 'create', order: {
+            id: 201,
+            customerEmail: 'customer@example.com',
+            items: [{ price: 600, quantity: 1 }],
+            teamOrder: { isTeamOrder: true, teamName: 'Team Alpha', teamType: 'Basketball', totalPlayers: 4, teamNotes: 'Player sizes listed.' }
+        } })
+    });
+    assert.strictEqual(undersizedTeamOrder.statusCode, 400);
+
+    const validTeamOrder = await ordersHandler({
+        httpMethod: 'POST',
+        headers: { authorization: `Bearer ${customerToken}` },
+        body: JSON.stringify({ action: 'create', order: {
+            id: 202,
+            customerEmail: 'customer@example.com',
+            items: [{ price: 600, quantity: 1 }],
+            teamOrder: { isTeamOrder: true, teamName: 'Team Alpha', teamType: 'Basketball', totalPlayers: 5, teamNotes: 'Player sizes listed.' }
+        } })
+    });
+    assert.strictEqual(validTeamOrder.statusCode, 201);
+    assert.strictEqual(JSON.parse(validTeamOrder.body).order.totalAmount, 3000);
 
     console.log('order attachment tests passed');
 }

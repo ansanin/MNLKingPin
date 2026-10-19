@@ -1,6 +1,7 @@
 const { connectLambda, getStore } = require('@netlify/blobs');
 const { authenticateEvent, signAccessToken } = require('./lib/auth');
 const { PRODUCTION_STAGES, normalizeProductionStatus, validateProductionTransition } = require('../../js/production-tracking');
+const { MIN_TEAM_PLAYERS, isValidTeamPlayerCount, normalizeTeamOrderInput } = require('../../js/team-order');
 
 function jsonResponse(statusCode, body) {
     return {
@@ -12,6 +13,10 @@ function jsonResponse(statusCode, body) {
 
 function uploadedDesignKey(orderId, itemIndex) {
     return `order-design-${orderId}-${itemIndex}`;
+}
+
+function uploadedDesignFileKey(orderId, itemIndex, fileIndex) {
+    return `order-design-${orderId}-${itemIndex}-${fileIndex}`;
 }
 
 function orderMediaKey(orderId, mediaType) {
@@ -59,6 +64,30 @@ async function removeInlineDesignFiles(order, designStore) {
         }
 
         if (item.designType !== 'uploaded' || !item.details) continue;
+
+        if (Array.isArray(item.details.uploadedFiles) && item.details.uploadedFiles.length) {
+            const uploadedFiles = [];
+            for (const [fileIndex, file] of item.details.uploadedFiles.entries()) {
+                const uploadedFile = String(file.uploadedFile || '');
+                const match = uploadedFile.match(/^data:(image\/(?:png|jpeg|gif|webp)|application\/pdf);base64,([a-z0-9+/=]+)$/i);
+                if (!match) continue;
+                const designKey = uploadedDesignFileKey(normalized.id, itemIndex, fileIndex);
+                if (!await designStore.get(designKey, { type: 'text' })) await designStore.set(designKey, uploadedFile);
+                uploadedFiles.push({
+                    fileName: String(file.fileName || 'customer-design'),
+                    fileType: String(file.fileType || match[1]),
+                    uploadedFileUrl: `/.netlify/functions/order-design?orderId=${encodeURIComponent(normalized.id)}&itemIndex=${itemIndex}&fileIndex=${fileIndex}`
+                });
+            }
+            if (uploadedFiles.length) {
+                item.details.uploadedFiles = uploadedFiles;
+                item.details.uploadedFileUrl = uploadedFiles[0].uploadedFileUrl;
+                item.details.fileName = uploadedFiles.map(file => file.fileName).join(', ');
+                delete item.details.uploadedFile;
+                changed = true;
+                continue;
+            }
+        }
 
         const uploadedFile = String(item.details.uploadedFile || '');
         const match = uploadedFile.match(/^data:(image\/(?:png|jpeg|gif|webp)|application\/pdf);base64,([a-z0-9+/=]+)$/i);
@@ -194,9 +223,9 @@ function validEstimate(value) {
     return !value || /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
 }
 
-function addMediaTicket(url, claims, orderId, media, itemIndex = '') {
+function addMediaTicket(url, claims, orderId, media, itemIndex = '', fileIndex = '') {
     if (!url || !String(url).startsWith('/.netlify/functions/order-design?')) return url;
-    const ticket = signAccessToken({ sub: claims.sub, role: claims.role, mediaOrderId: String(orderId), media, itemIndex: String(itemIndex) });
+    const ticket = signAccessToken({ sub: claims.sub, role: claims.role, mediaOrderId: String(orderId), media, itemIndex: String(itemIndex), fileIndex: String(fileIndex) });
     return `${url}&access=${encodeURIComponent(ticket)}`;
 }
 
@@ -207,8 +236,12 @@ function decorateOrderMedia(order, claims) {
     decorated.finalDesignUrl = addMediaTicket(decorated.finalDesignUrl, claims, decorated.id, 'final-design');
     (decorated.items || []).forEach((item, itemIndex) => {
         if (item.details?.uploadedFileUrl) {
-            item.details.uploadedFileUrl = addMediaTicket(item.details.uploadedFileUrl, claims, decorated.id, 'item-design', itemIndex);
+            const firstFileIndex = item.details.uploadedFiles?.length ? 0 : '';
+            item.details.uploadedFileUrl = addMediaTicket(item.details.uploadedFileUrl, claims, decorated.id, 'item-design', itemIndex, firstFileIndex);
         }
+        (item.details?.uploadedFiles || []).forEach((file, fileIndex) => {
+            file.uploadedFileUrl = addMediaTicket(file.uploadedFileUrl, claims, decorated.id, 'item-design', itemIndex, fileIndex);
+        });
     });
     return decorated;
 }
@@ -251,6 +284,19 @@ exports.handler = async function handler(event) {
             const order = payload.order;
             if (!order?.id || !order.customerEmail || String(order.customerEmail).toLowerCase() !== String(claims.sub).toLowerCase()) {
                 return jsonResponse(400, { error: 'A valid order for the signed-in customer is required.' });
+            }
+            const teamOrder = normalizeTeamOrderInput(order.teamOrder);
+            if (teamOrder.isTeamOrder) {
+                if (!isValidTeamPlayerCount(teamOrder.totalPlayers)) {
+                    return jsonResponse(400, { error: `Team orders require at least ${MIN_TEAM_PLAYERS} players.` });
+                }
+                if (!teamOrder.teamNotes) return jsonResponse(400, { error: 'Exact player sizes and team notes are required.' });
+                order.teamOrder = teamOrder;
+                order.totalAmount = (order.items || []).reduce((sum, item) => {
+                    const unitPrice = Number(item.price);
+                    const quantity = Number(item.quantity) || 1;
+                    return sum + (Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice * quantity * teamOrder.totalPlayers : 0);
+                }, 0);
             }
             if (await orderIndexStore.get(orderRecordKey(order.id), { type: 'json' })) return jsonResponse(409, { error: 'This order already exists.' });
             order.customerEmail = claims.sub;

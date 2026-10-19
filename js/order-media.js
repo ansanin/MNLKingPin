@@ -2,7 +2,7 @@
     const IMAGE_DATA_URL = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i;
     const ACCESS_TOKEN = /^[a-z0-9_-]+\.[a-z0-9_-]+\.[a-z0-9_-]+$/i;
 
-    function getAuthorizedMediaUrl(value, orderId, mediaType, itemIndex) {
+    function getAuthorizedMediaUrl(value, orderId, mediaType, itemIndex, fileIndex) {
         if (!value || !orderId) return '';
 
         try {
@@ -17,6 +17,9 @@
                 return url.searchParams.get('media') === mediaType ? value : '';
             }
             return url.searchParams.get('itemIndex') === String(itemIndex)
+                && (fileIndex === undefined
+                    ? !url.searchParams.has('fileIndex')
+                    : url.searchParams.get('fileIndex') === String(fileIndex))
                 && !url.searchParams.has('media')
                 ? value
                 : '';
@@ -45,7 +48,21 @@
         return getAuthorizedMediaUrl(item.details.uploadedFileUrl, orderId, '', itemIndex);
     }
 
-    const api = { getOrderMediaSource, getUploadedDesignImageSource };
+    function getUploadedDesignImageSources(item, orderId, itemIndex) {
+        if (item?.designType !== 'uploaded' || !item.details) return [];
+        const files = Array.isArray(item.details.uploadedFiles) ? item.details.uploadedFiles : [];
+        if (!files.length) {
+            const image = getUploadedDesignImageSource(item, orderId, itemIndex);
+            return image ? [image] : [];
+        }
+        return files.map((file, fileIndex) => {
+            const dataUrl = String(file.uploadedFile || '');
+            if (IMAGE_DATA_URL.test(dataUrl)) return dataUrl;
+            return getAuthorizedMediaUrl(file.uploadedFileUrl, orderId, '', itemIndex, fileIndex);
+        }).filter(Boolean);
+    }
+
+    const api = { getOrderMediaSource, getUploadedDesignImageSource, getUploadedDesignImageSources };
     global.KingPinOrderMedia = api;
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);
