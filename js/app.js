@@ -3134,6 +3134,9 @@ function getTeamPlayerMultiplier() {
 
 function getAvailableProductSizes(product) {
     const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
+    if (!Object.prototype.hasOwnProperty.call(product || {}, 'availableSizes')) {
+        return sizeOptions;
+    }
     const sizes = Array.isArray(product?.availableSizes)
         ? product.availableSizes
         : typeof product?.availableSizes === 'string'
