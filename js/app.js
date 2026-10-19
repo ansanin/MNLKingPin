@@ -628,7 +628,7 @@ function fetchSharedProducts() {
         const data = await staticResponse.json();
         if (!Array.isArray(data.products)) throw lastError;
         return data.products;
-    });
+    })();
 
     const sharedRequest = request.finally(() => {
         if (sharedProductsRequest === sharedRequest) {
