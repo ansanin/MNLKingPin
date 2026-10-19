@@ -6779,3 +6779,24 @@ body.light-mode .footer-social-link:focus-visible {
 .product-size-picker {
     margin: 16px 0;
 }
+
+.order-design-gallery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 7px;
+}
+
+.order-design-thumbnail {
+    background: #fff;
+    border: 1px solid #555;
+    border-radius: 3px;
+    height: 64px;
+    object-fit: contain;
+    width: 64px;
+}
+
+.admin-order-design-gallery .order-design-thumbnail {
+    height: 48px;
+    width: 48px;
+}

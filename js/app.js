@@ -4278,7 +4278,7 @@ function buildPurchaseHistoryProducts(order) {
         return `<div class="purchase-history-products"><strong>Products Ordered</strong>${fallbackItems.map(item => `<div class="purchase-history-product-row"><span>${escapeProductionHtml(item.name || item.productName || 'Jersey product')}</span><span>Qty: ${Number(item.quantity) || 1}</span></div>`).join('')}</div>`;
     }
 
-    const rows = items.map(item => {
+    const rows = items.map((item, itemIndex) => {
         const itemName = String(item.name || item.productName || 'Jersey product');
         const product = (appData.products || []).find(savedProduct =>
             (item.id && Number(savedProduct.id) === Number(item.id)) || savedProduct.name === itemName
@@ -4299,6 +4299,10 @@ function buildPurchaseHistoryProducts(order) {
         const quantity = Math.max(1, Number(item.quantity) || 1);
         const unitPrice = Number(item.price ?? product?.price);
         const itemTotal = Number.isFinite(unitPrice) ? `₱${(unitPrice * quantity).toFixed(2)}` : '';
+        const designImages = getUploadedDesignImageSources(item, order.id, itemIndex);
+        const designGallery = designImages.length
+            ? `<div class="order-design-gallery">${designImages.map((image, imageIndex) => `<img src="${image}" alt="Uploaded design ${imageIndex + 1}" class="order-design-thumbnail">`).join('')}</div>`
+            : '';
 
         return `<div class="purchase-history-product-row">
             ${safeImage ? `<img src="${safeImage}" alt="${escapeProductionHtml(itemName)}" class="purchase-history-product-image">` : ''}
@@ -4306,6 +4310,7 @@ function buildPurchaseHistoryProducts(order) {
                 <strong>${escapeProductionHtml(itemName)}</strong>
                 <span>Qty: ${quantity}${itemTotal ? ` · ${itemTotal}` : ''}</span>
                 ${options ? `<small>${options}</small>` : ''}
+                ${designGallery}
             </div>
         </div>`;
     }).join('');
@@ -5343,6 +5348,10 @@ function renderAdminOrders() {
 
     ordersToRender.forEach(order => {
         const itemCount = Array.isArray(order.items) ? order.items.length : 0;
+        const designImages = (order.items || []).flatMap((item, itemIndex) => getUploadedDesignImageSources(item, order.id, itemIndex));
+        const designGallery = designImages.length
+            ? `<div class="order-design-gallery admin-order-design-gallery" aria-label="Customer uploaded design photos">${designImages.map((image, imageIndex) => `<img src="${image}" alt="Customer design ${imageIndex + 1}" class="order-design-thumbnail">`).join('')}</div>`
+            : '';
         const customerName = escapeProductionHtml(order.customerName || 'N/A');
         const totalAmount = Number(order.totalAmount) || 0;
         const status = productionStatus(order);
@@ -5353,7 +5362,7 @@ function renderAdminOrders() {
         row.innerHTML = `
             <td><strong>#${order.id}</strong></td>
             <td><strong>${customerName}</strong></td>
-            <td><span class="admin-order-item-count">${itemCount} ${itemCount === 1 ? 'item' : 'items'}</span>${order.teamOrder?.isTeamOrder ? '<small class="admin-order-team-label">Team order</small>' : ''}</td>
+            <td><span class="admin-order-item-count">${itemCount} ${itemCount === 1 ? 'item' : 'items'}</span>${order.teamOrder?.isTeamOrder ? '<small class="admin-order-team-label">Team order</small>' : ''}${designGallery}</td>
             <td><strong>₱${totalAmount.toFixed(2)}</strong></td>
             <td><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
             <td class="production-stage-cell"><span class="production-stage-label">${escapeProductionHtml(getProductionStageLabel(status))}</span>${isDelayed(order) ? '<small class="production-delayed-label">Delayed</small>' : ''}<div class="production-progress-track" aria-label="${progress}% complete"><span style="width:${progress}%"></span></div></td>
