@@ -5188,6 +5188,7 @@ function saveProductEdit() {
             messageDiv.className = 'message success';
             messageDiv.textContent = 'Product updated and synced for customers.';
             messageDiv.style.display = 'block';
+            showStatusUpdateToast(`✓ ${name} updated and synced for customers.`);
             loadAdminInventoryProducts();
             displayProducts(appData.products);
             setTimeout(() => closeEditProductModal(), 1500);
