@@ -73,6 +73,8 @@ let customerCartRefreshRequest = null;
 let customerServiceRefreshTimer = null;
 let customerServiceRefreshRequest = null;
 let selectedAdminMessageId = null;
+let customerProfileRefreshTimer = null;
+let customerProfileRefreshRequest = null;
 
 function applyTheme(theme) {
     const isLight = theme === 'light';
@@ -413,6 +415,48 @@ async function saveOrderToSharedServer(order, action = 'customer-update') {
     throw new Error('Shared order API unavailable');
 }
 
+async function refreshCustomerProfile() {
+    if (appData.currentRole !== 'customer' || !appData.currentUser || customerProfileRefreshRequest) {
+        return customerProfileRefreshRequest;
+    }
+    customerProfileRefreshRequest = fetch('/.netlify/functions/auth', {
+        cache: 'no-store',
+        headers: getAuthenticatedHeaders()
+    })
+        .then(async response => {
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.profile) {
+                throw new Error(result.error || 'Unable to refresh customer account information.');
+            }
+            if (normalizeCustomerEmail(result.user) !== normalizeCustomerEmail(appData.currentUser)) return;
+
+            appData.currentUserProfile = result.profile;
+            const customerAccounts = loadCustomerAccounts();
+            customerAccounts[normalizeCustomerEmail(appData.currentUser)] = result.profile;
+            saveCustomerAccounts(customerAccounts);
+            saveCurrentSession();
+            const displayName = document.getElementById('customerDisplayName');
+            if (displayName) displayName.textContent = `Welcome, ${result.profile.username || appData.currentUser}!`;
+            populateCustomerSettingsForm(result.profile);
+            return result.profile;
+        })
+        .finally(() => {
+            customerProfileRefreshRequest = null;
+        });
+    return customerProfileRefreshRequest;
+}
+
+function startCustomerProfileRefresh() {
+    if (customerProfileRefreshTimer !== null) return;
+    customerProfileRefreshTimer = setInterval(() => {
+        if (appData.currentRole === 'customer' && document.visibilityState !== 'hidden') {
+            refreshCustomerProfile().catch(error => {
+                console.error('Unable to refresh customer account information:', error);
+            });
+        }
+    }, 15000);
+}
+
 async function saveAdminOrderOperation(orderId, operation, fields = {}) {
     const response = await fetch('/.netlify/functions/orders', {
         method: 'POST',
@@ -615,9 +659,21 @@ async function refreshCustomerCart() {
 }
 
 window.addEventListener('focus', refreshCustomerCart);
+window.addEventListener('focus', () => {
+    if (appData.currentRole === 'customer') {
+        refreshCustomerProfile().catch(error => {
+            console.error('Unable to refresh customer account information:', error);
+        });
+    }
+});
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
         refreshCustomerCart();
+        if (appData.currentRole === 'customer') {
+            refreshCustomerProfile().catch(error => {
+                console.error('Unable to refresh customer account information:', error);
+            });
+        }
         if (appData.currentRole === 'admin') {
             refreshCustomerServiceMessages().catch(error => {
                 console.error('Unable to refresh shared customer-service messages:', error);
@@ -670,6 +726,10 @@ async function checkSavedSession() {
             appData.currentUser = session.user;
             appData.currentRole = 'customer';
             appData.currentUserProfile = session.userProfile || { email: session.user, username: session.user };
+            startCustomerProfileRefresh();
+            await refreshCustomerProfile().catch(error => {
+                console.error('Unable to refresh customer account information:', error);
+            });
             await loadUserCart();
             initializeData();
             document.getElementById('loginPage').style.display = 'none';
@@ -1151,6 +1211,7 @@ async function establishAuthenticatedSession(result) {
     appData.currentUser = result.user.email || result.user.username;
     appData.currentUserProfile = result.role === 'admin' ? null : result.user;
     if (appData.currentRole === 'customer') {
+        startCustomerProfileRefresh();
         const customerAccounts = loadCustomerAccounts();
         customerAccounts[normalizeCustomerEmail(appData.currentUser)] = appData.currentUserProfile;
         saveCustomerAccounts(customerAccounts);
@@ -2057,7 +2118,7 @@ function renderAdminMessagesList() {
         const messageItem = document.createElement('div');
         messageItem.className = `admin-message-item ${serviceMessage.read ? 'read' : 'unread'}`;
         messageItem.innerHTML = `
-            <div class="admin-message-item-top"><strong>${escapeCustomerServiceHtml(serviceMessage.customerName || serviceMessage.customerUsername || 'Unknown customer')}</strong><span>${escapeCustomerServiceHtml(serviceMessage.date)}</span></div>
+            <div class="admin-message-item-top"><strong>${escapeCustomerServiceHtml(serviceMessage.customerUsername || serviceMessage.customerName || 'Unknown customer')}</strong><span>${escapeCustomerServiceHtml(serviceMessage.date)}</span></div>
             <div class="admin-message-subject">${escapeCustomerServiceHtml(serviceMessage.subject || 'Customer concern')}</div>
             <div class="admin-message-preview">${escapeCustomerServiceHtml(serviceMessage.message)}</div>
         `;
@@ -2075,7 +2136,7 @@ function renderAdminMessageDetails(messageId) {
         <div class="admin-message-details-header">
             <div>
                 <h3>${escapeCustomerServiceHtml(message.subject || 'Customer concern')}</h3>
-                <p>From ${escapeCustomerServiceHtml(message.customerName || message.customerUsername || 'Unknown customer')}</p>
+                <p>From ${escapeCustomerServiceHtml(message.customerUsername || message.customerName || 'Unknown customer')}</p>
             </div>
             <span class="message-status">${escapeCustomerServiceHtml(message.status || 'open')}</span>
         </div>
@@ -2087,7 +2148,7 @@ function renderAdminMessageDetails(messageId) {
         <div class="admin-message-body">${escapeCustomerServiceHtml(message.message)}</div>
         <div class="admin-message-replies">${(message.replies || []).map(reply => `
             <div class="admin-message-reply">
-                <strong>${reply.sender === 'admin' ? 'You' : escapeCustomerServiceHtml(message.customerName || 'Customer')}</strong>
+                <strong>${reply.sender === 'admin' ? 'You' : escapeCustomerServiceHtml(message.customerUsername || 'Customer')}</strong>
                 <span>${escapeCustomerServiceHtml(reply.date)}</span>
                 <p>${escapeCustomerServiceHtml(reply.message)}</p>
             </div>
@@ -2388,27 +2449,41 @@ function viewCustomerSettings() {
     saveNavigationState('customer', 'viewCustomerSettings');
     updateFloatingBackButton();
 
-    document.getElementById('settingsUsername').value = profile.username || appData.currentUser;
-    document.getElementById('settingsFullName').value = profile.fullName || '';
-    document.getElementById('settingsEmail').value = profile.email || appData.currentUser;
-    document.getElementById('settingsPhone').value = profile.phone || '';
-    document.getElementById('settingsAddress').value = profile.address || '';
+    const form = document.getElementById('customerSettingsForm');
+    form.dataset.profileDirty = 'false';
+    if (form.dataset.profileDirtyTracking !== 'true') {
+        form.addEventListener('input', () => {
+            form.dataset.profileDirty = 'true';
+        });
+        form.dataset.profileDirtyTracking = 'true';
+    }
+    populateCustomerSettingsForm(profile);
     document.getElementById('customerSettingsMessage').textContent = '';
 }
 
-function saveCustomerSettings(e) {
+function populateCustomerSettingsForm(profile) {
+    const form = document.getElementById('customerSettingsForm');
+    if (!form || form.dataset.profileDirty === 'true') return;
+    document.getElementById('settingsUsername').value = profile.username || appData.currentUser || '';
+    document.getElementById('settingsFullName').value = profile.fullName || '';
+    const emailInput = document.getElementById('settingsEmail');
+    emailInput.value = appData.currentUser || profile.email || '';
+    emailInput.readOnly = true;
+    emailInput.title = 'The login email cannot be changed here.';
+    document.getElementById('settingsPhone').value = profile.phone || '';
+    document.getElementById('settingsAddress').value = profile.address || '';
+}
+
+async function saveCustomerSettings(e) {
     e.preventDefault();
 
     if (appData.currentRole !== 'customer' || !appData.currentUser) return;
 
     const email = appData.currentUser;
-    const accounts = loadCustomerAccounts();
-    const account = accounts[email] || {};
     const updatedAccount = {
-        ...account,
         username: document.getElementById('settingsUsername').value.trim(),
         fullName: document.getElementById('settingsFullName').value.trim(),
-        email: document.getElementById('settingsEmail').value.trim().toLowerCase(),
+        email,
         phone: document.getElementById('settingsPhone').value.trim(),
         address: document.getElementById('settingsAddress').value.trim()
     };
@@ -2426,24 +2501,34 @@ function saveCustomerSettings(e) {
         return;
     }
 
-    if (updatedAccount.email !== email && accounts[updatedAccount.email]) {
+    const submitButton = document.querySelector('#customerSettingsForm button[type="submit"]');
+    if (submitButton) submitButton.disabled = true;
+    message.className = 'status-message';
+    message.textContent = 'Saving account information...';
+    try {
+        const result = await callAuthApi({ action: 'update-customer-profile', ...updatedAccount });
+        const savedProfile = result.user;
+        const accounts = loadCustomerAccounts();
+        accounts[email] = savedProfile;
+        saveCustomerAccounts(accounts);
+
+        appData.currentUserProfile = savedProfile;
+        saveCurrentSession();
+        rememberQuickLogin();
+        const displayName = document.getElementById('customerDisplayName');
+        if (displayName) displayName.textContent = `Welcome, ${savedProfile.username}!`;
+        document.getElementById('customerSettingsForm').dataset.profileDirty = 'false';
+        populateCustomerSettingsForm(savedProfile);
+
+        message.className = 'status-message success';
+        message.textContent = 'Account information updated and synced successfully.';
+    } catch (error) {
+        console.error('Unable to save customer account information:', error);
         message.className = 'status-message error';
-        message.textContent = 'That email address is already registered.';
-        return;
+        message.textContent = `Account information was not saved: ${error.message}`;
+    } finally {
+        if (submitButton) submitButton.disabled = false;
     }
-
-    delete accounts[email];
-    accounts[updatedAccount.email] = updatedAccount;
-    saveCustomerAccounts(accounts);
-
-    appData.currentUser = updatedAccount.email;
-    appData.currentUserProfile = updatedAccount;
-    saveCurrentSession();
-    rememberQuickLogin();
-    document.getElementById('customerDisplayName').textContent = `Welcome, ${updatedAccount.username}!`;
-
-    message.className = 'status-message success';
-    message.textContent = 'Account information updated successfully.';
 }
 
 function loadCustomerNotifications() {

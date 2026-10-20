@@ -8,7 +8,6 @@ const {
     hashVerificationCode,
     safeEqual,
     signAccessToken,
-    verifyAccessToken,
     verifyPassword
 } = require('./lib/auth');
 
@@ -71,7 +70,8 @@ function publicAccount(account) {
         email: account.email,
         username: account.username || account.email,
         fullName: account.fullName || account.email,
-        phone: account.phone || ''
+        phone: account.phone || '',
+        address: account.address || ''
     };
 }
 
@@ -155,8 +155,26 @@ exports.handler = async function handler(event) {
     connectLambda(event);
     if (event.httpMethod === 'OPTIONS') return jsonResponse(204, {});
     if (event.httpMethod === 'GET') {
-        const claims = verifyAccessToken((event.headers?.authorization || event.headers?.Authorization || '').replace(/^Bearer\s+/i, ''));
-        return claims ? jsonResponse(200, { ok: true, user: claims.sub, role: claims.role, exp: claims.exp }) : jsonResponse(401, { error: 'Authentication required' });
+        const authentication = authenticateEvent(event);
+        if (!authentication.ok) return jsonResponse(authentication.statusCode, { error: authentication.error });
+        const { claims } = authentication;
+        if (claims.role !== 'customer') {
+            return jsonResponse(200, { ok: true, user: claims.sub, role: claims.role, exp: claims.exp });
+        }
+        try {
+            const account = await getStore('kingpin-auth').get(accountKey(claims.sub), { type: 'json' });
+            if (!account?.verified) return jsonResponse(401, { error: 'Customer account is unavailable.' });
+            return jsonResponse(200, {
+                ok: true,
+                user: claims.sub,
+                role: claims.role,
+                exp: claims.exp,
+                profile: publicAccount(account)
+            });
+        } catch (error) {
+            console.error('Unable to load customer profile:', error);
+            return jsonResponse(500, { error: 'Unable to load customer account information.' });
+        }
     }
     if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'Method not allowed' });
     const configurationError = getAuthConfigurationError();
@@ -169,6 +187,36 @@ exports.handler = async function handler(event) {
         const store = getStore('kingpin-auth');
         if (data.action === 'register') return await handleRegistration(store, data);
         if (data.action === 'verify') return await handleVerification(store, data);
+
+        if (data.action === 'update-customer-profile') {
+            const authentication = authenticateEvent(event);
+            if (!authentication.ok) {
+                return jsonResponse(authentication.statusCode, { error: authentication.error });
+            }
+            if (authentication.claims.role !== 'customer') {
+                return jsonResponse(403, { error: 'Customer access required.' });
+            }
+
+            const email = normalizeEmail(data.email);
+            const username = String(data.username || '').trim();
+            const fullName = String(data.fullName || '').trim();
+            const phone = String(data.phone || '').trim();
+            const address = String(data.address || '').trim();
+            if (email !== normalizeEmail(authentication.claims.sub)) {
+                return jsonResponse(400, { error: 'The login email cannot be changed in Customer Settings.' });
+            }
+            if (username.length < 3 || username.length > 60 || !fullName || fullName.length > 120
+                || !phone || phone.length > 40 || !address || address.length > 500) {
+                return jsonResponse(400, { error: 'Enter a username (3–60 characters), name, phone, and address within the allowed lengths.' });
+            }
+
+            const key = accountKey(authentication.claims.sub);
+            const account = await store.get(key, { type: 'json' });
+            if (!account?.verified) return jsonResponse(404, { error: 'Customer account was not found.' });
+            const updatedAccount = { ...account, username, fullName, phone, address };
+            await store.setJSON(key, updatedAccount);
+            return jsonResponse(200, { ok: true, user: publicAccount(updatedAccount) });
+        }
 
         if (data.action === 'login') {
             const email = normalizeEmail(data.email);

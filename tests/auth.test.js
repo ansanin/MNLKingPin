@@ -110,6 +110,60 @@ async function run() {
   assert.deepStrictEqual(JSON.parse((await cartHandler(getEvent(otherCustomerToken))).body).cart, []);
   assert.strictEqual((await cartHandler(postEvent(customerToken, { cart: [{ ...customerCart[0], details: { uploadedFiles: [{ uploadedFile: 'data:text/html;base64,AA==' }] } }] }))).statusCode, 400);
   const adminToken = signAccessToken({ sub: 'admin', role: 'admin' });
+  const testCustomerAccount = {
+    email: 'customer@example.com',
+    username: 'customerlogin',
+    fullName: 'Old Full Name',
+    phone: '09170000000',
+    address: 'Old address',
+    verified: true
+  };
+  await blobModule.getStore('kingpin-auth').setJSON(accountKey(testCustomerAccount.email), testCustomerAccount);
+  const earlierServiceMessageResponse = await customerServiceHandler(postEvent(customerToken, {
+    action: 'create',
+    subject: 'Order status',
+    message: 'Checking an existing support thread.'
+  }));
+  assert.strictEqual(earlierServiceMessageResponse.statusCode, 201);
+  const earlierServiceMessage = JSON.parse(earlierServiceMessageResponse.body).message;
+  assert.strictEqual(earlierServiceMessage.customerUsername, 'customerlogin');
+  const updateProfileResponse = await authHandler(postEvent(customerToken, {
+    action: 'update-customer-profile',
+    email: testCustomerAccount.email,
+    username: 'newusername',
+    fullName: 'Updated Full Name',
+    phone: '09171112222',
+    address: 'Updated address'
+  }));
+  assert.strictEqual(updateProfileResponse.statusCode, 200);
+  assert.deepStrictEqual(JSON.parse(updateProfileResponse.body).user, {
+    email: testCustomerAccount.email,
+    username: 'newusername',
+    fullName: 'Updated Full Name',
+    phone: '09171112222',
+    address: 'Updated address'
+  });
+  assert.strictEqual((await authHandler(getEvent(customerToken))).statusCode, 200);
+  const refreshedProfileResponse = await authHandler(getEvent(customerToken));
+  assert.strictEqual(JSON.parse(refreshedProfileResponse.body).profile.username, 'newusername');
+  const refreshedAdminMessages = JSON.parse((await customerServiceHandler(getEvent(adminToken))).body).messages;
+  assert.strictEqual(refreshedAdminMessages.find(message => message.id === earlierServiceMessage.id).customerUsername, 'newusername');
+  assert.strictEqual((await authHandler(postEvent(customerToken, {
+    action: 'update-customer-profile',
+    email: 'changed@example.com',
+    username: 'newusername',
+    fullName: 'Updated Full Name',
+    phone: '09171112222',
+    address: 'Updated address'
+  }))).statusCode, 400);
+  assert.strictEqual((await authHandler(postEvent(adminToken, {
+    action: 'update-customer-profile',
+    email: 'admin@example.com',
+    username: 'adminuser',
+    fullName: 'Admin',
+    phone: '09170000000',
+    address: 'Admin address'
+  }))).statusCode, 403);
   const customerServiceMessage = {
     action: 'create',
     customerName: 'Test Customer',
@@ -121,18 +175,28 @@ async function run() {
   const createdServiceMessage = await customerServiceHandler(postEvent(customerToken, customerServiceMessage));
   assert.strictEqual(createdServiceMessage.statusCode, 201);
   const serviceMessage = JSON.parse(createdServiceMessage.body).message;
+  assert.strictEqual(serviceMessage.customerUsername, 'newusername');
   assert.strictEqual(serviceMessage.customerEmail, 'customer@example.com');
   assert.strictEqual(serviceMessage.ownerSub, 'customer@example.com');
   assert.strictEqual((await customerServiceHandler(postEvent(adminToken, customerServiceMessage))).statusCode, 403);
   assert.strictEqual((await customerServiceHandler(postEvent(customerToken, { action: 'create', subject: 'Invalid', message: 'Hello' }))).statusCode, 400);
   const customerServiceMessages = await customerServiceHandler(getEvent(customerToken));
-  assert.deepStrictEqual(JSON.parse(customerServiceMessages.body).messages.map(message => message.id), [serviceMessage.id]);
+  assert.deepStrictEqual(
+    JSON.parse(customerServiceMessages.body).messages.map(message => message.id).sort(),
+    [serviceMessage.id, earlierServiceMessage.id].sort()
+  );
   assert.deepStrictEqual(JSON.parse((await customerServiceHandler(getEvent(otherCustomerToken))).body).messages, []);
-  assert.deepStrictEqual(JSON.parse((await customerServiceHandler(getEvent(adminToken))).body).messages.map(message => message.id), [serviceMessage.id]);
+  const adminMessages = JSON.parse((await customerServiceHandler(getEvent(adminToken))).body).messages;
+  assert.deepStrictEqual(
+    adminMessages.map(message => message.id).sort(),
+    [serviceMessage.id, earlierServiceMessage.id].sort()
+  );
+  assert.ok(adminMessages.every(message => message.customerUsername === 'newusername'));
   assert.strictEqual((await customerServiceHandler(postEvent(customerToken, { action: 'reply', messageId: serviceMessage.id, message: 'Not allowed' }))).statusCode, 403);
   assert.strictEqual((await customerServiceHandler(postEvent(adminToken, { action: 'read', messageId: serviceMessage.id }))).statusCode, 200);
   assert.strictEqual((await customerServiceHandler(postEvent(adminToken, { action: 'reply', messageId: serviceMessage.id, message: 'We are checking this.' }))).statusCode, 200);
-  const customerServiceConversation = JSON.parse((await customerServiceHandler(getEvent(customerToken))).body).messages[0];
+  const customerServiceConversation = JSON.parse((await customerServiceHandler(getEvent(customerToken))).body).messages
+    .find(message => message.id === serviceMessage.id);
   assert.strictEqual(customerServiceConversation.read, true);
   assert.strictEqual(customerServiceConversation.replies[0].message, 'We are checking this.');
   assert.strictEqual((await cartHandler(postEvent(adminToken, { cart: [] }))).statusCode, 403);

@@ -1,5 +1,5 @@
 const { connectLambda, getStore } = require('@netlify/blobs');
-const { authenticateEvent } = require('./lib/auth');
+const { accountKey, authenticateEvent } = require('./lib/auth');
 
 const maxRequestBytes = 12 * 1024;
 const allowedSubjects = new Set([
@@ -52,10 +52,23 @@ exports.handler = async function handler(event) {
         const { claims } = authentication;
 
         if (event.httpMethod === 'GET') {
-            const visibleMessages = (claims.role === 'admin'
+            let visibleMessages = (claims.role === 'admin'
                 ? messages
                 : messages.filter(message => message.ownerSub === claims.sub))
                 .sort((first, second) => String(second.createdAt || '').localeCompare(String(first.createdAt || '')));
+            if (claims.role === 'admin') {
+                const accountsStore = getStore('kingpin-auth');
+                const usernames = new Map();
+                await Promise.all(visibleMessages.map(async message => {
+                    if (usernames.has(message.ownerSub)) return;
+                    const account = await accountsStore.get(accountKey(message.ownerSub), { type: 'json' });
+                    usernames.set(message.ownerSub, account?.username || message.customerUsername || message.customerName || message.ownerSub);
+                }));
+                visibleMessages = visibleMessages.map(message => ({
+                    ...message,
+                    customerUsername: usernames.get(message.ownerSub)
+                }));
+            }
             return jsonResponse(200, { messages: visibleMessages });
         }
 
@@ -82,8 +95,8 @@ exports.handler = async function handler(event) {
             const message = {
                 id: require('crypto').randomUUID(),
                 ownerSub: claims.sub,
-                customerUsername: String(payload.customerName || '').trim().slice(0, 120) || claims.sub,
-                customerName: String(payload.customerName || '').trim().slice(0, 120) || claims.sub,
+                customerUsername: claims.sub,
+                customerName: claims.sub,
                 customerEmail: claims.sub,
                 orderId: String(payload.orderId || '').trim().slice(0, 80) || null,
                 subject,
@@ -94,6 +107,9 @@ exports.handler = async function handler(event) {
                 createdAt: new Date().toISOString(),
                 replies: []
             };
+            const account = await getStore('kingpin-auth').get(accountKey(claims.sub), { type: 'json' });
+            message.customerUsername = account?.username || claims.sub;
+            message.customerName = message.customerUsername;
             await store.setJSON(`message-${message.id}`, message);
             return jsonResponse(201, { ok: true, message });
         }
