@@ -17,7 +17,13 @@ const blobModule = {
     return {
       async get(key) { return values.has(key) ? values.get(key) : null; },
       async set(key, value) { values.set(key, value); },
-      async setJSON(key, value) { values.set(key, value); }
+      async setJSON(key, value) { values.set(key, value); },
+      async list({ prefix = '' } = {}) {
+        return {
+          blobs: [...values.keys()].filter(key => key.startsWith(prefix)).map(key => ({ key })),
+          cursor: null
+        };
+      }
     };
   }
 };
@@ -38,6 +44,7 @@ const { handler: productsHandler } = require('../netlify/functions/products.js')
 const { handler: qrHandler } = require('../netlify/functions/gcash-qr.js');
 const { handler: footerHandler } = require('../netlify/functions/shop-footer.js');
 const { handler: cartHandler } = require('../netlify/functions/cart.js');
+const { handler: customerServiceHandler } = require('../netlify/functions/customer-service.js');
 const { handler: authHandler } = require('../netlify/functions/auth.js');
 
 async function run() {
@@ -103,6 +110,31 @@ async function run() {
   assert.deepStrictEqual(JSON.parse((await cartHandler(getEvent(otherCustomerToken))).body).cart, []);
   assert.strictEqual((await cartHandler(postEvent(customerToken, { cart: [{ ...customerCart[0], details: { uploadedFiles: [{ uploadedFile: 'data:text/html;base64,AA==' }] } }] }))).statusCode, 400);
   const adminToken = signAccessToken({ sub: 'admin', role: 'admin' });
+  const customerServiceMessage = {
+    action: 'create',
+    customerName: 'Test Customer',
+    orderId: 'order-123',
+    subject: 'Order status',
+    message: 'Can I get an update?'
+  };
+  assert.strictEqual((await customerServiceHandler(getEvent(''))).statusCode, 401);
+  const createdServiceMessage = await customerServiceHandler(postEvent(customerToken, customerServiceMessage));
+  assert.strictEqual(createdServiceMessage.statusCode, 201);
+  const serviceMessage = JSON.parse(createdServiceMessage.body).message;
+  assert.strictEqual(serviceMessage.customerEmail, 'customer@example.com');
+  assert.strictEqual(serviceMessage.ownerSub, 'customer@example.com');
+  assert.strictEqual((await customerServiceHandler(postEvent(adminToken, customerServiceMessage))).statusCode, 403);
+  assert.strictEqual((await customerServiceHandler(postEvent(customerToken, { action: 'create', subject: 'Invalid', message: 'Hello' }))).statusCode, 400);
+  const customerServiceMessages = await customerServiceHandler(getEvent(customerToken));
+  assert.deepStrictEqual(JSON.parse(customerServiceMessages.body).messages.map(message => message.id), [serviceMessage.id]);
+  assert.deepStrictEqual(JSON.parse((await customerServiceHandler(getEvent(otherCustomerToken))).body).messages, []);
+  assert.deepStrictEqual(JSON.parse((await customerServiceHandler(getEvent(adminToken))).body).messages.map(message => message.id), [serviceMessage.id]);
+  assert.strictEqual((await customerServiceHandler(postEvent(customerToken, { action: 'reply', messageId: serviceMessage.id, message: 'Not allowed' }))).statusCode, 403);
+  assert.strictEqual((await customerServiceHandler(postEvent(adminToken, { action: 'read', messageId: serviceMessage.id }))).statusCode, 200);
+  assert.strictEqual((await customerServiceHandler(postEvent(adminToken, { action: 'reply', messageId: serviceMessage.id, message: 'We are checking this.' }))).statusCode, 200);
+  const customerServiceConversation = JSON.parse((await customerServiceHandler(getEvent(customerToken))).body).messages[0];
+  assert.strictEqual(customerServiceConversation.read, true);
+  assert.strictEqual(customerServiceConversation.replies[0].message, 'We are checking this.');
   assert.strictEqual((await cartHandler(postEvent(adminToken, { cart: [] }))).statusCode, 403);
   assert.strictEqual((await productsHandler(postEvent(adminToken, { products: [] }))).statusCode, 200);
   assert.strictEqual((await qrHandler(postEvent(adminToken, { gcashQRCode: 'data:image/png;base64,AA==' }))).statusCode, 200);

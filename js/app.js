@@ -13,6 +13,7 @@ const appData = {
     selectedProduct: null,
     customers: [],
     notifications: [],
+    customerServiceMessages: [],
     editingCartIndex: null,
     shopLogo: null,
     gcashQRCode: null,
@@ -69,6 +70,9 @@ let lastCustomerProductsRefresh = 0;
 let customerCartSyncRequest = null;
 let customerCartRefreshTimer = null;
 let customerCartRefreshRequest = null;
+let customerServiceRefreshTimer = null;
+let customerServiceRefreshRequest = null;
+let selectedAdminMessageId = null;
 
 function applyTheme(theme) {
     const isLight = theme === 'light';
@@ -240,8 +244,7 @@ function markNotificationAsRead(id) {
 function updateNotificationBadges() {
     const adminCount = getUnreadCount('admin');
     const customerCount = getUnreadNotifications('customer').filter(notification => notification.orderId).length;
-    const serviceMessages = JSON.parse(localStorage.getItem('kingpinCustomerServiceMessages') || '[]');
-    const unreadMessageCount = serviceMessages.filter(serviceMessage => !serviceMessage.read).length;
+    const unreadMessageCount = appData.customerServiceMessages.filter(serviceMessage => !serviceMessage.read).length;
     
     const adminOrdersBadge = document.querySelector('[data-notification-badge="admin-orders"]');
     const customerNotificationBadges = document.querySelectorAll('[data-notification-badge="customer-notifications"], [data-notification-badge="customer-orders"]');
@@ -421,6 +424,23 @@ async function saveAdminOrderOperation(orderId, operation, fields = {}) {
     return result.order;
 }
 
+async function callCustomerServiceApi(payload) {
+    const options = {
+        cache: 'no-store',
+        headers: getAuthenticatedHeaders()
+    };
+    if (payload) {
+        options.method = 'POST';
+        options.headers = getAuthenticatedHeaders({ 'Content-Type': 'application/json' });
+        options.body = JSON.stringify(payload);
+    }
+
+    const response = await fetch('/.netlify/functions/customer-service', options);
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Customer-service messages are unavailable.');
+    return result;
+}
+
 async function saveCustomerDesignDecision(orderId, decision, remarks = '') {
     const response = await fetch('/.netlify/functions/orders', {
         method: 'POST',
@@ -596,7 +616,21 @@ async function refreshCustomerCart() {
 
 window.addEventListener('focus', refreshCustomerCart);
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') refreshCustomerCart();
+    if (document.visibilityState === 'visible') {
+        refreshCustomerCart();
+        if (appData.currentRole === 'admin') {
+            refreshCustomerServiceMessages().catch(error => {
+                console.error('Unable to refresh shared customer-service messages:', error);
+            });
+        }
+    }
+});
+window.addEventListener('focus', () => {
+    if (appData.currentRole === 'admin') {
+        refreshCustomerServiceMessages().catch(error => {
+            console.error('Unable to refresh shared customer-service messages:', error);
+        });
+    }
 });
 
 function clearUserCart() {
@@ -1252,6 +1286,7 @@ function clearCurrentSession() {
     localStorage.removeItem('kingpinCurrentSession');
     sessionStorage.removeItem('kingpinAccessToken');
     appData.authToken = null;
+    appData.customerServiceMessages = [];
 }
 
 // Sign up customer
@@ -1903,7 +1938,11 @@ async function showAdminDashboard() {
 
     await loadProductsFromStorage();
     showAdminTab('products');
+    startAdminCustomerServiceRefresh();
     loadAdminOrders();
+    refreshCustomerServiceMessages().catch(error => {
+        console.error('Unable to load shared customer-service messages:', error);
+    });
     updateFloatingBackButton();
     
     // Update logo display
@@ -1950,11 +1989,63 @@ function showAdminTab(tabName) {
     }
 }
 
-function loadAdminMessages() {
+function startAdminCustomerServiceRefresh() {
+    if (customerServiceRefreshTimer !== null) return;
+    customerServiceRefreshTimer = setInterval(() => {
+        if (appData.currentRole === 'admin' && document.visibilityState !== 'hidden') {
+            refreshCustomerServiceMessages().catch(error => {
+                console.error('Unable to refresh shared customer-service messages:', error);
+            });
+        }
+    }, 15000);
+}
+
+async function refreshCustomerServiceMessages() {
+    if (!appData.currentRole || customerServiceRefreshRequest) return customerServiceRefreshRequest;
+    customerServiceRefreshRequest = callCustomerServiceApi()
+        .then(result => {
+            appData.customerServiceMessages = Array.isArray(result.messages) ? result.messages : [];
+            updateNotificationBadges();
+            if (appData.currentRole === 'admin' && document.getElementById('messagesTab')?.style.display === 'block') {
+                renderAdminMessagesList();
+            }
+            return appData.customerServiceMessages;
+        })
+        .finally(() => {
+            customerServiceRefreshRequest = null;
+        });
+    return customerServiceRefreshRequest;
+}
+
+async function loadAdminMessages() {
     const messageList = document.getElementById('adminMessagesList');
     if (!messageList) return;
 
-    const serviceMessages = JSON.parse(localStorage.getItem('kingpinCustomerServiceMessages') || '[]');
+    messageList.innerHTML = '<p style="text-align: center; padding: 40px; color: #a0a0a0;">Loading customer messages...</p>';
+    try {
+        await refreshCustomerServiceMessages();
+        renderAdminMessagesList();
+    } catch (error) {
+        console.error('Unable to load shared customer-service messages:', error);
+        messageList.innerHTML = '<p style="text-align: center; padding: 40px; color: #f88;">Unable to load customer messages. Please try again.</p>';
+    }
+}
+
+function escapeCustomerServiceHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, character => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[character]);
+}
+
+function renderAdminMessagesList() {
+    const messageList = document.getElementById('adminMessagesList');
+    if (!messageList) return;
+
+    const serviceMessages = appData.customerServiceMessages;
     messageList.innerHTML = '';
 
     if (serviceMessages.length === 0) {
@@ -1966,49 +2057,58 @@ function loadAdminMessages() {
         const messageItem = document.createElement('div');
         messageItem.className = `admin-message-item ${serviceMessage.read ? 'read' : 'unread'}`;
         messageItem.innerHTML = `
-            <div class="admin-message-item-top"><strong>${serviceMessage.customerName || serviceMessage.customerUsername || 'Unknown customer'}</strong><span>${serviceMessage.date || ''}</span></div>
-            <div class="admin-message-subject">${serviceMessage.subject || 'Customer concern'}</div>
-            <div class="admin-message-preview">${serviceMessage.message || ''}</div>
+            <div class="admin-message-item-top"><strong>${escapeCustomerServiceHtml(serviceMessage.customerName || serviceMessage.customerUsername || 'Unknown customer')}</strong><span>${escapeCustomerServiceHtml(serviceMessage.date)}</span></div>
+            <div class="admin-message-subject">${escapeCustomerServiceHtml(serviceMessage.subject || 'Customer concern')}</div>
+            <div class="admin-message-preview">${escapeCustomerServiceHtml(serviceMessage.message)}</div>
         `;
-        messageItem.onclick = () => selectAdminMessage(serviceMessage.id);
+        messageItem.onclick = () => selectAdminMessage(String(serviceMessage.id));
         messageList.appendChild(messageItem);
     });
 }
 
-function selectAdminMessage(messageId) {
-    const serviceMessages = JSON.parse(localStorage.getItem('kingpinCustomerServiceMessages') || '[]');
-    const message = serviceMessages.find(serviceMessage => serviceMessage.id === messageId);
+function renderAdminMessageDetails(messageId) {
+    const message = appData.customerServiceMessages.find(serviceMessage => String(serviceMessage.id) === String(messageId));
     if (!message) return;
 
-    markCustomerMessageAsRead(messageId);
     const details = document.getElementById('adminMessageDetails');
     details.innerHTML = `
         <div class="admin-message-details-header">
             <div>
-                <h3>${message.subject || 'Customer concern'}</h3>
-                <p>From ${message.customerName || message.customerUsername || 'Unknown customer'}</p>
+                <h3>${escapeCustomerServiceHtml(message.subject || 'Customer concern')}</h3>
+                <p>From ${escapeCustomerServiceHtml(message.customerName || message.customerUsername || 'Unknown customer')}</p>
             </div>
-            <span class="message-status">${message.status || 'open'}</span>
+            <span class="message-status">${escapeCustomerServiceHtml(message.status || 'open')}</span>
         </div>
         <div class="admin-message-meta">
-            <span>${message.customerEmail || 'No email'}</span>
-            <span>${message.orderId ? `Order #${message.orderId}` : 'General concern'}</span>
-            <span>${message.date || ''}</span>
+            <span>${escapeCustomerServiceHtml(message.customerEmail || 'No email')}</span>
+            <span>${message.orderId ? `Order #${escapeCustomerServiceHtml(message.orderId)}` : 'General concern'}</span>
+            <span>${escapeCustomerServiceHtml(message.date)}</span>
         </div>
-        <div class="admin-message-body">${message.message || ''}</div>
+        <div class="admin-message-body">${escapeCustomerServiceHtml(message.message)}</div>
         <div class="admin-message-replies">${(message.replies || []).map(reply => `
             <div class="admin-message-reply">
-                <strong>${reply.sender === 'admin' ? 'You' : (message.customerName || 'Customer')}</strong>
-                <span>${reply.date || ''}</span>
-                <p>${reply.message || ''}</p>
+                <strong>${reply.sender === 'admin' ? 'You' : escapeCustomerServiceHtml(message.customerName || 'Customer')}</strong>
+                <span>${escapeCustomerServiceHtml(reply.date)}</span>
+                <p>${escapeCustomerServiceHtml(reply.message)}</p>
             </div>
         `).join('')}</div>
         <button type="button" class="btn btn-primary" onclick="toggleAdminReplyBox()">Reply</button>
         <div id="adminReplyBox" class="admin-reply-box" style="display: none;">
             <textarea id="adminReplyInput" rows="4" placeholder="Write a reply to the customer..."></textarea>
-            <button type="button" class="btn btn-primary" onclick="sendAdminMessageReply(${message.id})">Send Reply</button>
+            <button type="button" class="btn btn-primary" onclick="sendAdminMessageReply('${escapeCustomerServiceHtml(message.id)}')">Send Reply</button>
         </div>
     `;
+}
+
+function selectAdminMessage(messageId) {
+    selectedAdminMessageId = String(messageId);
+    renderAdminMessageDetails(selectedAdminMessageId);
+    const message = appData.customerServiceMessages.find(serviceMessage => String(serviceMessage.id) === selectedAdminMessageId);
+    if (message && !message.read) {
+        markCustomerMessageAsRead(selectedAdminMessageId).catch(error => {
+            console.error('Unable to mark customer message as read:', error);
+        });
+    }
 }
 
 function toggleAdminReplyBox() {
@@ -2018,43 +2118,33 @@ function toggleAdminReplyBox() {
     if (replyBox.style.display === 'block') document.getElementById('adminReplyInput').focus();
 }
 
-function sendAdminMessageReply(messageId) {
+async function sendAdminMessageReply(messageId) {
     const replyInput = document.getElementById('adminReplyInput');
     const replyText = replyInput ? replyInput.value.trim() : '';
     if (!replyText) return;
 
-    const serviceMessages = JSON.parse(localStorage.getItem('kingpinCustomerServiceMessages') || '[]');
-    const message = serviceMessages.find(serviceMessage => serviceMessage.id === messageId);
-    if (!message) return;
-
-    message.replies = message.replies || [];
-    message.replies.push({
-        sender: 'admin',
-        message: replyText,
-        date: new Date().toLocaleString()
-    });
-    message.read = true;
-    localStorage.setItem('kingpinCustomerServiceMessages', JSON.stringify(serviceMessages));
-
-    addNotification('customer', `💬 Admin reply to "${message.subject}": ${replyText}`, message.orderId);
-    saveNotifications();
-    selectAdminMessage(messageId);
+    try {
+        const result = await callCustomerServiceApi({ action: 'reply', messageId, message: replyText });
+        const index = appData.customerServiceMessages.findIndex(item => String(item.id) === String(messageId));
+        if (index >= 0) appData.customerServiceMessages[index] = result.message;
+        renderAdminMessagesList();
+        renderAdminMessageDetails(messageId);
+        updateNotificationBadges();
+    } catch (error) {
+        console.error('Unable to send customer-service reply:', error);
+        const details = document.getElementById('adminMessageDetails');
+        const errorMessage = document.createElement('p');
+        errorMessage.className = 'status-message error';
+        errorMessage.textContent = `Reply was not sent: ${error.message}`;
+        details?.appendChild(errorMessage);
+    }
 }
 
-function markCustomerMessageAsRead(messageId) {
-    const serviceMessages = JSON.parse(localStorage.getItem('kingpinCustomerServiceMessages') || '[]');
-    const message = serviceMessages.find(serviceMessage => serviceMessage.id === messageId);
-    if (!message) return;
-
-    message.read = true;
-    localStorage.setItem('kingpinCustomerServiceMessages', JSON.stringify(serviceMessages));
-
-    const notification = appData.notifications.find(item =>
-        item.type === 'admin' && item.orderId === message.orderId && item.message.includes(message.subject)
-    );
-    if (notification) notification.read = true;
-    saveNotifications();
-    loadAdminMessages();
+async function markCustomerMessageAsRead(messageId) {
+    const result = await callCustomerServiceApi({ action: 'read', messageId });
+    const index = appData.customerServiceMessages.findIndex(item => String(item.id) === String(messageId));
+    if (index >= 0) appData.customerServiceMessages[index] = result.message;
+    renderAdminMessagesList();
     updateNotificationBadges();
 }
 
@@ -2244,37 +2334,39 @@ function viewCustomerService() {
     document.getElementById('customerServiceStatus').textContent = '';
 }
 
-function sendCustomerServiceMessage(event) {
+async function sendCustomerServiceMessage(event) {
     event.preventDefault();
     const subject = document.getElementById('serviceSubject').value;
     const message = document.getElementById('serviceMessage').value.trim();
     const orderId = document.getElementById('serviceOrderId').value || null;
     if (!subject || !message) return;
 
-    const serviceMessages = JSON.parse(localStorage.getItem('kingpinCustomerServiceMessages') || '[]');
-    const serviceMessage = {
-        id: Date.now(),
-        customerUsername: appData.currentUser,
-        customerName: appData.currentUserProfile?.fullName || appData.currentUser,
-        customerEmail: appData.currentUserProfile?.email || appData.currentUser,
-        orderId,
-        subject,
-        message,
-        status: 'open',
-        read: false,
-        date: new Date().toLocaleString()
-    };
-    serviceMessages.push(serviceMessage);
-    localStorage.setItem('kingpinCustomerServiceMessages', JSON.stringify(serviceMessages));
-
-    addNotification('admin', `💬 Customer service message: ${subject}${orderId ? ` for order #${orderId}` : ''}`, orderId);
-    addNotification('customer', `✓ Your message to Customer Service was sent: ${subject}.`, orderId);
-    saveNotifications();
-
     const status = document.getElementById('customerServiceStatus');
-    status.className = 'status-message success';
-    status.textContent = 'Message sent to the seller successfully.';
-    document.getElementById('customerServiceForm').reset();
+    status.className = 'status-message';
+    status.textContent = 'Sending your message...';
+    const submitButton = document.querySelector('#customerServiceForm button[type="submit"]');
+    if (submitButton) submitButton.disabled = true;
+    try {
+        await callCustomerServiceApi({
+            action: 'create',
+            customerName: appData.currentUserProfile?.fullName || appData.currentUserProfile?.username || appData.currentUser,
+            orderId,
+            subject,
+            message
+        });
+        addNotification('customer', `✓ Your message to Customer Service was sent: ${subject}.`, orderId);
+        saveNotifications();
+        status.className = 'status-message success';
+        status.textContent = 'Message sent to the seller successfully.';
+        updateNotificationBadges();
+        document.getElementById('customerServiceForm').reset();
+    } catch (error) {
+        console.error('Unable to send customer-service message:', error);
+        status.className = 'status-message error';
+        status.textContent = `Message was not sent: ${error.message}`;
+    } finally {
+        if (submitButton) submitButton.disabled = false;
+    }
 }
 
 function viewCustomerSettings() {
