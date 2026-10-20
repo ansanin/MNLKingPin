@@ -1472,6 +1472,7 @@ body.light-mode .website-footer-location {
 
 .customer-orders-track {
     display: flex;
+    align-items: flex-start;
     width: 100%;
     min-width: 0;
     overflow-x: auto;
