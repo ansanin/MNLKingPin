@@ -932,7 +932,9 @@ async function refreshSharedShopBranding() {
             if (!response.ok || !result.branding) {
                 throw new Error(result.error || 'Unable to load the latest shop branding.');
             }
-            if (!result.exists) {
+            const sharedBrandingExists = result.exists === true
+                || (typeof result.exists !== 'boolean' && Boolean(result.branding.shopName));
+            if (!sharedBrandingExists) {
                 if (appData.currentRole === 'admin') {
                     const legacyBranding = {
                         shopName: localStorage.getItem('kingpinShopName') || appData.shopName || '',
