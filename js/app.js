@@ -4738,11 +4738,22 @@ function loadCustomerOrders() {
     const updateCarouselControls = () => {
         const slides = Array.from(ordersTrack.querySelectorAll('.customer-order-slide'));
         const currentIndex = Math.min(slides.length - 1, Math.max(0, Math.round(ordersTrack.scrollLeft / Math.max(ordersTrack.clientWidth, 1))));
-        ordersList.dataset.currentOrderId = slides[currentIndex]?.dataset.orderId || '';
+        const currentSlide = slides[currentIndex];
+        ordersList.dataset.currentOrderId = currentSlide?.dataset.orderId || '';
         orderPosition.textContent = `${currentIndex + 1} of ${slides.length}`;
         previousOrderButton.disabled = currentIndex === 0;
         nextOrderButton.disabled = currentIndex === slides.length - 1;
+        if (currentSlide) {
+            const activeOrderHeight = `${currentSlide.offsetHeight}px`;
+            if (ordersTrack.style.height !== activeOrderHeight) {
+                ordersTrack.style.height = activeOrderHeight;
+            }
+        }
     };
+
+    const orderTrackResizeObserver = typeof ResizeObserver === 'function'
+        ? new ResizeObserver(updateCarouselControls)
+        : null;
 
     const navigateOrder = direction => {
         const currentIndex = Math.round(ordersTrack.scrollLeft / Math.max(ordersTrack.clientWidth, 1));
@@ -4863,6 +4874,7 @@ function loadCustomerOrders() {
             ${getOrderReviewsSection(order)}
         `;
         ordersTrack.appendChild(orderItem);
+        orderTrackResizeObserver?.observe(orderItem);
     });
 
     const selectedIndex = customerOrders.findIndex(order => String(order.id) === selectedOrderId);
