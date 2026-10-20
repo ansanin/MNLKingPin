@@ -37,6 +37,7 @@ require.cache[nodemailerModulePath] = {
 const { handler: productsHandler } = require('../netlify/functions/products.js');
 const { handler: qrHandler } = require('../netlify/functions/gcash-qr.js');
 const { handler: footerHandler } = require('../netlify/functions/shop-footer.js');
+const { handler: cartHandler } = require('../netlify/functions/cart.js');
 const { handler: authHandler } = require('../netlify/functions/auth.js');
 
 async function run() {
@@ -90,7 +91,19 @@ async function run() {
   assert.strictEqual((await productsHandler(postEvent('', { products: [] }))).statusCode, 401);
   assert.strictEqual((await qrHandler(postEvent(customerToken, { gcashQRCode: 'data:image/png;base64,AA==' }))).statusCode, 403);
   assert.strictEqual((await footerHandler(postEvent(customerToken, {}))).statusCode, 403);
+  const customerCart = [{ id: 1, name: 'Uploaded Design', price: 600, quantity: 1, details: { uploadedFiles: [{ uploadedFile: 'data:image/png;base64,AA==', fileName: 'design.png' }] } }];
+  const getEvent = token => ({
+    httpMethod: 'GET',
+    headers: { authorization: ['Bearer', token].join(' ') }
+  });
+  const saveCartResponse = await cartHandler(postEvent(customerToken, { cart: customerCart }));
+  assert.strictEqual(saveCartResponse.statusCode, 200);
+  assert.deepStrictEqual(JSON.parse((await cartHandler(getEvent(customerToken))).body).cart, customerCart);
+  const otherCustomerToken = signAccessToken({ sub: 'other-customer@example.com', role: 'customer' });
+  assert.deepStrictEqual(JSON.parse((await cartHandler(getEvent(otherCustomerToken))).body).cart, []);
+  assert.strictEqual((await cartHandler(postEvent(customerToken, { cart: [{ ...customerCart[0], details: { uploadedFiles: [{ uploadedFile: 'data:text/html;base64,AA==' }] } }] }))).statusCode, 400);
   const adminToken = signAccessToken({ sub: 'admin', role: 'admin' });
+  assert.strictEqual((await cartHandler(postEvent(adminToken, { cart: [] }))).statusCode, 403);
   assert.strictEqual((await productsHandler(postEvent(adminToken, { products: [] }))).statusCode, 200);
   assert.strictEqual((await qrHandler(postEvent(adminToken, { gcashQRCode: 'data:image/png;base64,AA==' }))).statusCode, 200);
   assert.strictEqual((await footerHandler(postEvent(adminToken, { location: 'Naga', contactNumber: '', facebookUrl: '', instagramUrl: '' }))).statusCode, 200);

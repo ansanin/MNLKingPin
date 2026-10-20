@@ -66,6 +66,9 @@ let sharedProductsRequest = null;
 let customerProductsRefreshRequest = null;
 let customerProductsRefreshTimer = null;
 let lastCustomerProductsRefresh = 0;
+let customerCartSyncRequest = null;
+let customerCartRefreshTimer = null;
+let customerCartRefreshRequest = null;
 
 function applyTheme(theme) {
     const isLight = theme === 'light';
@@ -461,48 +464,148 @@ function loadNotifications() {
 }
 
 // ===== USER-SPECIFIC CART PERSISTENCE =====
-// Save user's cart to localStorage
-function saveUserCart() {
-    if (!appData.currentUser) return;
-    const key = `kingpinCart_${appData.currentUser}`;
+function getUserCartStorageKey(user = appData.currentUser) {
+    return user ? `kingpinCart_${normalizeCustomerEmail(user)}` : '';
+}
+
+function readLocalUserCart() {
+    const key = getUserCartStorageKey();
+    if (!key) return [];
     try {
-        localStorage.setItem(key, JSON.stringify(appData.cart));
-        console.log(`Cart saved for user: ${appData.currentUser}`);
+        const cart = JSON.parse(localStorage.getItem(key) || '[]');
+        return Array.isArray(cart) ? cart : [];
     } catch (error) {
-        console.warn('Unable to save the cart locally because browser storage is full.', error);
+        console.warn('Unable to read the locally saved cart:', error);
+        return [];
     }
 }
 
-// Load user's cart from localStorage
-function loadUserCart() {
-    if (!appData.currentUser) {
+function cacheUserCartLocally(cart) {
+    const key = getUserCartStorageKey();
+    if (!key) return;
+    try {
+        localStorage.setItem(key, JSON.stringify(cart));
+    } catch (error) {
+        console.warn('Unable to cache the cart on this device; it will still sync online.', error);
+    }
+}
+
+function getCartSyncPayload(cart) {
+    return cart.map(item => {
+        if (item.designType === 'uploaded' && item.details) {
+            const details = { ...item.details };
+            if (Array.isArray(details.uploadedFiles) && details.uploadedFiles.length) {
+                details.uploadedFile = '';
+            }
+            return { ...item, image: '', details };
+        }
+        if (item.type === 'custom-design' || item.designType) return item;
+        const { image, images, sizeChartImage, ...cartItem } = item;
+        return cartItem;
+    });
+}
+
+async function requestSharedCart(method, cart) {
+    const response = await fetch('/.netlify/functions/cart', {
+        method,
+        cache: 'no-store',
+        headers: getAuthenticatedHeaders(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+        ...(method === 'POST' ? { body: JSON.stringify({ cart: getCartSyncPayload(cart) }) } : {})
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Unable to sync cart across devices.');
+    return result;
+}
+
+function saveUserCart() {
+    if (appData.currentRole !== 'customer' || !appData.currentUser) return Promise.resolve(false);
+    const cartSnapshot = JSON.parse(JSON.stringify(appData.cart));
+    cacheUserCartLocally(cartSnapshot);
+
+    const sync = (customerCartSyncRequest || Promise.resolve())
+        .catch(() => {})
+        .then(() => requestSharedCart('POST', cartSnapshot));
+    const queuedSync = sync.finally(() => {
+        if (customerCartSyncRequest === queuedSync) customerCartSyncRequest = null;
+    });
+    customerCartSyncRequest = queuedSync;
+
+    return queuedSync.then(() => true).catch(error => {
+        console.error('Unable to sync customer cart:', error);
+        showStatusUpdateToast(`Cart was saved on this device but could not sync: ${error.message}`);
+        return false;
+    });
+}
+
+async function loadUserCart() {
+    if (appData.currentRole !== 'customer' || !appData.currentUser) {
         appData.cart = [];
         return;
     }
-    const key = `kingpinCart_${appData.currentUser}`;
-    const stored = localStorage.getItem(key);
-    if (stored) {
-        try {
-            appData.cart = JSON.parse(stored);
-            console.log(`Cart loaded for user: ${appData.currentUser}`, appData.cart);
+
+    appData.cart = readLocalUserCart();
+    updateCartCount();
+    updateCartDisplay();
+
+    try {
+        const result = await requestSharedCart('GET');
+        if (result.exists) {
+            appData.cart = result.cart;
+            cacheUserCartLocally(appData.cart);
             updateCartCount();
             updateCartDisplay();
-        } catch (e) {
-            console.error('Error loading user cart:', e);
-            appData.cart = [];
+        } else if (appData.cart.length) {
+            await saveUserCart();
         }
-    } else {
-        appData.cart = [];
+        startCustomerCartRefresh();
+    } catch (error) {
+        console.error('Unable to load the shared customer cart:', error);
+        showStatusUpdateToast(`Could not load your cart from other devices: ${error.message}`);
+        startCustomerCartRefresh();
     }
 }
 
-// Clear user's cart from localStorage
+function startCustomerCartRefresh() {
+    if (appData.currentRole !== 'customer' || customerCartRefreshTimer !== null) return;
+    customerCartRefreshTimer = setInterval(refreshCustomerCart, 15000);
+}
+
+async function refreshCustomerCart() {
+    if (appData.currentRole !== 'customer' || document.visibilityState === 'hidden'
+        || customerCartRefreshRequest || customerCartSyncRequest) return;
+
+    customerCartRefreshRequest = requestSharedCart('GET')
+        .then(result => {
+            if (!result.exists || JSON.stringify(result.cart) === JSON.stringify(appData.cart)) return;
+            appData.cart = result.cart;
+            cacheUserCartLocally(appData.cart);
+            updateCartCount();
+            updateCartDisplay();
+            if (document.getElementById('checkoutSection')?.style.display === 'block') {
+                updateCheckoutDisplay();
+            }
+        })
+        .catch(error => {
+            console.error('Unable to refresh the shared customer cart:', error);
+        })
+        .finally(() => {
+            customerCartRefreshRequest = null;
+        });
+    return customerCartRefreshRequest;
+}
+
+window.addEventListener('focus', refreshCustomerCart);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshCustomerCart();
+});
+
 function clearUserCart() {
-    if (!appData.currentUser) return;
-    const key = `kingpinCart_${appData.currentUser}`;
-    localStorage.removeItem(key);
+    const key = getUserCartStorageKey();
+    if (key) localStorage.removeItem(key);
     appData.cart = [];
-    console.log(`Cart cleared for user: ${appData.currentUser}`);
+    updateCartCount();
+    updateCartDisplay();
+    return saveUserCart();
 }
 
 // Restore only a session that the server signed and has not expired.
@@ -533,7 +636,7 @@ async function checkSavedSession() {
             appData.currentUser = session.user;
             appData.currentRole = 'customer';
             appData.currentUserProfile = session.userProfile || { email: session.user, username: session.user };
-            loadUserCart();
+            await loadUserCart();
             initializeData();
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('customerPage').style.display = 'block';
@@ -1008,7 +1111,7 @@ function ensureSignupVerificationField(show) {
     return codeInput;
 }
 
-function establishAuthenticatedSession(result) {
+async function establishAuthenticatedSession(result) {
     appData.authToken = result.token;
     appData.currentRole = result.role;
     appData.currentUser = result.user.email || result.user.username;
@@ -1017,7 +1120,7 @@ function establishAuthenticatedSession(result) {
         const customerAccounts = loadCustomerAccounts();
         customerAccounts[normalizeCustomerEmail(appData.currentUser)] = appData.currentUserProfile;
         saveCustomerAccounts(customerAccounts);
-        loadUserCart();
+        await loadUserCart();
     }
     saveCurrentSession();
     hideCustomerAuth();
@@ -1197,7 +1300,7 @@ async function signupCustomer(e) {
         }
 
         const result = await callAuthApi({ action: 'verify', email, code: verificationCode });
-        establishAuthenticatedSession(result);
+        await establishAuthenticatedSession(result);
         showStatusUpdateToast('Account verified. You are now signed in.');
     } catch (error) {
         errorMessage.textContent = error.message;
@@ -1243,7 +1346,7 @@ async function loginCustomer(e) {
     
     try {
         const result = await callAuthApi({ action: 'login', email, password });
-        establishAuthenticatedSession(result);
+        await establishAuthenticatedSession(result);
     } catch (error) {
         errorMessage.textContent = error.message;
         errorMessage.style.display = 'block';
@@ -1301,7 +1404,7 @@ function loginWithGmail() {
 // Process Gmail Login
 async function processGmailLogin(credential) {
     const result = await callAuthApi({ action: 'google-login', credential });
-    establishAuthenticatedSession(result);
+    await establishAuthenticatedSession(result);
 }
 
 // Show admin login form
@@ -1360,8 +1463,12 @@ function forgotPassword() {
     showStatusUpdateToast(message);
 }
 
-function logout() {
+async function logout() {
     closeCustomerNavMenu();
+
+    if (appData.currentRole === 'customer') {
+        await saveUserCart();
+    }
 
     // Clear all session data before switching the UI
     clearCurrentSession();
@@ -1369,11 +1476,6 @@ function logout() {
     localStorage.removeItem('kingpinSession');
     localStorage.removeItem('kingpinCurrentSession');
     localStorage.removeItem('kingpinForceLogin');
-
-    // Save cart before logging out
-    if (appData.currentUser) {
-        saveUserCart();
-    }
 
     appData.currentUser = null;
     appData.currentRole = null;
@@ -3163,6 +3265,7 @@ function placeOrderDirect() {
     // Update cart display
     updateCartCount();
     updateCartDisplay();
+    saveUserCart();
     
     // Open payment checkout directly after the first Place Order click.
     document.getElementById('productsSection').style.display = 'none';
@@ -3351,8 +3454,12 @@ function updateCartDisplay() {
 
         const cartItem = document.createElement('div');
         cartItem.className = 'cart-item';
-        const imageMarkup = item.image
-            ? `<img class="cart-item-image" src="${item.image}" alt="${item.name}">`
+        const catalogImage = item.type === 'custom-design'
+            ? ''
+            : appData.products.find(product => String(product.id) === String(item.id))?.image || '';
+        const cartImage = item.image || catalogImage;
+        const imageMarkup = cartImage
+            ? `<img class="cart-item-image" src="${cartImage}" alt="${item.name}">`
             : '<div class="cart-item-image cart-item-image-placeholder" aria-hidden="true">KP</div>';
         cartItem.innerHTML = `
             <div class="cart-item-media">${imageMarkup}</div>
