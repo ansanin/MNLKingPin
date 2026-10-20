@@ -4713,23 +4713,23 @@ function loadCustomerOrders() {
     }
 
     customerOrders.forEach(order => {
-        // Build items list with customization
         const itemsList = order.items.map(item => {
-            let customStr = '';
-            if (item.customization) {
-                customStr = ' [';
-                if (item.customization.size) customStr += `Top: ${item.customization.size}`;
-                if (item.customization.bottomSize) customStr += `${item.customization.size ? ', ' : ''}Bottom: ${item.customization.bottomSize}`;
-                if (item.customization.name || item.customization.number) {
-                    if (item.customization.size || item.customization.bottomSize) customStr += ', ';
-                    if (item.customization.name) customStr += `${item.customization.name}`;
-                    if (item.customization.name && item.customization.number) customStr += ' ';
-                    if (item.customization.number) customStr += `#${item.customization.number}`;
-                }
-                customStr += ']';
-            }
-            return `${item.name} (x${item.quantity})${customStr}`;
-        }).join(', ');
+            const customization = item.customization || {};
+            const options = [
+                customization.size ? `Top: ${customization.size}` : '',
+                customization.bottomSize ? `Bottom: ${customization.bottomSize}` : '',
+                customization.name ? `Name: ${customization.name}` : '',
+                customization.number ? `No. ${customization.number}` : '',
+                customization.color || customization.colour ? `Color: ${customization.color || customization.colour}` : ''
+            ].filter(Boolean);
+            return `<div class="customer-order-product">
+                <div class="customer-order-product-heading">
+                    <strong>${escapeProductionHtml(item.name || item.productName || 'Jersey product')}</strong>
+                    <span class="customer-order-quantity">Qty ${Number(item.quantity) || 1}</span>
+                </div>
+                ${options.length ? `<div class="customer-order-product-options">${options.map(option => `<span>${escapeProductionHtml(option)}</span>`).join('')}</div>` : ''}
+            </div>`;
+        }).join('');
         const uploadedDesignsHtml = order.items.map((item, itemIndex) => {
             return getUploadedDesignImageSources(item, order.id, itemIndex).map((imageSource, imageIndex) =>
                 `<img src="${imageSource}" alt="Uploaded customer design ${imageIndex + 1}" style="display: inline-block; max-width: 180px; max-height: 140px; object-fit: contain; margin: 8px 8px 0 0; border: 1px solid #5b6268; border-radius: 4px;">`
@@ -4739,14 +4739,38 @@ function loadCustomerOrders() {
         const orderItem = document.createElement('div');
         orderItem.className = 'order-item';
 
-        const teamOrderBadge = order.teamOrder && order.teamOrder.isTeamOrder
-            ? `<p style="margin: 8px 0 0; color: #d4af37; font-weight: 700;">🏆 ${buildTeamOrderLabel(order.teamOrder)}</p>`
+        const teamOrder = normalizeTeamOrderInput(order.teamOrder);
+        const teamOrderDetails = teamOrder.isTeamOrder
+            ? `<section class="customer-order-section customer-order-team">
+                <h3>Team order</h3>
+                <div class="customer-order-meta">
+                    <div><span>Team</span><strong>${escapeProductionHtml(teamOrder.teamName || 'Team order')}</strong></div>
+                    ${teamOrder.teamType ? `<div><span>Sport / type</span><strong>${escapeProductionHtml(teamOrder.teamType)}</strong></div>` : ''}
+                    ${teamOrder.totalPlayers ? `<div><span>Players</span><strong>${teamOrder.totalPlayers}</strong></div>` : ''}
+                </div>
+                ${teamOrder.teamSizes.length ? `<div class="customer-order-team-sizes">
+                    <h4>Player sizes</h4>
+                    <div class="customer-order-team-size-grid">
+                        ${teamOrder.teamSizes.map(size => `<div class="customer-order-team-size">
+                            <strong>Player ${size.player}</strong>
+                            <span><small>Upper</small>${escapeProductionHtml(size.topSize || '—')}</span>
+                            <span><small>Bottom</small>${escapeProductionHtml(size.bottomSize || '—')}</span>
+                        </div>`).join('')}
+                    </div>
+                </div>` : ''}
+                ${teamOrder.teamNotes ? `<div class="customer-order-team-notes"><h4>Team notes</h4><p>${escapeProductionHtml(teamOrder.teamNotes)}</p></div>` : ''}
+            </section>`
             : '';
-        const teamOrderSizes = order.teamOrder && Array.isArray(order.teamOrder.teamSizes) && order.teamOrder.teamSizes.length
-            ? `<p style="margin: 8px 0 0; color: #d4af37;">Team sizes: ${buildTeamSizeSummary(order.teamOrder.teamSizes)}</p>`
-            : '';
-        const teamOrderNotes = order.teamOrder?.teamNotes
-            ? `<p class="customer-order-team-notes"><strong>Team Notes:</strong> ${escapeProductionHtml(order.teamOrder.teamNotes)}</p>`
+        const measurements = order.measurements;
+        const measurementsHtml = measurements
+            ? `<section class="customer-order-section">
+                <h3>Measurements</h3>
+                <div class="customer-order-measurements">
+                    <div><span>Chest</span><strong>${escapeProductionHtml(measurements.chest || '—')}${measurements.chest && measurements.chest !== 'Not provided' ? '<small>cm</small>' : ''}</strong></div>
+                    <div><span>Waist</span><strong>${escapeProductionHtml(measurements.waist || '—')}${measurements.waist && measurements.waist !== 'Not provided' ? '<small>cm</small>' : ''}</strong></div>
+                    <div><span>Length</span><strong>${escapeProductionHtml(measurements.length || '—')}${measurements.length && measurements.length !== 'Not provided' ? '<small>cm</small>' : ''}</strong></div>
+                </div>
+            </section>`
             : '';
 
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
@@ -4765,17 +4789,20 @@ function loadCustomerOrders() {
                 <span class="order-status ${getOrderProductionStatus(order)}">${escapeProductionHtml(getProductionStageLabel(getOrderProductionStatus(order)))}</span>
             </div>
             <div class="order-details">
-                <p><strong>Customer:</strong> ${order.customerName}</p>
-                <p><strong>Email:</strong> ${order.customerEmail}</p>
-                <p><strong>Products:</strong> ${itemsList}</p>
+                <section class="customer-order-section customer-order-meta">
+                    <div><span>Customer</span><strong>${escapeProductionHtml(order.customerName || '—')}</strong></div>
+                    <div><span>Email</span><strong>${escapeProductionHtml(order.customerEmail || '—')}</strong></div>
+                    <div><span>Order date</span><strong>${escapeProductionHtml(order.date || '—')}</strong></div>
+                    <div><span>Payment</span><strong>${escapeProductionHtml(paymentMethod.toUpperCase())}</strong></div>
+                    <div class="customer-order-address"><span>Delivery address</span><strong>${escapeProductionHtml(order.customerAddress || '—')}</strong></div>
+                </section>
+                <section class="customer-order-section">
+                    <h3>Items ordered</h3>
+                    <div class="customer-order-products">${itemsList}</div>
+                </section>
                 ${uploadedDesignsHtml ? `<div class="customer-order-designs"><strong>Uploaded Design:</strong>${uploadedDesignsHtml}</div>` : ''}
-                <p><strong>Delivery Address:</strong> ${order.customerAddress}</p>
-                <p><strong>Order Date:</strong> ${order.date}</p>
-                <p><strong>Payment Method:</strong> ${(order.paymentMethod || 'gcash').toUpperCase()}</p>
-                ${teamOrderBadge}
-                ${teamOrderSizes}
-                ${teamOrderNotes}
-                ${order.measurements ? `<p><strong>Measurements:</strong> Chest: ${order.measurements.chest}cm, Waist: ${order.measurements.waist}cm, Length: ${order.measurements.length}cm</p>` : ''}
+                ${teamOrderDetails}
+                ${measurementsHtml}
             </div>
             ${productionTrackingHtml}
             <div class="order-total">Total: ₱${order.totalAmount.toFixed(2)}</div>
