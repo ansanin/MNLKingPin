@@ -4625,8 +4625,14 @@ function normalizePaymentMethod(value) {
     return String(value || 'gcash').toLowerCase();
 }
 
+function isOrderCompleted(order) {
+    const completedStatuses = ['completed', 'delivered'];
+    return completedStatuses.includes(String(order.status || '').trim().toLowerCase())
+        || completedStatuses.includes(String(order.productionStatus || '').trim().toLowerCase());
+}
+
 function isOrderInPurchaseHistory(order) {
-    return ['completed', 'delivered', 'cancelled'].includes(order.status);
+    return isOrderCompleted(order) || String(order.status || '').trim().toLowerCase() === 'cancelled';
 }
 
 function formatProductionTimestamp(value) {
@@ -4708,9 +4714,51 @@ function loadCustomerOrders() {
         .sort((firstOrder, secondOrder) => Number(secondOrder.id) - Number(firstOrder.id));
 
     if (customerOrders.length === 0) {
+        ordersList.dataset.currentOrderId = '';
         ordersList.innerHTML = '<p style="text-align: center; padding: 40px; color: #a0a0a0;">No active orders. <a href="javascript:viewPurchaseHistory()" style="color: #d4af37; text-decoration: underline;">View purchase history</a></p>';
         return;
     }
+
+    const selectedOrderId = ordersList.dataset.currentOrderId;
+    ordersList.innerHTML = `
+        <div class="customer-orders-carousel">
+            <div class="customer-orders-carousel-controls">
+                <button type="button" class="btn btn-secondary customer-order-nav-button" data-order-direction="-1" aria-label="Previous order">← Previous</button>
+                <span class="customer-orders-position" aria-live="polite"></span>
+                <button type="button" class="btn btn-secondary customer-order-nav-button" data-order-direction="1" aria-label="Next order">Next →</button>
+            </div>
+            <div class="customer-orders-track" role="region" aria-label="Customer orders" tabindex="0"></div>
+            <p class="customer-orders-swipe-hint">Swipe left or right to view another order.</p>
+        </div>`;
+    const ordersTrack = ordersList.querySelector('.customer-orders-track');
+    const orderPosition = ordersList.querySelector('.customer-orders-position');
+    const previousOrderButton = ordersList.querySelector('[data-order-direction="-1"]');
+    const nextOrderButton = ordersList.querySelector('[data-order-direction="1"]');
+
+    const updateCarouselControls = () => {
+        const slides = Array.from(ordersTrack.querySelectorAll('.customer-order-slide'));
+        const currentIndex = Math.min(slides.length - 1, Math.max(0, Math.round(ordersTrack.scrollLeft / Math.max(ordersTrack.clientWidth, 1))));
+        ordersList.dataset.currentOrderId = slides[currentIndex]?.dataset.orderId || '';
+        orderPosition.textContent = `${currentIndex + 1} of ${slides.length}`;
+        previousOrderButton.disabled = currentIndex === 0;
+        nextOrderButton.disabled = currentIndex === slides.length - 1;
+    };
+
+    const navigateOrder = direction => {
+        const currentIndex = Math.round(ordersTrack.scrollLeft / Math.max(ordersTrack.clientWidth, 1));
+        const nextIndex = Math.min(customerOrders.length - 1, Math.max(0, currentIndex + direction));
+        ordersTrack.scrollTo({ left: nextIndex * ordersTrack.clientWidth, behavior: 'smooth' });
+    };
+
+    previousOrderButton.addEventListener('click', () => navigateOrder(-1));
+    nextOrderButton.addEventListener('click', () => navigateOrder(1));
+    ordersTrack.addEventListener('scroll', updateCarouselControls, { passive: true });
+    ordersTrack.addEventListener('keydown', event => {
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            event.preventDefault();
+            navigateOrder(event.key === 'ArrowLeft' ? -1 : 1);
+        }
+    });
 
     customerOrders.forEach(order => {
         const itemsList = order.items.map(item => {
@@ -4738,6 +4786,8 @@ function loadCustomerOrders() {
         
         const orderItem = document.createElement('div');
         orderItem.className = 'order-item';
+        orderItem.classList.add('customer-order-slide');
+        orderItem.dataset.orderId = String(order.id);
 
         const teamOrder = normalizeTeamOrderInput(order.teamOrder);
         const teamOrderDetails = teamOrder.isTeamOrder
@@ -4812,8 +4862,14 @@ function loadCustomerOrders() {
             <div class="order-actions"><strong>Order action:</strong><div class="order-action-buttons"><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'cancel')">Cancel / Change of Mind</button><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'refund')">Request Refund</button></div><div id="orderReason-${order.id}" class="order-reason-options"></div>${order.requestType ? `<p class="order-request-status">Request: ${order.requestType === 'cancel' ? 'Cancel / Change of Mind' : 'Refund'} (${order.requestStatus || 'pending'})</p>` : ''}</div>
             ${getOrderReviewsSection(order)}
         `;
-        ordersList.appendChild(orderItem);
+        ordersTrack.appendChild(orderItem);
     });
+
+    const selectedIndex = customerOrders.findIndex(order => String(order.id) === selectedOrderId);
+    if (selectedIndex > 0) {
+        ordersTrack.scrollLeft = selectedIndex * ordersTrack.clientWidth;
+    }
+    updateCarouselControls();
 }
 
 function openGcashQrViewer(qrSource) {
@@ -4938,10 +4994,9 @@ function showOrderRequestReasons(orderId, requestType) {
     reasonContainer.innerHTML = `<label for="orderReasonSelect-${orderId}">Reason:</label><select id="orderReasonSelect-${orderId}">${reasons.map(reason => `<option value="${reason}">${reason}</option>`).join('')}</select><button type="button" class="btn btn-small" onclick="requestOrderAction(${orderId}, '${requestType}', document.getElementById('orderReasonSelect-${orderId}').value)">Submit Request</button>`;
 }
 
-// Generate review section for products in an order (for My Orders display)
+// Generate the rating section for a completed order in purchase history.
 function getOrderReviewsSection(order) {
-    const isCompleted = order.status === 'completed' || order.status === 'delivered';
-    if (!isCompleted) return ''; // No reviews for non-completed orders
+    if (!isOrderCompleted(order)) return '';
     
     let reviewsHtml = '<div class="order-reviews"><h5 class="order-reviews-title">⭐ Leave Product Reviews</h5>';
     
@@ -5033,7 +5088,7 @@ function submitOrderProductReview(orderId, productId, productName) {
     }
     
     // Verify order is completed
-    if (order.status !== 'completed' && order.status !== 'delivered') {
+    if (!isOrderCompleted(order)) {
         alert('This order is not marked as completed yet.');
         return;
     }
@@ -5071,8 +5126,11 @@ function submitOrderProductReview(orderId, productId, productName) {
     // Show success
     showStatusUpdateToast(`✓ Thank you! Your review for ${productName} has been recorded.`);
     
-    // Refresh My Orders display
-    loadCustomerOrders();
+    if (document.getElementById('purchaseHistorySection')?.style.display === 'block') {
+        loadPurchaseHistory();
+    } else {
+        loadCustomerOrders();
+    }
 }
 
 async function requestOrderAction(orderId, requestType, reason) {
@@ -5085,7 +5143,7 @@ async function requestOrderAction(orderId, requestType, reason) {
         loadCustomerOrders();
         return;
     }
-    if (['completed', 'delivered', 'cancelled'].includes(order.status) && requestType === 'cancel') {
+    if ((isOrderCompleted(order) || String(order.status || '').trim().toLowerCase() === 'cancelled') && requestType === 'cancel') {
         alert('This order can no longer be cancelled.');
         loadCustomerOrders();
         return;

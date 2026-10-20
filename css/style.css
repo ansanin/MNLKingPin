@@ -1441,6 +1441,85 @@ body.light-mode .website-footer-location {
     margin-bottom: 20px;
 }
 
+.customer-orders-carousel {
+    min-width: 0;
+}
+
+.customer-orders-carousel-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.customer-orders-position {
+    color: #e4e8eb;
+    font-size: 0.9rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.customer-order-nav-button {
+    min-width: 112px;
+    margin: 0;
+}
+
+.customer-order-nav-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.customer-orders-track {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+.customer-orders-track::-webkit-scrollbar {
+    display: none;
+}
+
+.customer-orders-track:focus-visible {
+    outline: 2px solid #d4af37;
+    outline-offset: 3px;
+}
+
+.customer-orders-track > .customer-order-slide {
+    box-sizing: border-box;
+    flex: 0 0 100%;
+    min-width: 0;
+    margin: 0;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+}
+
+.customer-orders-swipe-hint {
+    margin: 8px 0 0;
+    color: #aeb8c2;
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+body.light-mode #customerPage .customer-orders-position {
+    color: #263238;
+}
+
+body.light-mode #customerPage .customer-orders-swipe-hint {
+    color: #58656d;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .customer-orders-track {
+        scroll-behavior: auto;
+    }
+}
+
 .order-item {
     background-color: #1f1f1f;
     padding: 15px;
@@ -5907,6 +5986,16 @@ body.light-mode #customerPage #cartSection button.btn-secondary {
 
     #customerPage .customer-order-team-size-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #customerPage .customer-orders-carousel-controls {
+        gap: 8px;
+    }
+
+    #customerPage .customer-order-nav-button {
+        min-width: 0;
+        padding: 8px 10px;
+        font-size: 0.78rem;
     }
 
     #customerPage .order-tracking {
