@@ -260,17 +260,19 @@ function setupFileUploadPreview() {
             preview.className = 'upload-design-file-preview';
             if (file.type.startsWith('image/')) {
                 const image = document.createElement('img');
-                image.alt = file.name;
+                image.alt = `Uploaded design ${fileIndex + 1}`;
                 image.src = URL.createObjectURL(file);
                 preview.appendChild(image);
+            } else {
+                const fileType = document.createElement('span');
+                fileType.className = 'upload-design-file-type';
+                fileType.textContent = 'PDF';
+                preview.appendChild(fileType);
             }
-            const name = document.createElement('span');
-            name.textContent = file.name;
-            preview.appendChild(name);
             const removeButton = document.createElement('button');
             removeButton.type = 'button';
             removeButton.className = 'upload-design-file-remove';
-            removeButton.setAttribute('aria-label', `Remove ${file.name}`);
+            removeButton.setAttribute('aria-label', `Remove uploaded design ${fileIndex + 1}`);
             removeButton.textContent = 'Remove';
             removeButton.addEventListener('click', () => {
                 designData.uploadedDesignFiles.splice(fileIndex, 1);

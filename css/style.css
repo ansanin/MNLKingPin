@@ -6748,6 +6748,17 @@ body.light-mode .footer-social-link:focus-visible {
     text-align: center;
 }
 
+.upload-design-file-type,
+.uploaded-design-pdf-preview {
+    align-items: center;
+    border: 1px solid #8d793b;
+    color: #e5c85c;
+    display: flex;
+    height: 96px;
+    justify-content: center;
+    width: 96px;
+}
+
 .upload-design-file-count {
     color: #d4af37;
     display: block;

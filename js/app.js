@@ -3325,6 +3325,23 @@ function getUploadedDesignImageSources(item, orderId, itemIndex) {
     return window.KingPinOrderMedia.getUploadedDesignImageSources(item, orderId, itemIndex);
 }
 
+function renderUploadedDesignPreviews(item) {
+    const images = getUploadedDesignImageSources(item);
+    const files = Array.isArray(item?.details?.uploadedFiles) && item.details.uploadedFiles.length
+        ? item.details.uploadedFiles
+        : [{ fileType: item?.details?.fileType }];
+    const pdfCount = files.filter(file => file.fileType === 'application/pdf').length;
+    if (!images.length && !pdfCount) return '';
+
+    const previews = images.map((image, imageIndex) =>
+        `<img src="${image}" alt="Uploaded design ${imageIndex + 1}">`
+    );
+    for (let index = 0; index < pdfCount; index += 1) {
+        previews.push('<span class="uploaded-design-pdf-preview" aria-label="PDF attachment">PDF</span>');
+    }
+    return `<div class="cart-uploaded-design-images">${previews.join('')}</div>`;
+}
+
 function getCartSubtotal() {
     return appData.cart.reduce((sum, item) => sum + (Number(item.price) * (Number(item.quantity) || 1)), 0);
 }
@@ -3434,11 +3451,7 @@ function updateCartDisplay() {
                 customizationHTML += `<span>📤 Uploaded Design</span>`;
                 customizationHTML += `<span>Type: <strong>${getUploadedDesignTypeLabel(details.clothingType)}</strong></span>`;
                 customizationHTML += `<span>Item: <strong>${details.itemDescription}</strong></span>`;
-                customizationHTML += `<span>File: <strong>${details.fileName}</strong></span>`;
-                const designImages = getUploadedDesignImageSources(item);
-                if (designImages.length) {
-                    customizationHTML += `<div class="cart-uploaded-design-images">${designImages.map((image, imageIndex) => `<img src="${image}" alt="Uploaded design ${imageIndex + 1}">`).join('')}</div>`;
-                }
+                customizationHTML += renderUploadedDesignPreviews(item);
             }
             customizationHTML += '</div>';
         } else if (item.customization) {
@@ -3693,7 +3706,7 @@ function updateCheckoutDisplay() {
                 customHTML += '<strong style="color: #d4af37;">Uploaded Custom Design:</strong><br>';
                 customHTML += `<span style="display: block; margin: 5px 0;">📤 <strong>${details.itemDescription}</strong></span>`;
                 customHTML += `<span style="display: block; margin: 5px 0;">Type: <strong>${getUploadedDesignTypeLabel(details.clothingType)}</strong></span>`;
-                customHTML += `<span style="display: block; margin: 5px 0;">File: <strong>${details.fileName}</strong></span>`;
+                customHTML += renderUploadedDesignPreviews(item);
             }
             customHTML += '</div>';
         } else if (item.customization) {
