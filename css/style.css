@@ -1476,6 +1476,7 @@ body.light-mode .website-footer-location {
     width: 100%;
     min-width: 0;
     overflow-x: auto;
+    overflow-y: hidden;
     overscroll-behavior-x: contain;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
