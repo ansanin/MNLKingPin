@@ -45,6 +45,7 @@ const { handler: qrHandler } = require('../netlify/functions/gcash-qr.js');
 const { handler: footerHandler } = require('../netlify/functions/shop-footer.js');
 const { handler: cartHandler } = require('../netlify/functions/cart.js');
 const { handler: customerServiceHandler } = require('../netlify/functions/customer-service.js');
+const { handler: shopBrandingHandler } = require('../netlify/functions/shop-branding.js');
 const { handler: authHandler } = require('../netlify/functions/auth.js');
 
 async function run() {
@@ -95,21 +96,35 @@ async function run() {
     body: JSON.stringify(body)
   });
   const customerToken = signAccessToken({ sub: 'customer@example.com', role: 'customer' });
-  assert.strictEqual((await productsHandler(postEvent('', { products: [] }))).statusCode, 401);
-  assert.strictEqual((await qrHandler(postEvent(customerToken, { gcashQRCode: 'data:image/png;base64,AA==' }))).statusCode, 403);
-  assert.strictEqual((await footerHandler(postEvent(customerToken, {}))).statusCode, 403);
-  const customerCart = [{ id: 1, name: 'Uploaded Design', price: 600, quantity: 1, details: { uploadedFiles: [{ uploadedFile: 'data:image/png;base64,AA==', fileName: 'design.png' }] } }];
+  const adminToken = signAccessToken({ sub: 'admin', role: 'admin' });
   const getEvent = token => ({
     httpMethod: 'GET',
     headers: { authorization: ['Bearer', token].join(' ') }
   });
+  assert.strictEqual((await productsHandler(postEvent('', { products: [] }))).statusCode, 401);
+  assert.strictEqual((await qrHandler(postEvent(customerToken, { gcashQRCode: 'data:image/png;base64,AA==' }))).statusCode, 403);
+  assert.strictEqual((await footerHandler(postEvent(customerToken, {}))).statusCode, 403);
+  assert.strictEqual((await shopBrandingHandler(postEvent(customerToken, {
+    shopName: 'Shop',
+    shopLogo: 'data:image/png;base64,AA=='
+  }))).statusCode, 403);
+  const branding = { shopName: 'Shared Shop', shopLogo: 'data:image/png;base64,AA==' };
+  assert.strictEqual((await shopBrandingHandler(postEvent(adminToken, branding))).statusCode, 200);
+  assert.deepStrictEqual(
+    JSON.parse((await shopBrandingHandler(getEvent(customerToken))).body).branding,
+    branding
+  );
+  assert.strictEqual((await shopBrandingHandler(postEvent(adminToken, {
+    shopName: 'Shared Shop',
+    shopLogo: 'data:text/html;base64,AA=='
+  }))).statusCode, 400);
+  const customerCart = [{ id: 1, name: 'Uploaded Design', price: 600, quantity: 1, details: { uploadedFiles: [{ uploadedFile: 'data:image/png;base64,AA==', fileName: 'design.png' }] } }];
   const saveCartResponse = await cartHandler(postEvent(customerToken, { cart: customerCart }));
   assert.strictEqual(saveCartResponse.statusCode, 200);
   assert.deepStrictEqual(JSON.parse((await cartHandler(getEvent(customerToken))).body).cart, customerCart);
   const otherCustomerToken = signAccessToken({ sub: 'other-customer@example.com', role: 'customer' });
   assert.deepStrictEqual(JSON.parse((await cartHandler(getEvent(otherCustomerToken))).body).cart, []);
   assert.strictEqual((await cartHandler(postEvent(customerToken, { cart: [{ ...customerCart[0], details: { uploadedFiles: [{ uploadedFile: 'data:text/html;base64,AA==' }] } }] }))).statusCode, 400);
-  const adminToken = signAccessToken({ sub: 'admin', role: 'admin' });
   const testCustomerAccount = {
     email: 'customer@example.com',
     username: 'customerlogin',

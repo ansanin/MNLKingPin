@@ -1126,8 +1126,8 @@
                     <form id="logoUploadForm" onsubmit="uploadShopLogo(event)">
                         <div class="form-group">
                             <label for="shopLogoFile">Upload Logo Image:</label>
-                            <input type="file" id="shopLogoFile" accept="image/*">
-                            <small>Supported formats: JPG, PNG, GIF (Recommended: Square image, at least 200x200px)</small>
+                            <input type="file" id="shopLogoFile" accept="image/png,image/jpeg,image/webp">
+                            <small>Supported formats: JPG, PNG, WebP (Max 3MB. Recommended: square image, at least 200x200px)</small>
                         </div>
                         
                         <div class="form-group">
@@ -1351,7 +1351,7 @@
     <script src="js/team-order.js?v=20261019-team-order-3"></script>
     <script src="js/production-tracking.js?v=20261015-production-1"></script>
     <script src="js/order-media.js?v=20261019-multi-design-1"></script>
-    <script src="js/app.js?v=20261020-customer-profile-sync-1"></script>
+    <script src="js/app.js?v=20261020-shared-shop-branding-1"></script>
     <script src="js/design-interface.js?v=20261020-hide-upload-filenames-1"></script>
     <script>
         // Force initialization when page loads
@@ -1383,18 +1383,6 @@
         });
         
     </script>
-
-<script>
-const savedLogo = localStorage.getItem('kingpinShopLogo');
-
-if (savedLogo) {
-    const loginLogo = document.getElementById('loginLogo');
-
-    if (loginLogo) {
-        loginLogo.src = savedLogo;
-    }
-}
-</script>
 
 <!-- Shared receipt modal for customer checkout and admin order details -->
 <div id="gcashQrViewerModal" class="gcash-qr-viewer-modal" style="display: none;" onclick="if (event.target === this) closeGcashQrViewer()">

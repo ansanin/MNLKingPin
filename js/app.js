@@ -75,6 +75,8 @@ let customerServiceRefreshRequest = null;
 let selectedAdminMessageId = null;
 let customerProfileRefreshTimer = null;
 let customerProfileRefreshRequest = null;
+let shopBrandingRefreshTimer = null;
+let shopBrandingRefreshRequest = null;
 
 function applyTheme(theme) {
     const isLight = theme === 'light';
@@ -660,6 +662,11 @@ async function refreshCustomerCart() {
 
 window.addEventListener('focus', refreshCustomerCart);
 window.addEventListener('focus', () => {
+    refreshSharedShopBranding().catch(error => {
+        console.error('Unable to refresh shared shop branding:', error);
+    });
+});
+window.addEventListener('focus', () => {
     if (appData.currentRole === 'customer') {
         refreshCustomerProfile().catch(error => {
             console.error('Unable to refresh customer account information:', error);
@@ -669,6 +676,9 @@ window.addEventListener('focus', () => {
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
         refreshCustomerCart();
+        refreshSharedShopBranding().catch(error => {
+            console.error('Unable to refresh shared shop branding:', error);
+        });
         if (appData.currentRole === 'customer') {
             refreshCustomerProfile().catch(error => {
                 console.error('Unable to refresh customer account information:', error);
@@ -904,22 +914,65 @@ function loadProductsFromStorage() {
         });
 }
 
-// Save shop logo and name to localStorage
+// Keep a local copy only as an optional offline fallback.
 function saveShopLogo() {
-    localStorage.setItem('kingpinShopLogo', appData.shopLogo || '');
-    localStorage.setItem('kingpinShopName', appData.shopName);
-    console.log('Shop logo saved to localStorage');
+    try {
+        localStorage.setItem('kingpinShopLogo', appData.shopLogo || '');
+        localStorage.setItem('kingpinShopName', appData.shopName);
+    } catch (error) {
+        console.warn('Unable to cache shop branding locally; shared branding remains available online.', error);
+    }
 }
 
-// Load shop logo from localStorage
+async function refreshSharedShopBranding() {
+    if (shopBrandingRefreshRequest) return shopBrandingRefreshRequest;
+    shopBrandingRefreshRequest = fetch('/.netlify/functions/shop-branding', { cache: 'no-store' })
+        .then(async response => {
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.branding) {
+                throw new Error(result.error || 'Unable to load the latest shop branding.');
+            }
+            appData.shopName = result.branding.shopName || 'KingPin Custom Ph® CamSur';
+            appData.shopLogo = result.branding.shopLogo || '';
+            saveShopLogo();
+            updateShopLogoDisplay();
+            updateLoginLogo();
+            const shopNameInput = document.getElementById('shopLogoName');
+            if (shopNameInput && shopNameInput.dataset.brandingDirty !== 'true'
+                && document.getElementById('settingsTab')?.style.display === 'block') {
+                shopNameInput.value = appData.shopName;
+            }
+            return result.branding;
+        })
+        .finally(() => {
+            shopBrandingRefreshRequest = null;
+        });
+    return shopBrandingRefreshRequest;
+}
+
+function startShopBrandingRefresh() {
+    if (shopBrandingRefreshTimer !== null) return;
+    shopBrandingRefreshTimer = setInterval(() => {
+        if (document.visibilityState !== 'hidden') {
+            refreshSharedShopBranding().catch(error => {
+                console.error('Unable to refresh shared shop branding:', error);
+            });
+        }
+    }, 30000);
+}
+
+// Load a local fallback immediately, then replace it with the shared version.
 function loadShopLogo() {
     const logo = localStorage.getItem('kingpinShopLogo');
     const name = localStorage.getItem('kingpinShopName');
     if (logo) appData.shopLogo = logo;
     if (name) appData.shopName = name;
-    console.log('Shop logo loaded from storage:', appData.shopLogo ? 'Yes' : 'No');
     updateShopLogoDisplay();
     updateLoginLogo();
+    startShopBrandingRefresh();
+    refreshSharedShopBranding().catch(error => {
+        console.error('Unable to load shared shop branding:', error);
+    });
 }
 
 function normalizeFooterUrl(value) {
@@ -1646,7 +1699,7 @@ async function updateAdminCredentials(e) {
 }
 
 // Upload Shop Logo
-function uploadShopLogo(e) {
+async function uploadShopLogo(e) {
     e.preventDefault();
     
     const logoFile = document.getElementById('shopLogoFile').files[0];
@@ -1660,39 +1713,84 @@ function uploadShopLogo(e) {
         return;
     }
 
-    const saveBranding = () => {
-        appData.shopName = logoName;
+    if (!logoFile) {
+        try {
+            await refreshSharedShopBranding();
+        } catch (error) {
+            console.error('Unable to load current shared branding before updating shop name:', error);
+            message.className = 'message error';
+            message.textContent = `❌ Could not load current shared branding: ${error.message}`;
+            message.style.display = 'block';
+            return;
+        }
+    }
+
+    let shopLogo = appData.shopLogo || '';
+    if (logoFile) {
+        if (!['image/png', 'image/jpeg', 'image/webp'].includes(logoFile.type)) {
+            message.className = 'message error';
+            message.textContent = '❌ Use a PNG, JPG, or WebP logo image.';
+            message.style.display = 'block';
+            return;
+        }
+        if (logoFile.size > 3 * 1024 * 1024) {
+            message.className = 'message error';
+            message.textContent = '❌ Logo image must be 3MB or smaller.';
+            message.style.display = 'block';
+            return;
+        }
+        try {
+            shopLogo = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || ''));
+                reader.onerror = () => reject(new Error('Unable to read the selected logo image.'));
+                reader.readAsDataURL(logoFile);
+            });
+        } catch (error) {
+            console.error('Unable to read shop logo:', error);
+            message.className = 'message error';
+            message.textContent = '❌ Error reading file. Please try again.';
+            message.style.display = 'block';
+            return;
+        }
+    }
+
+    const submitButton = document.querySelector('#logoUploadForm button[type="submit"]');
+    if (submitButton) submitButton.disabled = true;
+    message.className = 'message';
+    message.textContent = 'Saving shared shop branding...';
+    message.style.display = 'block';
+    try {
+        const response = await fetch('/.netlify/functions/shop-branding', {
+            method: 'POST',
+            headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ shopName: logoName, shopLogo })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok !== true) {
+            throw new Error(result.error || 'Unable to save shared shop branding.');
+        }
+
+        appData.shopName = result.branding.shopName;
+        appData.shopLogo = result.branding.shopLogo;
         saveShopLogo();
         updateShopLogoDisplay();
         updateLoginLogo();
-
         message.className = 'message success';
-        message.textContent = logoFile ? '✓ Shop name and logo updated successfully!' : '✓ Shop name updated successfully!';
-        message.style.display = 'block';
-
+        message.textContent = logoFile ? '✓ Shop name and logo synced to all devices!' : '✓ Shop name synced to all devices!';
         document.getElementById('shopLogoFile').value = '';
+        document.getElementById('shopLogoName').dataset.brandingDirty = 'false';
         setTimeout(() => {
             message.style.display = 'none';
         }, 3000);
-    };
-
-    if (!logoFile) {
-        saveBranding();
-        return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = event => {
-        appData.shopLogo = event.target.result;
-        saveBranding();
-    };
-    reader.onerror = () => {
+    } catch (error) {
+        console.error('Unable to save shared shop branding:', error);
         message.className = 'message error';
-        message.textContent = '❌ Error reading file. Please try again.';
+        message.textContent = `❌ Shop branding was not saved: ${error.message}`;
         message.style.display = 'block';
-    };
-
-    reader.readAsDataURL(logoFile);
+    } finally {
+        if (submitButton) submitButton.disabled = false;
+    }
 }
 
 // Upload GCash QR Code
@@ -2030,7 +2128,9 @@ function showAdminTab(tabName) {
     saveNavigationState('admin', tabName);
 
     if (tabName === 'settings') {
-        document.getElementById('shopLogoName').value = appData.shopName || 'KingPin Custom Ph® CamSur';
+        const shopNameInput = document.getElementById('shopLogoName');
+        shopNameInput.value = appData.shopName || 'KingPin Custom Ph® CamSur';
+        shopNameInput.dataset.brandingDirty = 'false';
         populateShopFooterSettings();
     }
     
@@ -6709,6 +6809,12 @@ Date: ${order.date}
 // Logo file preview handler
 document.addEventListener('DOMContentLoaded', function() {
     const logoFileInput = document.getElementById('shopLogoFile');
+    const shopNameInput = document.getElementById('shopLogoName');
+    if (shopNameInput) {
+        shopNameInput.addEventListener('input', () => {
+            shopNameInput.dataset.brandingDirty = 'true';
+        });
+    }
     if (logoFileInput) {
         logoFileInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
