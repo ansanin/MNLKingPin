@@ -639,23 +639,60 @@ function fetchSharedProducts() {
     return sharedRequest;
 }
 
+function getCachedProducts() {
+    try {
+        const stored = localStorage.getItem('kingpinProducts');
+        if (!stored) return [];
+        const products = JSON.parse(stored);
+        return Array.isArray(products) ? products : [];
+    } catch (error) {
+        console.warn('Unable to read locally cached products:', error);
+        return [];
+    }
+}
+
+function cacheProductsLocally(products) {
+    const omitEmbeddedImage = image => typeof image === 'string' && image.startsWith('data:image/')
+        ? ''
+        : image;
+    const cachedProducts = products.map(product => ({
+        ...product,
+        image: omitEmbeddedImage(product.image),
+        images: Array.isArray(product.images)
+            ? product.images.map(omitEmbeddedImage).filter(Boolean)
+            : product.images,
+        sizeChartImage: omitEmbeddedImage(product.sizeChartImage)
+    }));
+    const serializedProducts = JSON.stringify(cachedProducts);
+
+    try {
+        localStorage.setItem('kingpinProducts', serializedProducts);
+        return true;
+    } catch (error) {
+        console.warn('Unable to cache products locally; retrying after removing the previous product cache.', error);
+    }
+
+    try {
+        localStorage.removeItem('kingpinProducts');
+        localStorage.setItem('kingpinProducts', serializedProducts);
+        return true;
+    } catch (error) {
+        console.warn('Unable to cache products locally. The shared catalog remains available online.', error);
+        return false;
+    }
+}
+
 function loadProductsFromStorage() {
-    const stored = localStorage.getItem('kingpinProducts');
-    if (stored) {
-        try {
-            appData.products = JSON.parse(stored);
-            if (Array.isArray(appData.products)) {
-                displayProducts(appData.products);
-            }
-        } catch (e) {
-            console.error('Error loading products:', e);
-        }
+    const cachedProducts = getCachedProducts();
+    if (cachedProducts.length > 0) {
+        appData.products = cachedProducts;
+        displayProducts(appData.products);
     }
 
     return fetchSharedProducts()
         .then(products => {
             appData.products = products;
-            localStorage.setItem('kingpinProducts', JSON.stringify(appData.products));
+            cacheProductsLocally(appData.products);
             displayProducts(appData.products);
             if (appData.currentRole === 'admin') {
                 loadAdminInventoryProducts();
@@ -1717,17 +1754,10 @@ function showCustomerDashboard() {
     document.getElementById('customerServiceSection').style.display = 'none';
     saveNavigationState('customer', 'showCustomerDashboard');
 
-    const cachedProducts = localStorage.getItem('kingpinProducts');
-    if (cachedProducts) {
-        try {
-            const products = JSON.parse(cachedProducts);
-            if (Array.isArray(products) && products.length > 0) {
-                appData.products = products;
-                displayProducts(products);
-            }
-        } catch (error) {
-            console.warn('Unable to render cached products after customer login:', error);
-        }
+    const cachedProducts = getCachedProducts();
+    if (cachedProducts.length > 0) {
+        appData.products = cachedProducts;
+        displayProducts(cachedProducts);
     }
 
     try {
@@ -2391,11 +2421,8 @@ function renderImagePreview(container, images) {
     `).join('');
 }
 
-// Save products to localStorage
+// Save products to the shared catalog and keep a lightweight local cache.
 async function saveProducts() {
-    localStorage.setItem('kingpinProducts', JSON.stringify(appData.products));
-    console.log('Products saved to localStorage:', appData.products);
-
     const payload = JSON.stringify({ products: appData.products });
     const endpoints = ['api/products', 'api/products.php', '/.netlify/functions/products'];
 
@@ -2412,6 +2439,7 @@ async function saveProducts() {
             if (result.ok === true) {
                 console.log('Products synced to shared server.');
                 sharedProductsRequest = null;
+                cacheProductsLocally(appData.products);
                 return true;
             }
         } catch (error) {
@@ -2424,7 +2452,7 @@ async function saveProducts() {
 
 function saveProductsWithoutBlocking() {
     saveProducts().catch(error => {
-        console.warn('Unable to sync products to server; local copy was saved.', error);
+        console.warn('Unable to sync product changes to the shared server.', error);
     });
 }
 
@@ -2438,18 +2466,12 @@ async function loadProducts() {
     try {
         // The server is shared by all customers, so it is the source of truth.
         appData.products = await fetchSharedProducts();
-        localStorage.setItem('kingpinProducts', JSON.stringify(appData.products));
+        cacheProductsLocally(appData.products);
     } catch (error) {
         console.warn('Unable to load shared products; using local copy.', error);
 
-        const stored = localStorage.getItem('kingpinProducts');
-        if (stored) {
-            try {
-                appData.products = JSON.parse(stored);
-            } catch (storageError) {
-                console.error('Error loading products from localStorage:', storageError);
-            }
-        }
+        const cachedProducts = getCachedProducts();
+        if (cachedProducts.length > 0) appData.products = cachedProducts;
 
         if (!Array.isArray(appData.products) || appData.products.length === 0) {
             loadDefaultProducts();
@@ -2478,7 +2500,7 @@ async function refreshCustomerProducts() {
             if (JSON.stringify(products) === JSON.stringify(appData.products)) return;
 
             appData.products = products;
-            localStorage.setItem('kingpinProducts', JSON.stringify(products));
+            cacheProductsLocally(products);
 
             if (document.getElementById('searchProducts') && document.getElementById('categoryFilter')) {
                 filterProducts();
@@ -2676,7 +2698,7 @@ async function openProductModal(product) {
         sharedProductsRequest = null;
         const latestProducts = await fetchSharedProducts();
         appData.products = latestProducts;
-        localStorage.setItem('kingpinProducts', JSON.stringify(latestProducts));
+        cacheProductsLocally(latestProducts);
         product = latestProducts.find(item =>
             String(item.id) === String(requestedProduct.id) || item.name === requestedProduct.name
         ) || requestedProduct;
