@@ -108,8 +108,10 @@ async function run() {
     shopName: 'Shop',
     shopLogo: 'data:image/png;base64,AA=='
   }))).statusCode, 403);
+  assert.strictEqual(JSON.parse((await shopBrandingHandler(getEvent(customerToken))).body).exists, false);
   const branding = { shopName: 'Shared Shop', shopLogo: 'data:image/png;base64,AA==' };
   assert.strictEqual((await shopBrandingHandler(postEvent(adminToken, branding))).statusCode, 200);
+  assert.strictEqual(JSON.parse((await shopBrandingHandler(getEvent(customerToken))).body).exists, true);
   assert.deepStrictEqual(
     JSON.parse((await shopBrandingHandler(getEvent(customerToken))).body).branding,
     branding

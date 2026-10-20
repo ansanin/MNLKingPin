@@ -932,6 +932,33 @@ async function refreshSharedShopBranding() {
             if (!response.ok || !result.branding) {
                 throw new Error(result.error || 'Unable to load the latest shop branding.');
             }
+            if (!result.exists) {
+                if (appData.currentRole === 'admin') {
+                    const legacyBranding = {
+                        shopName: localStorage.getItem('kingpinShopName') || appData.shopName || '',
+                        shopLogo: localStorage.getItem('kingpinShopLogo') || appData.shopLogo || ''
+                    };
+                    if (legacyBranding.shopName || legacyBranding.shopLogo) {
+                        const migrationResponse = await fetch('/.netlify/functions/shop-branding', {
+                            method: 'POST',
+                            headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
+                            body: JSON.stringify({
+                                shopName: legacyBranding.shopName || 'KingPin Custom Ph® CamSur',
+                                shopLogo: legacyBranding.shopLogo
+                            })
+                        });
+                        const migrationResult = await migrationResponse.json().catch(() => ({}));
+                        if (!migrationResponse.ok || migrationResult.ok !== true) {
+                            throw new Error(migrationResult.error || 'Unable to sync the existing shop logo.');
+                        }
+                        result.branding = migrationResult.branding;
+                    } else {
+                        return result.branding;
+                    }
+                } else {
+                    return result.branding;
+                }
+            }
             appData.shopName = result.branding.shopName || 'KingPin Custom Ph® CamSur';
             appData.shopLogo = result.branding.shopLogo || '';
             saveShopLogo();
@@ -1727,9 +1754,9 @@ async function uploadShopLogo(e) {
 
     let shopLogo = appData.shopLogo || '';
     if (logoFile) {
-        if (!['image/png', 'image/jpeg', 'image/webp'].includes(logoFile.type)) {
+        if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(logoFile.type)) {
             message.className = 'message error';
-            message.textContent = '❌ Use a PNG, JPG, or WebP logo image.';
+            message.textContent = '❌ Use a PNG, JPG, GIF, or WebP logo image.';
             message.style.display = 'block';
             return;
         }
