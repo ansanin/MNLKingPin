@@ -901,6 +901,9 @@ function loadProductsFromStorage() {
             appData.products = products;
             cacheProductsLocally(appData.products);
             displayProducts(appData.products);
+            if (appData.currentRole === 'customer' && document.getElementById('ordersSection')?.style.display === 'block') {
+                loadCustomerOrders();
+            }
             if (appData.currentRole === 'admin') {
                 loadAdminInventoryProducts();
             }
@@ -4635,6 +4638,18 @@ function isOrderInPurchaseHistory(order) {
     return isOrderCompleted(order) || String(order.status || '').trim().toLowerCase() === 'cancelled';
 }
 
+function getCustomerOrderProductImage(item) {
+    const product = (appData.products || []).find(savedProduct =>
+        (item.id && Number(savedProduct.id) === Number(item.id))
+        || savedProduct.name === (item.name || item.productName)
+    );
+    const image = item.image || item.productImage || item.images?.[0] || (product ? getProductImages(product)[0] : '');
+    const imageSource = String(image || '');
+    return /^(?:data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+|https?:\/\/|\/)/i.test(imageSource)
+        ? imageSource
+        : '';
+}
+
 function formatProductionTimestamp(value) {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? 'Time unavailable' : date.toLocaleString();
@@ -4774,6 +4789,8 @@ function loadCustomerOrders() {
     customerOrders.forEach(order => {
         const itemsList = order.items.map(item => {
             const customization = item.customization || {};
+            const productName = item.name || item.productName || 'Jersey product';
+            const productImage = getCustomerOrderProductImage(item);
             const options = [
                 customization.size ? `Top: ${customization.size}` : '',
                 customization.bottomSize ? `Bottom: ${customization.bottomSize}` : '',
@@ -4782,11 +4799,18 @@ function loadCustomerOrders() {
                 customization.color || customization.colour ? `Color: ${customization.color || customization.colour}` : ''
             ].filter(Boolean);
             return `<div class="customer-order-product">
-                <div class="customer-order-product-heading">
-                    <strong>${escapeProductionHtml(item.name || item.productName || 'Jersey product')}</strong>
-                    <span class="customer-order-quantity">Qty ${Number(item.quantity) || 1}</span>
+                <div class="customer-order-product-image-wrap">
+                    ${productImage
+                        ? `<img src="${escapeProductionHtml(productImage)}" alt="${escapeProductionHtml(productName)}" loading="lazy">`
+                        : '<span>No photo</span>'}
                 </div>
-                ${options.length ? `<div class="customer-order-product-options">${options.map(option => `<span>${escapeProductionHtml(option)}</span>`).join('')}</div>` : ''}
+                <div class="customer-order-product-copy">
+                    <div class="customer-order-product-heading">
+                        <strong>${escapeProductionHtml(productName)}</strong>
+                        <span class="customer-order-quantity">Qty ${Number(item.quantity) || 1}</span>
+                    </div>
+                    ${options.length ? `<div class="customer-order-product-options">${options.map(option => `<span>${escapeProductionHtml(option)}</span>`).join('')}</div>` : ''}
+                </div>
             </div>`;
         }).join('');
         const uploadedDesignsHtml = order.items.map((item, itemIndex) => {
