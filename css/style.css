@@ -4319,6 +4319,10 @@ body.light-mode .floating-back-button button:hover {
     padding: 24px clamp(18px, 4vw, 54px) 42px;
 }
 
+#customerPage[style*="display: block"]:has(#ordersSection[style*="display: block"]) {
+    min-height: 0;
+}
+
 #customerPage .products-section h2,
 #customerPage .design-section h2,
 #customerPage .cart-section h2,
