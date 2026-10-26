@@ -4140,6 +4140,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (isTeamOrderCheckbox) {
         isTeamOrderCheckbox.addEventListener('change', toggleTeamOrderFields);
     }
+    document.getElementById('individualOrder')?.addEventListener('change', toggleTeamOrderFields);
 
     const teamPlayersField = document.getElementById('teamPlayers');
     if (teamPlayersField) {
