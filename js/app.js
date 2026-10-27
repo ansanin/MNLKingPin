@@ -327,6 +327,9 @@ function saveOrders() {
         date: order.date,
         paymentMethod: order.paymentMethod,
         paymentStatus: order.paymentStatus,
+        gcashPaymentProofUrl: order.gcashPaymentProofUrl,
+        gcashQRCodeUrl: order.gcashQRCodeUrl,
+        gcashDownpaymentAmount: order.gcashDownpaymentAmount,
         items: (order.items || []).map(item => ({
             name: item.name,
             quantity: item.quantity,
@@ -4903,7 +4906,7 @@ function loadCustomerOrders() {
         const orderGcashQr = getOrderMediaSource(order, 'gcashQRCode') || (paymentMethod === 'gcash' ? (appData.gcashQRCode || localStorage.getItem('kingpinGCashQR')) : null);
         const paymentProof = getOrderMediaSource(order, 'gcashPaymentProof');
         const gcashProofHtml = paymentProof
-            ? `<p style="color: #4caf50;">✓ Proof uploaded</p><img src="${paymentProof}" alt="GCash payment proof">`
+            ? `<p style="color: #4caf50;">Downpayment proof saved — ${order.paymentStatus === 'verified' ? 'verified by admin' : 'awaiting admin verification'}</p><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="Saved GCash downpayment proof"></a>`
             : '<p style="color: #ffb74d;">Proof not uploaded yet</p>';
         
         const productionTrackingHtml = buildProductionTrackingHtml(order, true);
@@ -4933,7 +4936,7 @@ function loadCustomerOrders() {
             <div class="order-total">Total: ₱${order.totalAmount.toFixed(2)}</div>
             <button type="button" class="btn btn-small view-receipt-button" onclick="viewCustomerReceipt(${order.id})">View Receipt</button>
             ${paymentMethod === 'gcash' && orderGcashQr ? `<div class="order-gcash-qr"><strong>GCash Installment QR:</strong><button type="button" class="btn btn-small qr-view-button" onclick="openGcashQrViewer('${orderGcashQr}')">View larger</button><img src="${orderGcashQr}" alt="GCash installment QR code" onclick="openGcashQrViewer('${orderGcashQr}')"></div>` : ''}
-            ${paymentMethod === 'gcash' ? `<div class="order-payment-proof"><strong>GCash Payment Proof:</strong><p class="half-payment-notice">Required downpayment: ₱${requiredDownpayment.toFixed(2)}</p><label for="gcashDownpayment-${order.id}" style="display:block; margin-top:8px; color:#d4af37; font-weight:600;">Amount to pay:</label><input id="gcashDownpayment-${order.id}" type="number" step="0.01" min="0" value="${requiredDownpayment.toFixed(2)}" onchange="updateOrderDownpayment(${order.id}, this.value)" style="width: 100%; margin-top: 6px; margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #111; color: #fff;" />${gcashProofHtml}<input type="file" accept="image/*" onchange="uploadOrderPaymentProof(${order.id}, this)"></div>` : ''}
+            ${paymentMethod === 'gcash' ? `<div class="order-payment-proof"><strong>GCash Downpayment Proof:</strong><p class="half-payment-notice">Downpayment amount: ₱${requiredDownpayment.toFixed(2)}</p>${gcashProofHtml}${paymentProof ? '<p>Your proof is saved with this order and available to the admin. No need to upload again.</p>' : `<input type="file" accept="image/*" onchange="uploadOrderPaymentProof(${order.id}, this)">`}</div>` : ''}
             <div class="order-actions"><strong>Order action:</strong><div class="order-action-buttons"><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'cancel')">Cancel / Change of Mind</button><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'refund')">Request Refund</button></div><div id="orderReason-${order.id}" class="order-reason-options"></div>${order.requestType ? `<p class="order-request-status">Request: ${order.requestType === 'cancel' ? 'Cancel / Change of Mind' : 'Refund'} (${order.requestStatus || 'pending'})</p>` : ''}</div>
             ${getOrderReviewsSection(order)}
         `;

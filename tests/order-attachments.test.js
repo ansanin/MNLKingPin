@@ -86,6 +86,8 @@ async function testOrderDesignAttachments() {
                     fileType: 'image/webp'
                 }
                 }],
+                paymentMethod: 'gcash',
+                gcashDownpaymentAmount: 500,
                 gcashQRCode: imageData,
                 gcashPaymentProof: imageData
         } })
@@ -101,11 +103,24 @@ async function testOrderDesignAttachments() {
     assert.ok(storedOrder.items[0].details.uploadedFiles[1].uploadedFileUrl.includes('fileIndex=1'));
     assert.ok(storedOrder.gcashQRCodeUrl);
     assert.ok(storedOrder.gcashPaymentProofUrl);
+    assert.strictEqual(storedOrder.paymentStatus, 'downpayment-received');
+    assert.strictEqual(storedOrder.gcashDownpaymentAmount, 500);
+    // A fresh customer session and the admin both retrieve the persisted checkout proof.
+    for (const token of [customerToken, adminToken]) {
+        const refreshed = await ordersHandler({ httpMethod: 'GET', headers: { authorization: `Bearer ${token}` } });
+        const order = JSON.parse(refreshed.body).orders.find(item => item.id === 200);
+        assert.ok(order.gcashPaymentProofUrl);
+        assert.strictEqual(order.gcashDownpaymentAmount, 500);
+        const proofUrl = new URL(order.gcashPaymentProofUrl, 'https://kingpin.example');
+        const proofResponse = await orderDesignHandler({ httpMethod: 'GET', headers: {}, queryStringParameters: Object.fromEntries(proofUrl.searchParams) });
+        assert.strictEqual(proofResponse.statusCode, 200);
+        assert.strictEqual(Buffer.from(proofResponse.body, 'base64').toString(), 'sample design');
+    }
     assert.strictEqual(storedOrder.gcashQRCode, undefined);
     assert.strictEqual(storedOrder.gcashPaymentProof, undefined);
     assert.strictEqual(storedOrder.items[0].image, undefined);
     assert.deepStrictEqual(storedOrder.items[0].images, []);
-    assert.deepStrictEqual(await orderIndexStore.get('active-order-ids', { type: 'json' }), [200]);
+    assert.deepStrictEqual(await orderIndexStore.get('active-order-ids', { type: 'json' }), [100, 150, 200]);
 
     const activeResponse = await ordersHandler({ httpMethod: 'GET', headers: { authorization: `Bearer ${adminToken}` }, queryStringParameters: { scope: 'active' } });
     const firstActiveOrders = JSON.parse(activeResponse.body).orders;
