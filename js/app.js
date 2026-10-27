@@ -7017,18 +7017,20 @@ function generateFullReport() {
 KINGPIN CLOTHING MANAGEMENT SYSTEM
 Sales & Performance Report
 Generated: ${reportDate}
+Period: ${getReportPeriodLabel()}
 
 === EXECUTIVE SUMMARY ===
 Total Sales: ₱${totalSales.toFixed(2)}
 Total Orders: ${totalOrders}
 Unique Customers: ${uniqueCustomers}
-Average Order Value: ₱${(totalSales / totalOrders).toFixed(2)}
+Average Order Value: ₱${totalOrders ? (totalSales / totalOrders).toFixed(2) : '0.00'}
 
 === ORDER DETAILS ===
     `;
 
-    allOrders.forEach(order => {
-        const itemsList = order.items.map(item => `${item.name} (x${item.quantity})`).join(', ');
+    // The PDF contains sales from the selected period only, not every stored order.
+    soldOrders.forEach(order => {
+        const itemsList = (order.items || []).map(item => `${item.name} (x${item.quantity})`).join(', ');
         reportContent += `\nOrder #${order.id}
 Customer: ${order.customerName}
 Email: ${order.customerEmail}
@@ -7041,13 +7043,13 @@ Date: ${order.date}
 
     // Download as a PDF file
     const reportLines = reportContent.split(/\r?\n/).map(line => line.trimEnd());
-    reportLines.splice(2, 0, `Period: ${getReportPeriodLabel()}`);
     const blob = createSimplePdf(reportLines);
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
 
     link.setAttribute('href', url);
-    link.setAttribute('download', `KINGPIN-Report-${reportDate}.pdf`);
+    const periodFileName = getReportPeriodLabel().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+    link.setAttribute('download', `KINGPIN-Sales-Report-${periodFileName || reportDate}.pdf`);
     link.style.visibility = 'hidden';
 
     document.body.appendChild(link);
