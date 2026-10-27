@@ -6013,7 +6013,6 @@ function renderAdminOrders() {
         const customerName = escapeProductionHtml(order.customerName || 'N/A');
         const customerEmail = escapeProductionHtml(order.customerEmail || 'No email');
         const customerPhone = escapeProductionHtml(order.customerPhone || 'No phone');
-        const totalAmount = Number(order.totalAmount) || 0;
         const status = productionStatus(order);
         const currentStageIndex = stages.findIndex(stage => stage.id === status);
         const progress = currentStageIndex < 0 ? 0 : Math.round((currentStageIndex / (stages.length - 1)) * 100);
@@ -6023,7 +6022,6 @@ function renderAdminOrders() {
             <td data-label="Order ID"><strong>#${order.id}</strong></td>
             <td data-label="Customer" class="admin-order-customer-cell"><strong>${customerName}</strong><small>${customerEmail}</small><small>${customerPhone}</small></td>
             <td data-label="Products"><span class="admin-order-item-count">${itemCount} ${itemCount === 1 ? 'item' : 'items'}</span>${order.teamOrder?.isTeamOrder ? '<small class="admin-order-team-label">Team order</small>' : ''}${designGallery}</td>
-            <td data-label="Total amount"><strong>₱${totalAmount.toFixed(2)}</strong></td>
             <td data-label="Order status"><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
             <td data-label="Production stage" class="production-stage-cell"><span class="production-stage-label">${escapeProductionHtml(getProductionStageLabel(status))}</span>${isDelayed(order) ? '<small class="production-delayed-label">Delayed</small>' : ''}<div class="production-progress-track" aria-label="${progress}% complete"><span style="width:${progress}%"></span></div></td>
             <td data-label="Order date">${order.date}</td>
