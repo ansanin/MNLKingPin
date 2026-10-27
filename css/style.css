@@ -2330,16 +2330,17 @@ table tbody tr:hover {
 }
 
 #ordersTab .orders-table {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow-x: hidden;
 }
 
 #ordersTab #ordersInventory {
-    min-width: 1120px;
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
 }
 
 #ordersTab .admin-order-actions {
-    min-width: 170px;
+    min-width: 0;
 }
 
 #ordersTab .admin-order-actions .btn {
@@ -6429,7 +6430,7 @@ body.light-mode #adminPage .message {
     }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 1100px) {
     #ordersTab .orders-table {
         padding: 12px;
         overflow: visible;
