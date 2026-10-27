@@ -564,6 +564,20 @@
                         </div>
                         <p id="gcashPaymentInstruction" class="info-text" style="color: #ff6b6b; font-weight: 600;">⚠️ GCash proof of downpayment is required to place your order</p>
                         
+                        <div id="checkoutGcashPanel">
+                            <div id="storeGcashQRContainer">
+                                <p>Scan to pay your 50% downpayment: <strong id="checkoutDownpayment"></strong></p>
+                                <img id="storeGcashQRImage" alt="Shop GCash payment QR" style="display:none; width:240px; max-width:100%; height:auto;">
+                                <p id="noStoreQRMessage">GCash QR is unavailable. Please contact the shop before paying.</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="customerGcashQRCode">Upload proof of GCash downpayment</label>
+                                <input id="customerGcashQRCode" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onchange="setupCheckoutProofPreview(this)">
+                                <small>Image only, up to 5 MB. Payment is subject to admin verification.</small>
+                                <div id="gcashPreviewContainer" style="display:none"><img id="gcashPreviewImage" alt="Payment proof preview" style="max-width:100%; max-height:220px;"></div>
+                            </div>
+                        </div>
+                        <p id="checkoutPickupInstruction" hidden>Confirm your shop pickup order below. Pay cash at the shop. Your order receipt does not mean payment has been received.</p>
                         <div id="gcashPaymentMessage" class="message" style="margin-top: 10px; display: none;"></div>
                     </div>
 

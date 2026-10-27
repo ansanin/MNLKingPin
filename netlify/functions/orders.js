@@ -302,7 +302,12 @@ exports.handler = async function handler(event) {
             order.customerEmail = claims.sub;
             order.customerUsername = claims.sub;
             order.status = 'pending';
-            order.paymentStatus = String(order.paymentMethod).toLowerCase() === 'gcash' ? 'awaiting-proof' : 'pending';
+            const isGcash = String(order.paymentMethod).toLowerCase() === 'gcash';
+            const checkoutProof = String(order.gcashPaymentProof || '');
+            if (isGcash && checkoutProof && (checkoutProof.length > 1500000 || !/^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(checkoutProof))) {
+                return jsonResponse(400, { error: 'A valid, compressed payment proof is required.' });
+            }
+            order.paymentStatus = isGcash ? (checkoutProof ? 'downpayment-received' : 'awaiting-proof') : 'pending';
             order.productionStatus = 'order-placed';
             order.productionHistory = [];
             order.productionNotifications = [];

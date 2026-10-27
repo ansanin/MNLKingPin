@@ -2048,6 +2048,23 @@ function setupGcashPaymentPreview() {
     });
 }
 
+async function setupCheckoutProofPreview(input) {
+    const preview = document.getElementById('gcashPreviewContainer');
+    preview.style.display = 'none';
+    const file = input.files[0];
+    if (!file) return;
+    try {
+        if (!/^image\/(jpeg|png|gif|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Upload a PNG, JPG, GIF or WEBP image up to 5 MB.');
+        const proof = await compressPaymentProof(file);
+        if (input.files[0] !== file) return;
+        document.getElementById('gcashPreviewImage').src = proof;
+        preview.style.display = 'block';
+    } catch (error) {
+        input.value = '';
+        alert(error.message);
+    }
+}
+
 function selectCheckoutPayment(method) {
     if (!['gcash', 'pickup'].includes(method)) return;
     document.getElementById('paymentMethod').value = method;
@@ -2061,6 +2078,9 @@ function updatePaymentMethodUI() {
     const qrContainer = document.getElementById('storeGcashQRContainer');
     const proofContainer = proofInput ? proofInput.closest('.form-group') : null;
     const isGcash = !paymentMethod || paymentMethod.value === 'gcash';
+    document.getElementById('checkoutPickupInstruction').hidden = isGcash;
+    document.getElementById('checkoutDownpayment').textContent = `PHP ${(getCartTotal() / 2).toFixed(2)}`;
+    document.getElementById('placeCustomerOrderButton').textContent = isGcash ? 'Confirm GCash Order' : 'Confirm Pickup Order';
     document.querySelectorAll('[data-payment-option]').forEach(button => {
         button.setAttribute('aria-pressed', String(button.dataset.paymentOption === (isGcash ? 'gcash' : 'pickup')));
     });
@@ -4373,6 +4393,16 @@ async function processCustomerOrder() {
 
     try {
         const totalAmount = getCartTotal();
+        let checkoutProof = null;
+        if (paymentMethod === 'gcash') {
+            const file = document.getElementById('customerGcashQRCode').files[0];
+            if (!file) throw new Error('Upload your GCash downpayment proof before confirming.');
+            if (!/^image\/(jpeg|png|gif|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Upload a valid proof image up to 5 MB.');
+            checkoutProof = await compressPaymentProof(file);
+        }
+        if (!confirm(paymentMethod === 'gcash'
+            ? 'Confirm this order and submit your GCash proof for verification? Your order receipt will appear after saving.'
+            : 'Confirm shop pickup with cash payment at the shop? Your receipt will show payment pending.')) return;
         const downpaymentAmount = paymentMethod === 'gcash' ? Number(totalAmount) / 2 : 0;
         const normalizedCart = appData.cart.map(item => {
             const nextCustomization = {
@@ -4411,7 +4441,7 @@ async function processCustomerOrder() {
             paymentMethod: paymentMethod,
             paymentStatus: paymentMethod === 'gcash' ? 'awaiting-proof' : 'pending',
             date: new Date().toLocaleDateString(),
-            gcashPaymentProof: null,
+            gcashPaymentProof: checkoutProof,
             gcashQRCode: paymentMethod === 'gcash' ? (localStorage.getItem('kingpinGCashQR') || appData.gcashQRCode || null) : null,
             gcashDownpaymentAmount: paymentMethod === 'gcash' ? downpaymentAmount : 0
         };
@@ -4463,7 +4493,7 @@ async function processCustomerOrder() {
             ? `✓ New Team Order #${orderData.id} from ${orderData.customerName} (${buildTeamOrderLabel(teamOrderInput)})`
             : `✓ New Order #${orderData.id} from ${orderData.customerName}`, orderData.id);
         addNotification('customer', paymentMethod === 'gcash'
-            ? `✓ Order #${orderData.id} was placed. Please upload your GCash payment proof in My Orders.`
+            ? `Order #${orderData.id} was placed. GCash proof submitted for admin verification.`
             : `✓ Your ${teamOrderInput.isTeamOrder ? 'team ' : ''}order #${orderData.id} was placed successfully. Total: ₱${orderData.totalAmount.toFixed(2)}. Payment: Pickup at Shop.`, orderData.id);
         try {
             saveNotifications();
@@ -4479,7 +4509,7 @@ async function processCustomerOrder() {
         const messageDiv = document.getElementById('gcashPaymentMessage');
         if (messageDiv) {
             messageDiv.className = 'message success';
-            messageDiv.textContent = '✓ Order placed successfully! Your Order ID: ' + orderData.id + ' - ' + (paymentMethod === 'gcash' ? 'Upload payment proof in My Orders' : 'Pickup at Shop');
+            messageDiv.textContent = 'Order saved: ' + orderData.id + ' - ' + (paymentMethod === 'gcash' ? 'Proof submitted for verification' : 'Cash payment pending at shop');
             messageDiv.style.display = 'block';
         }
 
@@ -4573,8 +4603,8 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
             <div class="customer-receipt-items"><h3>Order Items</h3>${itemsHtml}</div>
             ${teamSizesHtml || teamNotesHtml ? `<div class="customer-receipt-payment">${teamSizesHtml}${teamNotesHtml}</div>` : ''}
             <div class="customer-receipt-payment">
-                <div><strong>Payment Method:</strong> ${order.paymentMethod.toUpperCase()}</div>
-                <div><strong>Payment Status:</strong> ${order.paymentStatus.replace('-', ' ')}</div>
+                <div><strong>Payment Method:</strong> ${order.paymentMethod === 'pickup' ? 'Cash at Shop / Pickup' : 'GCash'}</div>
+                <div><strong>Payment Status:</strong> ${order.paymentStatus === 'downpayment-received' ? 'Proof submitted — awaiting verification' : order.paymentMethod === 'pickup' && order.paymentStatus === 'pending' ? 'Unpaid — pay at shop' : escapeProductionHtml(order.paymentStatus.replace(/-/g, ' '))}</div>
                 <div><strong>Measurements:</strong> Chest ${measurements.chest}, Waist ${measurements.waist}, Length ${measurements.length} cm</div>
             </div>
             <div class="customer-receipt-total">
