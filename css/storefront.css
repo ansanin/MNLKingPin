@@ -325,7 +325,7 @@
 #customerPage.storefront .search-bar::before {
     position: absolute;
     top: 50%;
-    left: 16px;
+    right: 16px;
     width: 10px;
     height: 10px;
     border: 1.5px solid currentColor;
@@ -340,7 +340,7 @@
     display: block;
     width: 100%;
     min-height: 46px;
-    padding: 10px 16px 10px 44px;
+    padding: 10px 44px 10px 16px;
     border: 0;
     border-radius: inherit;
     background: transparent;
@@ -1027,4 +1027,64 @@ body.light-mode #customerPage.storefront .shop-site-footer {
 
 body.light-mode #customerPage.storefront .storefront-bottom-nav:not([hidden]) {
     background: rgba(17, 20, 22, .98);
+}
+
+#customerPage.storefront .customer-service-footer[hidden],
+#customerPage.storefront [data-shop-footer][hidden] {
+    display: none !important;
+}
+
+#customerPage.storefront:not(.is-shop-view) {
+    display: block !important;
+    height: auto !important;
+    min-height: 100vh;
+    overflow: visible !important;
+}
+
+#customerPage.storefront:not(.is-shop-view) .customer-container {
+    display: block !important;
+    width: min(100%, 1160px);
+    min-height: 0;
+    margin: 0 auto;
+    padding: 24px clamp(16px, 3.5vw, 48px) 40px;
+    flex: none !important;
+}
+
+#customerPage.storefront:not(.is-shop-view) .customer-container > [style*="display: block"] {
+    display: block !important;
+    width: 100%;
+    margin: 0;
+}
+
+#customerPage.storefront:not(.is-shop-view) .customer-service-footer,
+#customerPage.storefront:not(.is-shop-view) [data-shop-footer] {
+    display: none !important;
+}
+
+#customerPage.storefront:not(.is-shop-view) .customer-container > [style*="display: none"] {
+    display: none !important;
+}
+
+.storefront-hero-admin-preview {
+    display: block;
+    width: min(100%, 640px);
+    max-height: 200px;
+    margin: 14px 0;
+    border: 1px solid #474b4d;
+    border-radius: 6px;
+    object-fit: cover;
+    object-position: center;
+}
+
+.storefront-hero-reset-option {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 9px;
+}
+
+@media (max-width: 700px) {
+    #customerPage.storefront:not(.is-shop-view) .customer-container {
+        padding: 20px 12px calc(88px + env(safe-area-inset-bottom));
+    }
 }

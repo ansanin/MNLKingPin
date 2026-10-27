@@ -84,19 +84,12 @@ function toggleDesignInterface() {
     const designSection = document.getElementById('designSection');
     
     if (designSection && designSection.style.display === 'none') {
-        // Show design section
-        hideAllSections();
-        designSection.style.display = 'block';
+        setCustomerActiveView('designSection');
         
         // Initialize design interface
         initializeDesignInterface();
     } else {
-        // Hide design section
-        hideAllSections();
-        const productsSection = document.getElementById('productsSection');
-        if (productsSection) {
-            productsSection.style.display = 'block';
-        }
+        setCustomerActiveView('productsSection');
     }
 }
 
@@ -190,8 +183,7 @@ function addTopsToCart() {
     document.getElementById('topsDesignForm').reset();
     
     // Switch back to shop
-    document.getElementById('designSection').style.display = 'none';
-    document.getElementById('productsSection').style.display = 'block';
+    setCustomerActiveView('productsSection');
     updateCartDisplay();
 }
 
@@ -235,8 +227,7 @@ function addBottomsToCart() {
     document.getElementById('bottomsDesignForm').reset();
     
     // Switch back to shop
-    document.getElementById('designSection').style.display = 'none';
-    document.getElementById('productsSection').style.display = 'block';
+    setCustomerActiveView('productsSection');
     updateCartDisplay();
 }
 

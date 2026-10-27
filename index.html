@@ -111,7 +111,7 @@
                     <button class="btn btn-secondary customer-quick-action" onclick="viewCustomerNotifications()" aria-label="Open notifications" title="Notifications"><span aria-hidden="true">🔔</span><span class="notification-badge" data-notification-badge="customer-notifications" style="display:none;">0</span></button>
                 </div>
                 <div class="nav-menu-scroll-wrapper">
-                    <button class="btn btn-secondary nav-menu-toggle" type="button" onclick="toggleNavMenu()" aria-label="Open customer menu" aria-controls="customerNavMenu" aria-expanded="false">☰ <span class="menu-text">Account</span></button>
+                    <button class="btn btn-secondary nav-menu-toggle" type="button" onclick="toggleNavMenu()" aria-label="Open customer menu" aria-controls="customerNavMenu" aria-expanded="false"><span class="menu-text">Account</span></button>
                     <div id="customerNavMenu" class="nav-menu-items" aria-label="Customer navigation menu">
                         <button class="btn btn-secondary" onclick="toggleDesignInterface()">🎨 Design Studio</button>
                         <button class="btn btn-secondary" onclick="viewPurchaseHistory()">Purchase History</button>
@@ -1218,6 +1218,32 @@
                         <button type="submit" class="btn btn-primary">Save Shop Name / Logo</button>
                     </form>
                     <div id="logoMessage" class="message"></div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Shop Hero Banner</h3>
+                    <form id="storefrontHeroForm" onsubmit="saveStorefrontHero(event)">
+                        <div class="form-group">
+                            <label for="storefrontHeroTitleInput">Hero heading:</label>
+                            <input type="text" id="storefrontHeroTitleInput" maxlength="90" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="storefrontHeroSubtitleInput">Hero subtitle:</label>
+                            <input type="text" id="storefrontHeroSubtitleInput" maxlength="140">
+                        </div>
+                        <div class="form-group">
+                            <label for="storefrontHeroImageInput">Hero photo:</label>
+                            <input type="file" id="storefrontHeroImageInput" accept="image/png,image/jpeg,image/gif,image/webp">
+                            <small>JPG, PNG, GIF, or WebP. Maximum 3 MB.</small>
+                        </div>
+                        <label class="storefront-hero-reset-option">
+                            <input type="checkbox" id="storefrontHeroUseCatalogImage">
+                            Use the first available product photo
+                        </label>
+                        <img id="storefrontHeroPreview" class="storefront-hero-admin-preview" alt="Hero banner preview" hidden>
+                        <button type="submit" class="btn btn-primary">Save Hero Banner</button>
+                    </form>
+                    <div id="storefrontHeroMessage" class="message" role="status" aria-live="polite"></div>
                 </div>
 
                 <div class="settings-section">

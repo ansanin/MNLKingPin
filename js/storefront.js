@@ -57,14 +57,149 @@ function syncStorefrontCatalog(visibleProducts) {
     const featuredProduct = Array.isArray(appData.products)
         ? appData.products.find(product => product && (product.image || (Array.isArray(product.images) && product.images.length)))
         : null;
-    const featuredImage = featuredProduct
+    const featuredImage = appData.storefrontHero?.image || (featuredProduct
         ? (Array.isArray(featuredProduct.images) && featuredProduct.images.length ? featuredProduct.images[0] : featuredProduct.image)
-        : '';
+        : '');
 
     if (heroImage && featuredImage) {
         heroImage.src = featuredImage;
-        heroImage.alt = `${featuredProduct.name || 'KingPin'} jersey`;
+        heroImage.alt = appData.storefrontHero?.image ? 'Shop hero photo' : `${featuredProduct.name || 'KingPin'} jersey`;
         heroImage.hidden = false;
+    }
+}
+
+function updateStorefrontHeroDisplay() {
+    const hero = appData.storefrontHero || {};
+    const title = document.getElementById('storefrontHeroTitle');
+    const subtitle = document.querySelector('.storefront-hero-copy > p');
+    const image = document.getElementById('storefrontHeroImage');
+
+    if (title) title.textContent = hero.title || 'Your team. Your identity.';
+    if (subtitle) subtitle.textContent = hero.subtitle || 'Custom jerseys & teamwear';
+    if (image && hero.image) {
+        image.src = hero.image;
+        image.alt = 'Shop hero photo';
+        image.hidden = false;
+    } else {
+        syncStorefrontCatalog(appData.products);
+    }
+}
+
+function normalizeStorefrontHero(hero) {
+    return {
+        title: String(hero?.title || 'Your team. Your identity.').trim().slice(0, 90),
+        subtitle: String(hero?.subtitle || 'Custom jerseys & teamwear').trim().slice(0, 140),
+        image: String(hero?.image || '')
+    };
+}
+
+function cacheStorefrontHero() {
+    try {
+        localStorage.setItem('kingpinStorefrontHero', JSON.stringify(appData.storefrontHero));
+    } catch (error) {
+        console.warn('Unable to cache the hero banner locally.', error);
+    }
+}
+
+function populateStorefrontHeroForm() {
+    const form = document.getElementById('storefrontHeroForm');
+    if (!form || form.dataset.heroDirty === 'true') return;
+
+    const hero = normalizeStorefrontHero(appData.storefrontHero);
+    document.getElementById('storefrontHeroTitleInput').value = hero.title;
+    document.getElementById('storefrontHeroSubtitleInput').value = hero.subtitle;
+    document.getElementById('storefrontHeroUseCatalogImage').checked = !hero.image;
+    const preview = document.getElementById('storefrontHeroPreview');
+    const firstProduct = appData.products.find(product => product && (product.image || product.images?.length));
+    const previewImage = hero.image || (firstProduct ? (firstProduct.images?.[0] || firstProduct.image) : '');
+    preview.hidden = !previewImage;
+    if (previewImage) preview.src = previewImage;
+}
+
+async function loadStorefrontHero() {
+    try {
+        const cachedHero = JSON.parse(localStorage.getItem('kingpinStorefrontHero') || 'null');
+        if (cachedHero) appData.storefrontHero = normalizeStorefrontHero(cachedHero);
+    } catch (error) {
+        console.warn('Unable to read the cached hero banner.', error);
+    }
+    updateStorefrontHeroDisplay();
+
+    try {
+        const response = await fetch('/.netlify/functions/shop-hero', { cache: 'no-store' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.hero) throw new Error(result.error || 'Unable to load the shop hero banner.');
+        appData.storefrontHero = normalizeStorefrontHero(result.hero);
+        cacheStorefrontHero();
+        updateStorefrontHeroDisplay();
+        populateStorefrontHeroForm();
+    } catch (error) {
+        console.warn('Unable to load shared shop hero settings; using the saved copy.', error);
+    }
+}
+
+async function saveStorefrontHero(event) {
+    event.preventDefault();
+    if (appData.currentRole !== 'admin') return;
+
+    const title = document.getElementById('storefrontHeroTitleInput').value.trim();
+    const subtitle = document.getElementById('storefrontHeroSubtitleInput').value.trim();
+    const imageFile = document.getElementById('storefrontHeroImageInput').files[0];
+    const useCatalogImage = document.getElementById('storefrontHeroUseCatalogImage').checked;
+    const message = document.getElementById('storefrontHeroMessage');
+    const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+
+    if (!title || title.length > 90 || subtitle.length > 140) {
+        message.className = 'message error';
+        message.textContent = 'Enter a heading up to 90 characters and a subtitle up to 140 characters.';
+        return;
+    }
+    if (imageFile && (!/^image\/(png|jpeg|gif|webp)$/.test(imageFile.type) || imageFile.size > 3 * 1024 * 1024)) {
+        message.className = 'message error';
+        message.textContent = 'Choose a PNG, JPG, GIF, or WebP image up to 3 MB.';
+        return;
+    }
+
+    message.className = 'message';
+    message.textContent = 'Saving hero banner...';
+    if (submitButton) submitButton.disabled = true;
+
+    try {
+        let image = useCatalogImage ? '' : appData.storefrontHero.image;
+        if (imageFile) {
+            image = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || ''));
+                reader.onerror = () => reject(new Error('Unable to read the selected hero photo.'));
+                reader.readAsDataURL(imageFile);
+            });
+        }
+
+        const hero = normalizeStorefrontHero({ title, subtitle, image });
+        const response = await fetch('/.netlify/functions/shop-hero', {
+            method: 'POST',
+            headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(hero)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok !== true || !result.hero) {
+            throw new Error(result.error || 'Unable to save the shared hero banner.');
+        }
+
+        appData.storefrontHero = normalizeStorefrontHero(result.hero);
+        cacheStorefrontHero();
+        updateStorefrontHeroDisplay();
+        syncStorefrontCatalog(appData.products);
+        document.getElementById('storefrontHeroImageInput').value = '';
+        event.currentTarget.dataset.heroDirty = 'false';
+        populateStorefrontHeroForm();
+        message.className = 'message success';
+        message.textContent = 'Hero banner saved and shared with customers.';
+    } catch (error) {
+        message.className = 'message error';
+        message.textContent = `Hero banner was not saved: ${error.message}`;
+    } finally {
+        if (submitButton) submitButton.disabled = false;
     }
 }
 
@@ -89,6 +224,10 @@ function updateStorefrontNavigation(activeDestination) {
         if (isActive) button.setAttribute('aria-current', 'page');
         else button.removeAttribute('aria-current');
     });
+
+    const menuToggle = document.querySelector('#customerPage .nav-menu-toggle');
+    const menuOpen = document.getElementById('customerNavMenu')?.classList.contains('visible') || false;
+    if (menuToggle) menuToggle.setAttribute('aria-expanded', String(menuOpen));
 }
 
 function navigateStorefront(destination) {
@@ -109,7 +248,15 @@ function navigateStorefront(destination) {
 
 document.addEventListener('DOMContentLoaded', () => {
     setupStorefrontCatalog();
+    loadStorefrontHero();
     updateStorefrontNavigation();
+
+    const heroForm = document.getElementById('storefrontHeroForm');
+    if (heroForm) {
+        heroForm.addEventListener('input', () => {
+            heroForm.dataset.heroDirty = 'true';
+        });
+    }
 
     const customerPage = document.getElementById('customerPage');
     const watchedSections = [

@@ -23,8 +23,41 @@ const appData = {
         contactNumber: '',
         facebookUrl: '',
         instagramUrl: ''
+    },
+    storefrontHero: {
+        image: '',
+        title: 'Your team. Your identity.',
+        subtitle: 'Custom jerseys & teamwear'
     }
 };
+
+function setCustomerActiveView(activeSectionId) {
+    const sectionIds = [
+        'productsSection',
+        'designSection',
+        'cartSection',
+        'ordersSection',
+        'purchaseHistorySection',
+        'notificationsSection',
+        'customerSettingsSection',
+        'customerServiceSection',
+        'checkoutSection'
+    ];
+    if (!sectionIds.includes(activeSectionId)) return false;
+
+    sectionIds.forEach(sectionId => {
+        const section = document.getElementById(sectionId);
+        if (section) section.style.display = sectionId === activeSectionId ? 'block' : 'none';
+    });
+
+    const isShop = activeSectionId === 'productsSection';
+    document.getElementById('customerPage')?.classList.toggle('is-shop-view', isShop);
+    document.querySelectorAll('#customerPage .customer-service-footer, #customerPage [data-shop-footer]').forEach(footer => {
+        footer.hidden = !isShop;
+    });
+    if (typeof updateStorefrontNavigation === 'function') updateStorefrontNavigation();
+    return true;
+}
 
 function saveNavigationState(role, view) {
     localStorage.setItem('kingpinNavigationState', JSON.stringify({ role, view }));
@@ -2106,12 +2139,7 @@ function showCustomerDashboard() {
     document.getElementById('loginPage').style.display = 'none';
     document.getElementById('customerPage').style.display = 'block';
     document.getElementById('adminPage').style.display = 'none';
-    document.getElementById('productsSection').style.display = 'block';
-    document.getElementById('cartSection').style.display = 'none';
-    document.getElementById('ordersSection').style.display = 'none';
-    document.getElementById('purchaseHistorySection').style.display = 'none';
-    document.getElementById('checkoutSection').style.display = 'none';
-    document.getElementById('customerServiceSection').style.display = 'none';
+    setCustomerActiveView('productsSection');
     saveNavigationState('customer', 'showCustomerDashboard');
 
     const cachedProducts = getCachedProducts();
@@ -2153,6 +2181,7 @@ async function showAdminDashboard() {
     document.getElementById('customerPage').style.display = 'none';
     document.getElementById('accessDeniedPage').style.display = 'none';
     document.getElementById('adminPage').style.display = 'block';
+    if (typeof updateStorefrontNavigation === 'function') updateStorefrontNavigation();
 
     try {
         initializeData();
@@ -2197,6 +2226,8 @@ function showAdminTab(tabName) {
         shopNameInput.value = appData.shopName || 'KingPin Custom Ph® CamSur';
         shopNameInput.dataset.brandingDirty = 'false';
         populateShopFooterSettings();
+        populateStorefrontHeroForm();
+        loadStorefrontHero();
     }
     
     // Load data when tabs are clicked
@@ -2376,11 +2407,7 @@ async function markCustomerMessageAsRead(messageId) {
 
 function toggleCart() {
     const showCart = document.getElementById('cartSection').style.display === 'none';
-    document.getElementById('productsSection').style.display = showCart ? 'none' : 'block';
-    document.getElementById('cartSection').style.display = showCart ? 'block' : 'none';
-    document.getElementById('ordersSection').style.display = 'none';
-    document.getElementById('purchaseHistorySection').style.display = 'none';
-    document.getElementById('checkoutSection').style.display = 'none';
+    setCustomerActiveView(showCart ? 'cartSection' : 'productsSection');
     
     if (showCart) {
         saveNavigationState('customer', 'toggleCart');
@@ -2454,13 +2481,7 @@ async function viewOrders() {
         }
     });
     saveNotifications();
-    document.getElementById('productsSection').style.display = 'none';
-    document.getElementById('designSection').style.display = 'none';
-    document.getElementById('cartSection').style.display = 'none';
-    document.getElementById('ordersSection').style.display = 'block';
-    document.getElementById('purchaseHistorySection').style.display = 'none';
-    document.getElementById('checkoutSection').style.display = 'none';
-    document.getElementById('customerServiceSection').style.display = 'none';
+    setCustomerActiveView('ordersSection');
     saveNavigationState('customer', 'viewOrders');
     await loadSharedGcashQRCode();
     loadCustomerOrders();
@@ -2473,13 +2494,7 @@ async function viewOrders() {
 }
 
 function viewPurchaseHistory() {
-    document.getElementById('productsSection').style.display = 'none';
-    document.getElementById('designSection').style.display = 'none';
-    document.getElementById('cartSection').style.display = 'none';
-    document.getElementById('ordersSection').style.display = 'none';
-    document.getElementById('purchaseHistorySection').style.display = 'block';
-    document.getElementById('checkoutSection').style.display = 'none';
-    document.getElementById('customerServiceSection').style.display = 'none';
+    setCustomerActiveView('purchaseHistorySection');
     saveNavigationState('customer', 'viewPurchaseHistory');
     loadPurchaseHistory();
     refreshCustomerOrdersFromServer(false).then(loadPurchaseHistory).catch(error => {
@@ -2490,14 +2505,7 @@ function viewPurchaseHistory() {
 }
 
 function goBackToShop() {
-    document.getElementById('productsSection').style.display = 'block';
-    document.getElementById('cartSection').style.display = 'none';
-    document.getElementById('ordersSection').style.display = 'none';
-    document.getElementById('purchaseHistorySection').style.display = 'none';
-    document.getElementById('notificationsSection').style.display = 'none';
-    document.getElementById('customerSettingsSection').style.display = 'none';
-    document.getElementById('checkoutSection').style.display = 'none';
-    document.getElementById('customerServiceSection').style.display = 'none';
+    setCustomerActiveView('productsSection');
     updateFloatingBackButton();
 }
 
@@ -2519,14 +2527,7 @@ function updateFloatingBackButton() {
 }
 
 function viewCustomerNotifications() {
-    document.getElementById('productsSection').style.display = 'none';
-    document.getElementById('cartSection').style.display = 'none';
-    document.getElementById('ordersSection').style.display = 'none';
-    document.getElementById('purchaseHistorySection').style.display = 'none';
-    document.getElementById('notificationsSection').style.display = 'block';
-    document.getElementById('customerSettingsSection').style.display = 'none';
-    document.getElementById('checkoutSection').style.display = 'none';
-    document.getElementById('customerServiceSection').style.display = 'none';
+    setCustomerActiveView('notificationsSection');
     saveNavigationState('customer', 'viewCustomerNotifications');
     appData.notifications.forEach(notification => {
         if (notification.type === 'customer') notification.read = true;
@@ -2538,14 +2539,7 @@ function viewCustomerNotifications() {
 }
 
 function viewCustomerService() {
-    document.getElementById('productsSection').style.display = 'none';
-    document.getElementById('cartSection').style.display = 'none';
-    document.getElementById('ordersSection').style.display = 'none';
-    document.getElementById('purchaseHistorySection').style.display = 'none';
-    document.getElementById('notificationsSection').style.display = 'none';
-    document.getElementById('customerSettingsSection').style.display = 'none';
-    document.getElementById('checkoutSection').style.display = 'none';
-    document.getElementById('customerServiceSection').style.display = 'block';
+    setCustomerActiveView('customerServiceSection');
     saveNavigationState('customer', 'viewCustomerService');
     updateFloatingBackButton();
 
@@ -2600,17 +2594,7 @@ function viewCustomerSettings() {
 
     const accounts = loadCustomerAccounts();
     const profile = appData.currentUserProfile || accounts[appData.currentUser] || {};
-    document.querySelectorAll('#customerPage .customer-container > div').forEach(section => {
-        section.style.display = 'none';
-    });
-    document.getElementById('productsSection').style.display = 'none';
-    document.getElementById('cartSection').style.display = 'none';
-    document.getElementById('ordersSection').style.display = 'none';
-    document.getElementById('purchaseHistorySection').style.display = 'none';
-    document.getElementById('notificationsSection').style.display = 'none';
-    document.getElementById('customerSettingsSection').style.display = 'block';
-    document.getElementById('checkoutSection').style.display = 'none';
-    document.getElementById('customerServiceSection').style.display = 'none';
+    setCustomerActiveView('customerSettingsSection');
     saveNavigationState('customer', 'viewCustomerSettings');
     updateFloatingBackButton();
 
@@ -2739,12 +2723,8 @@ function checkout() {
         placeOrderButton.style.cursor = 'pointer';
     }
     
-    document.getElementById('cartSection').style.display = 'none';
-    document.getElementById('checkoutSection').style.display = 'block';
+    setCustomerActiveView('checkoutSection');
     saveNavigationState('customer', 'checkout');
-    document.getElementById('productsSection').style.display = 'none';
-    document.getElementById('ordersSection').style.display = 'none';
-    document.getElementById('purchaseHistorySection').style.display = 'none';
     
     // Load the shared QR before displaying checkout payment instructions.
     loadSharedGcashQRCode();
@@ -3625,12 +3605,7 @@ function placeOrderDirect() {
     saveUserCart();
     
     // Open payment checkout directly after the first Place Order click.
-    document.getElementById('productsSection').style.display = 'none';
-    document.getElementById('cartSection').style.display = 'none';
-    document.getElementById('ordersSection').style.display = 'none';
-    document.getElementById('purchaseHistorySection').style.display = 'none';
-    document.getElementById('notificationsSection').style.display = 'none';
-    document.getElementById('checkoutSection').style.display = 'block';
+    setCustomerActiveView('checkoutSection');
     loadSharedGcashQRCode();
     updateCheckoutDisplay();
     updatePaymentMethodUI();
@@ -4540,11 +4515,7 @@ async function processCustomerOrder() {
             timestamp: Date.now()
         }));
 
-        document.getElementById('checkoutSection').style.display = 'none';
-        document.getElementById('productsSection').style.display = 'block';
-        document.getElementById('cartSection').style.display = 'none';
-        document.getElementById('ordersSection').style.display = 'none';
-        document.getElementById('notificationsSection').style.display = 'none';
+        setCustomerActiveView('productsSection');
         updateFloatingBackButton();
 
         setTimeout(() => {
@@ -4634,8 +4605,7 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
         </div>
     `;
     if (!isPreview && !preserveCurrentView) {
-        document.getElementById('checkoutSection').style.display = 'none';
-        document.getElementById('productsSection').style.display = 'block';
+        setCustomerActiveView('productsSection');
     }
     if (!preserveCurrentView) {
         document.getElementById('cartSection').style.display = 'none';
@@ -4665,12 +4635,7 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
 
 function continueToPayment() {
     closeOrderDetailsModal();
-    document.getElementById('productsSection').style.display = 'none';
-    document.getElementById('cartSection').style.display = 'none';
-    document.getElementById('ordersSection').style.display = 'none';
-    document.getElementById('purchaseHistorySection').style.display = 'none';
-    document.getElementById('notificationsSection').style.display = 'none';
-    document.getElementById('checkoutSection').style.display = 'block';
+    setCustomerActiveView('checkoutSection');
     loadSharedGcashQRCode();
     updateCheckoutDisplay();
     updatePaymentMethodUI();
