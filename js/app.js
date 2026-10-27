@@ -6020,14 +6020,14 @@ function renderAdminOrders() {
 
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td><strong>#${order.id}</strong></td>
-            <td class="admin-order-customer-cell"><strong>${customerName}</strong><small>${customerEmail}</small><small>${customerPhone}</small></td>
-            <td><span class="admin-order-item-count">${itemCount} ${itemCount === 1 ? 'item' : 'items'}</span>${order.teamOrder?.isTeamOrder ? '<small class="admin-order-team-label">Team order</small>' : ''}${designGallery}</td>
-            <td><strong>₱${totalAmount.toFixed(2)}</strong></td>
-            <td><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
-            <td class="production-stage-cell"><span class="production-stage-label">${escapeProductionHtml(getProductionStageLabel(status))}</span>${isDelayed(order) ? '<small class="production-delayed-label">Delayed</small>' : ''}<div class="production-progress-track" aria-label="${progress}% complete"><span style="width:${progress}%"></span></div></td>
-            <td>${order.date}</td>
-            <td><button type="button" class="btn btn-small admin-order-view-details" onclick="viewOrderDetails(${Number(order.id) || 0})">View Details</button><button type="button" class="btn btn-small" onclick="viewOrderDetails(${Number(order.id) || 0})">Update Production</button></td>
+            <td data-label="Order ID"><strong>#${order.id}</strong></td>
+            <td data-label="Customer" class="admin-order-customer-cell"><strong>${customerName}</strong><small>${customerEmail}</small><small>${customerPhone}</small></td>
+            <td data-label="Products"><span class="admin-order-item-count">${itemCount} ${itemCount === 1 ? 'item' : 'items'}</span>${order.teamOrder?.isTeamOrder ? '<small class="admin-order-team-label">Team order</small>' : ''}${designGallery}</td>
+            <td data-label="Total amount"><strong>₱${totalAmount.toFixed(2)}</strong></td>
+            <td data-label="Order status"><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
+            <td data-label="Production stage" class="production-stage-cell"><span class="production-stage-label">${escapeProductionHtml(getProductionStageLabel(status))}</span>${isDelayed(order) ? '<small class="production-delayed-label">Delayed</small>' : ''}<div class="production-progress-track" aria-label="${progress}% complete"><span style="width:${progress}%"></span></div></td>
+            <td data-label="Order date">${order.date}</td>
+            <td data-label="Actions" class="admin-order-actions"><button type="button" class="btn btn-small admin-order-view-details" onclick="viewOrderDetails(${Number(order.id) || 0})">View Details</button><button type="button" class="btn btn-small" onclick="viewOrderDetails(${Number(order.id) || 0})">Update Production</button></td>
         `;
         ordersList.appendChild(row);
     });
