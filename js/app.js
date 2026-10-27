@@ -6027,7 +6027,7 @@ function renderAdminOrders() {
             <td data-label="Order status"><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
             <td data-label="Production stage" class="production-stage-cell"><span class="production-stage-label">${escapeProductionHtml(getProductionStageLabel(status))}</span>${isDelayed(order) ? '<small class="production-delayed-label">Delayed</small>' : ''}<div class="production-progress-track" aria-label="${progress}% complete"><span style="width:${progress}%"></span></div></td>
             <td data-label="Order date">${order.date}</td>
-            <td data-label="Actions" class="admin-order-actions"><button type="button" class="btn btn-small admin-order-view-details" onclick="viewOrderDetails(${Number(order.id) || 0})">View Details</button><button type="button" class="btn btn-small" onclick="viewOrderDetails(${Number(order.id) || 0})">Update Production</button></td>
+            <td data-label="Actions" class="admin-order-actions"><button type="button" class="btn btn-small" onclick="viewOrderDetails(${Number(order.id) || 0})">Update Production</button></td>
         `;
         ordersList.appendChild(row);
     });
