@@ -6011,6 +6011,8 @@ function renderAdminOrders() {
             ? `<div class="order-design-gallery admin-order-design-gallery" aria-label="Customer uploaded design photos">${designImages.map((image, imageIndex) => `<img src="${image}" alt="Customer design ${imageIndex + 1}" class="order-design-thumbnail">`).join('')}</div>`
             : '';
         const customerName = escapeProductionHtml(order.customerName || 'N/A');
+        const customerEmail = escapeProductionHtml(order.customerEmail || 'No email');
+        const customerPhone = escapeProductionHtml(order.customerPhone || 'No phone');
         const totalAmount = Number(order.totalAmount) || 0;
         const status = productionStatus(order);
         const currentStageIndex = stages.findIndex(stage => stage.id === status);
@@ -6019,7 +6021,7 @@ function renderAdminOrders() {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td><strong>#${order.id}</strong></td>
-            <td><strong>${customerName}</strong></td>
+            <td class="admin-order-customer-cell"><strong>${customerName}</strong><small>${customerEmail}</small><small>${customerPhone}</small></td>
             <td><span class="admin-order-item-count">${itemCount} ${itemCount === 1 ? 'item' : 'items'}</span>${order.teamOrder?.isTeamOrder ? '<small class="admin-order-team-label">Team order</small>' : ''}${designGallery}</td>
             <td><strong>₱${totalAmount.toFixed(2)}</strong></td>
             <td><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
@@ -6296,10 +6298,12 @@ function viewOrderDetails(orderStr) {
                 
                 <div class="admin-order-customer-info">
                     <h3>Customer Information</h3>
-                    <div class="admin-order-customer-field"><strong>Name:</strong> ${order.customerName || 'N/A'}</div>
-                    <div class="admin-order-customer-field"><strong>Email:</strong> ${order.customerEmail || 'N/A'}</div>
-                    <div class="admin-order-customer-field"><strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
-                    <div class="admin-order-customer-field"><strong>Address:</strong> ${order.customerAddress || 'N/A'}</div>
+                    <div class="admin-order-customer-grid">
+                        <div class="admin-order-customer-field"><span>Name</span><strong>${escapeDetailText(order.customerName || 'N/A')}</strong></div>
+                        <div class="admin-order-customer-field"><span>Email</span><strong>${escapeDetailText(order.customerEmail || 'N/A')}</strong></div>
+                        <div class="admin-order-customer-field"><span>Phone</span><strong>${escapeDetailText(order.customerPhone || 'N/A')}</strong></div>
+                        <div class="admin-order-customer-field admin-order-customer-address"><span>Delivery address</span><strong>${escapeDetailText(order.customerAddress || 'N/A')}</strong></div>
+                    </div>
                 </div>
 
                 ${teamOrderHtml}
@@ -6815,11 +6819,66 @@ function getSoldOrders() {
     return getReportOrders().filter(order => ['completed', 'delivered'].includes(order.status));
 }
 
+function parseReportDate(value) {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+    const match = String(value).match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    return match ? new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1])) : null;
+}
+
+function getReportDateRange() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const period = document.getElementById('reportPeriod')?.value || 'this-month';
+    let start = null;
+    let end = null;
+    if (period === 'today') {
+        start = new Date(today); end = new Date(today); end.setDate(end.getDate() + 1);
+    } else if (period === 'this-month') {
+        start = new Date(today.getFullYear(), today.getMonth(), 1); end = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    } else if (period === 'last-month') {
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1); end = new Date(today.getFullYear(), today.getMonth(), 1);
+    } else if (period === 'custom') {
+        const startValue = document.getElementById('reportStartDate')?.value;
+        const endValue = document.getElementById('reportEndDate')?.value;
+        start = startValue ? new Date(`${startValue}T00:00:00`) : null;
+        end = endValue ? new Date(`${endValue}T00:00:00`) : null;
+        if (end) end.setDate(end.getDate() + 1);
+    }
+    return { start, end, period };
+}
+
+function filterReportOrders(orders) {
+    const { start, end } = getReportDateRange();
+    if (!start && !end) return orders;
+    return orders.filter(order => {
+        const date = parseReportDate(order.date);
+        return date && (!start || date >= start) && (!end || date < end);
+    });
+}
+
+function getReportPeriodLabel() {
+    const { start, end, period } = getReportDateRange();
+    if (period === 'all-time') return 'All recorded dates';
+    if (!start || !end) return 'Choose both custom dates';
+    const lastIncludedDay = new Date(end);
+    lastIncludedDay.setDate(lastIncludedDay.getDate() - 1);
+    return `${start.toLocaleDateString()} – ${lastIncludedDay.toLocaleDateString()}`;
+}
+
+function toggleCustomReportDates() {
+    const customDates = document.getElementById('customReportDates');
+    if (customDates) customDates.style.display = document.getElementById('reportPeriod')?.value === 'custom' ? 'flex' : 'none';
+    const label = document.getElementById('reportPeriodLabel');
+    if (label) label.textContent = getReportPeriodLabel();
+}
+
 // Generate Reports
 function generateReports() {
     loadOrders();
-    const allOrders = getReportOrders();
-    const soldOrders = getSoldOrders();
+    const allOrders = filterReportOrders(getReportOrders());
+    const soldOrders = allOrders.filter(order => ['completed', 'delivered'].includes(order.status));
 
     // Calculate metrics
     const totalSales = soldOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
@@ -6838,6 +6897,8 @@ function generateReports() {
 
     // Generate status report
     generateStatusReport(allOrders);
+    const label = document.getElementById('reportPeriodLabel');
+    if (label) label.textContent = getReportPeriodLabel();
 }
 
 // Generate Top Products Report
@@ -6845,7 +6906,7 @@ function generateTopProductsReport(orders) {
     const productSales = {};
 
     orders.forEach(order => {
-        order.items.forEach(item => {
+        (order.items || []).forEach(item => {
             if (!productSales[item.name]) {
                 productSales[item.name] = { count: 0, revenue: 0 };
             }
@@ -6899,18 +6960,55 @@ function generateStatusReport(orders) {
     });
 }
 
-// Generate Full Report (PDF) - Basic implementation
+function pdfEscape(value) {
+    return String(value ?? '').replace(/[^\x20-\x7E]/g, '?').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
+
+function createSimplePdf(lines) {
+    const pageHeight = 792;
+    const linesPerPage = 50;
+    const pages = [];
+    for (let index = 0; index < lines.length; index += linesPerPage) pages.push(lines.slice(index, index + linesPerPage));
+    const objects = [];
+    const addObject = value => { objects.push(value); return objects.length; };
+    const catalogId = addObject('');
+    const pagesId = addObject('');
+    const fontId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+    const pageIds = pages.map(pageLines => {
+        const commands = ['BT', '/F1 10 Tf', `50 ${pageHeight - 50} Td`];
+        pageLines.forEach((line, index) => {
+            if (index) commands.push('0 -14 Td');
+            commands.push(`(${pdfEscape(line).slice(0, 180)}) Tj`);
+        });
+        commands.push('ET');
+        const stream = commands.join('\n');
+        const contentId = addObject(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+        return addObject(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 ${pageHeight}] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+    });
+    objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+    objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+    const xrefOffset = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    offsets.slice(1).forEach(offset => { pdf += `${String(offset).padStart(10, '0')} 00000 n \n`; });
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+    return new Blob([pdf], { type: 'application/pdf' });
+}
+
+// Generate Full Report as a real PDF file
 function generateFullReport() {
     loadOrders();
-    const allOrders = getReportOrders();
-    const soldOrders = getSoldOrders();
+    const allOrders = filterReportOrders(getReportOrders());
+    const soldOrders = allOrders.filter(order => ['completed', 'delivered'].includes(order.status));
 
     if (allOrders.length === 0) {
         alert('No data to generate report');
         return;
     }
 
-    const reportDate = new Date().toLocaleDateString();
+    const reportDate = new Date().toISOString().slice(0, 10);
     const totalSales = soldOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
     const totalOrders = soldOrders.length;
     const uniqueCustomers = new Set(soldOrders.map(order => order.customerEmail)).size;
@@ -6941,20 +7039,23 @@ Date: ${order.date}
 ---`;
     });
 
-    // Download as text file
-    const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8;' });
+    // Download as a PDF file
+    const reportLines = reportContent.split(/\r?\n/).map(line => line.trimEnd());
+    reportLines.splice(2, 0, `Period: ${getReportPeriodLabel()}`);
+    const blob = createSimplePdf(reportLines);
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
 
     link.setAttribute('href', url);
-    link.setAttribute('download', `KINGPIN-Report-${reportDate}.txt`);
+    link.setAttribute('download', `KINGPIN-Report-${reportDate}.pdf`);
     link.style.visibility = 'hidden';
 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
-    alert('Report generated and downloaded successfully!');
+    URL.revokeObjectURL(url);
+    alert('Report PDF generated and downloaded successfully!');
 }
 
 // Logo file preview handler

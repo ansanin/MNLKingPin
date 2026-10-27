@@ -6320,14 +6320,89 @@ body.light-mode #adminPage .message {
     color: #f4f4f4;
 }
 
+.admin-order-customer-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 16px;
+}
+
 .admin-order-customer-field {
-    margin-bottom: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 0;
     color: #f4f4f4;
     overflow-wrap: anywhere;
 }
 
+.admin-order-customer-field span {
+    color: #a0a0a0;
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
 .admin-order-customer-field strong {
     color: #d4af37;
+}
+
+.admin-order-customer-address {
+    grid-column: 1 / -1;
+}
+
+.admin-order-customer-cell {
+    min-width: 180px;
+}
+
+.admin-order-customer-cell small {
+    display: block;
+    margin-top: 3px;
+    color: #a0a0a0;
+    overflow-wrap: anywhere;
+}
+
+.report-filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 20px;
+    padding: 14px 16px;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    background: #1f1f1f;
+}
+
+.report-filters > label,
+.report-custom-dates label {
+    color: #d4af37;
+    font-weight: 600;
+}
+
+.report-filters .search-input {
+    flex: 0 1 180px;
+}
+
+.report-custom-dates {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.report-period-label {
+    color: #a0a0a0;
+    font-size: .9rem;
+}
+
+@media (max-width: 600px) {
+    .admin-order-customer-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-order-customer-address {
+        grid-column: auto;
+    }
 }
 
 .production-summary {
