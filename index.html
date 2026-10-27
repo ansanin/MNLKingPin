@@ -8,6 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <title>KingPin Custom Ph® CamSur - Jersey Management System</title>
     <link rel="stylesheet" href="css/style.css?v=20261020-customer-order-item-photo-1">
+    <link rel="stylesheet" href="css/storefront.css">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -89,14 +90,19 @@
     </div>
 
     <!-- Customer Dashboard -->
-    <div id="customerPage" class="page" style="display: none;">
-        <nav class="navbar">
+    <div id="customerPage" class="page storefront" style="display: none;">
+        <nav class="navbar" aria-label="Customer header">
             <div class="navbar-left">
                 <div class="navbar-emblem-container">
                     <img id="customerNavbarLogo" src="" alt="Shop Logo" class="navbar-emblem">
                 </div>
                 <span id="customerDisplayName">Welcome, Customer!</span>
                 <span class="navbar-division">MNL KINGPIN / CAMSUR</span>
+            </div>
+            <div class="storefront-desktop-nav" aria-label="Shop navigation">
+                <button type="button" data-shop-destination="shop" onclick="navigateStorefront('shop')">Shop</button>
+                <button type="button" data-shop-destination="orders" onclick="navigateStorefront('orders')">My Orders</button>
+                <button type="button" data-shop-destination="support" onclick="navigateStorefront('support')">Support</button>
             </div>
             <div class="navbar-right">
                 <div class="customer-quick-actions" aria-label="Customer quick actions">
@@ -105,7 +111,7 @@
                     <button class="btn btn-secondary customer-quick-action" onclick="viewCustomerNotifications()" aria-label="Open notifications" title="Notifications"><span aria-hidden="true">🔔</span><span class="notification-badge" data-notification-badge="customer-notifications" style="display:none;">0</span></button>
                 </div>
                 <div class="nav-menu-scroll-wrapper">
-                    <button class="btn btn-secondary nav-menu-toggle" type="button" onclick="toggleNavMenu()">Menu</button>
+                    <button class="btn btn-secondary nav-menu-toggle" type="button" onclick="toggleNavMenu()" aria-label="Open customer menu" aria-controls="customerNavMenu" aria-expanded="false">☰ <span class="menu-text">Account</span></button>
                     <div id="customerNavMenu" class="nav-menu-items" aria-label="Customer navigation menu">
                         <button class="btn btn-secondary" onclick="toggleDesignInterface()">🎨 Design Studio</button>
                         <button class="btn btn-secondary" onclick="viewPurchaseHistory()">Purchase History</button>
@@ -120,10 +126,21 @@
         <div class="customer-container">
             <!-- Products Section -->
             <div id="productsSection" class="products-section">
+                <section class="storefront-hero" aria-labelledby="storefrontHeroTitle">
+                    <div class="storefront-hero-copy">
+                        <span class="storefront-eyebrow">MADE FOR YOUR TEAM</span>
+                        <h1 id="storefrontHeroTitle">Your team. Your identity.</h1>
+                        <p>Custom jerseys &amp; teamwear</p>
+                        <span class="storefront-hero-rule" aria-hidden="true"></span>
+                    </div>
+                    <img id="storefrontHeroImage" alt="" hidden>
+                </section>
+                <div class="catalog-toolbar">
                 <h2>Available Products</h2>
                 <div class="search-bar">
-                    <input type="text" id="searchProducts" placeholder="Search jerseys...">
-                    <select id="categoryFilter">
+                    <label for="searchProducts" class="storefront-sr-only">Search products</label>
+                    <input type="search" id="searchProducts" placeholder="Search products…">
+                    <select id="categoryFilter" aria-label="Filter by category" class="storefront-sr-only">
                         <option value="">All Types</option>
                         <option value="basketball">Basketball Jersey</option>
                         <option value="volleyball">Volleyball Jersey</option>
@@ -136,6 +153,9 @@
                         <option value="organization">Organization Uniform</option>
                     </select>
                 </div>
+                </div>
+                <div id="storefrontCategoryFilters" class="catalog-filters" role="group" aria-label="Product categories"></div>
+                <p id="storefrontProductCount" class="catalog-count" role="status" aria-live="polite"></p>
                 <div id="productsList" class="products-grid">
                     <!-- Products will be dynamically loaded here -->
                 </div>
@@ -614,6 +634,12 @@
                 </nav>
             </div>
         </footer>
+        <nav id="storefrontBottomNav" class="storefront-bottom-nav" aria-label="Customer mobile navigation" hidden>
+            <button type="button" data-shop-destination="shop" onclick="navigateStorefront('shop')"><span aria-hidden="true">⌂</span>Shop</button>
+            <button type="button" data-shop-destination="orders" onclick="navigateStorefront('orders')"><span aria-hidden="true">▤</span>Orders</button>
+            <button type="button" data-shop-destination="support" onclick="navigateStorefront('support')"><span aria-hidden="true">♧</span>Support</button>
+            <button type="button" data-shop-destination="account" onclick="navigateStorefront('account')"><span aria-hidden="true">♙</span>Account</button>
+        </nav>
     </div>
 
     <!-- Admin Dashboard -->
@@ -1272,8 +1298,8 @@
 
     <!-- Product Detail Modal -->
     <div id="productModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeProductModal()">&times;</span>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modalProductName">
+            <button type="button" class="close" onclick="closeProductModal()" aria-label="Close product details">&times;</button>
             <div class="modal-body">
                 <div class="modal-image">
                     <div id="modalProductGallery" class="modal-product-gallery" aria-label="Product photos"></div>
@@ -1395,6 +1421,7 @@
     <script src="js/production-tracking.js?v=20261015-production-1"></script>
     <script src="js/order-media.js?v=20261019-multi-design-1"></script>
     <script src="js/app.js?v=20261020-customer-order-item-photo-1"></script>
+    <script src="js/storefront.js"></script>
     <script src="js/design-interface.js?v=20261020-hide-upload-filenames-1"></script>
     <script>
         // Force initialization when page loads

@@ -2135,6 +2135,7 @@ function showCustomerDashboard() {
     
     loadProducts();
     updateFloatingBackButton();
+    if (typeof updateStorefrontNavigation === 'function') updateStorefrontNavigation();
     
     // Update badges after UI is shown
     setTimeout(() => {
@@ -3084,10 +3085,12 @@ function loadDefaultProducts() {
 // Display Products
 function displayProducts(products) {
     const productsList = document.getElementById('productsList');
-    productsList.innerHTML = '';
+    if (!productsList) return;
+    productsList.replaceChildren();
+    if (typeof syncStorefrontCatalog === 'function') syncStorefrontCatalog(products);
 
     if (products.length === 0) {
-        productsList.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 40px;">No products found</p>';
+        productsList.innerHTML = '<div class="catalog-empty-state"><h3>No products match your search</h3><p>Try a different search or category.</p><button class="btn btn-secondary" type="button" data-clear-catalog>Clear search and filters</button></div>';
         return;
     }
 
@@ -3096,9 +3099,9 @@ function displayProducts(products) {
         productCard.className = 'product-card';
         productCard.onclick = () => openProductModal(product);
         
-        const stockClass = product.stock < 5 ? 'low' : '';
-        const stockText = product.stock > 0 ? `Stock: ${product.stock}` : 'Out of Stock';
-        const isOutOfStock = product.stock <= 0;
+        const stock = Number(product.stock) || 0;
+        const stockClass = stock < 5 ? 'low' : '';
+        const stockText = stock > 0 ? `Stock: ${stock}` : 'Out of Stock';
 
         // Type label mapping
         const typeLabels = {
@@ -3124,11 +3127,16 @@ function displayProducts(products) {
                 <p style="color: #4a9eff; font-weight: 600; margin-bottom: 8px;">${typeLabels[product.type] || product.type}</p>
                 <p style="color: #a0a0a0; font-size: 0.85em; margin-bottom: 8px;">Premium Quality Jersey</p>
                 <p class="product-available-sizes">Sizes: ${availableSizes.length ? availableSizes.join(', ') : 'Not set'}</p>
-                <div class="product-price">₱${product.price.toFixed(2)}</div>
+                <div class="product-price">₱${formatStorefrontPrice(product.price)}</div>
                 <div class="product-stock ${stockClass}">${stockText}</div>
-                <button class="btn btn-primary btn-small" ${isOutOfStock ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''} onclick="openProductModal(${JSON.stringify(product).replace(/"/g, '&quot;')}); event.stopPropagation();">${isOutOfStock ? 'Out of Stock' : 'View Details'}</button>
+                <button class="btn btn-primary btn-small" type="button">View Details</button>
             </div>
         `;
+
+        productCard.querySelector('.btn-small').addEventListener('click', event => {
+            event.stopPropagation();
+            openProductModal(product);
+        });
 
         productsList.appendChild(productCard);
     });
@@ -3178,15 +3186,23 @@ async function openProductModal(product) {
     
     document.getElementById('modalProductCategory').textContent = `Type: ${typeLabels[product.type] || product.type}`;
     document.getElementById('modalProductDescription').textContent = product.description;
-    document.getElementById('modalProductPrice').textContent = product.price.toFixed(2);
+    document.getElementById('modalProductPrice').textContent = formatStorefrontPrice(product.price);
     
     const stockElement = document.getElementById('modalProductStock');
-    const stockClass = product.stock < 5 ? 'low' : '';
-    stockElement.className = `stock ${stockClass}`;
-    stockElement.textContent = product.stock > 0 ? `Stock Available: ${product.stock}` : 'Out of Stock';
+    const stock = Number(product.stock) || 0;
+    const isOutOfStock = stock <= 0;
+    const stockClass = stock < 5 ? 'low' : '';
+    stockElement.className = `stock ${stockClass}${isOutOfStock ? ' out-of-stock' : ''}`;
+    stockElement.textContent = stock > 0 ? `Stock Available: ${stock}` : 'Out of Stock';
+
+    document.querySelectorAll('#productModal .modal-actions button').forEach(button => {
+        button.disabled = isOutOfStock;
+        button.setAttribute('aria-disabled', String(isOutOfStock));
+    });
     
     document.getElementById('modalProductQuantity').value = 1;
     document.getElementById('modalProductQuantity').max = product.stock;
+    document.getElementById('modalProductQuantity').disabled = isOutOfStock;
     
     const sizeSelect = document.getElementById('customSize');
     const productSizeSelect = document.getElementById('modalProductSize');
@@ -3952,23 +3968,25 @@ function setupSearchAndFilter() {
     const searchInput = document.getElementById('searchProducts');
     const categoryFilter = document.getElementById('categoryFilter');
 
-    searchInput.addEventListener('input', filterProducts);
-    categoryFilter.addEventListener('change', filterProducts);
+    searchInput.oninput = filterProducts;
+    categoryFilter.onchange = filterProducts;
+    if (typeof setupStorefrontCatalog === 'function') setupStorefrontCatalog();
 }
 
 // Filter Products
 function filterProducts() {
-    const searchTerm = document.getElementById('searchProducts').value.toLowerCase();
+    const searchTerm = document.getElementById('searchProducts').value.trim().toLowerCase();
     const type = document.getElementById('categoryFilter').value;
 
     const filtered = appData.products.filter(product => {
-        const matchesSearch = product.name.toLowerCase().includes(searchTerm) || 
-                             product.description.toLowerCase().includes(searchTerm);
+        const searchableText = `${product.name || ''} ${product.description || ''} ${product.type || ''}`.toLowerCase();
+        const matchesSearch = searchableText.includes(searchTerm);
         const matchesType = !type || product.type === type;
         return matchesSearch && matchesType;
     });
 
     displayProducts(filtered);
+    if (typeof syncStorefrontCategoryState === 'function') syncStorefrontCategoryState(type);
 }
 
 // ===== CHECKOUT =====
