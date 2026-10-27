@@ -6997,7 +6997,11 @@ function createSimplePdf(lines) {
     return new Blob([pdf], { type: 'application/pdf' });
 }
 
-// Generate Full Report as a real PDF file
+function excelEscape(value) {
+    return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+}
+
+// Generate Full Report as an Excel-compatible workbook
 function generateFullReport() {
     loadOrders();
     const allOrders = filterReportOrders(getReportOrders());
@@ -7041,15 +7045,19 @@ Date: ${order.date}
 ---`;
     });
 
-    // Download as a PDF file
-    const reportLines = reportContent.split(/\r?\n/).map(line => line.trimEnd());
-    const blob = createSimplePdf(reportLines);
+    const periodLabel = getReportPeriodLabel();
+    const detailRows = soldOrders.map(order => {
+        const itemsList = (order.items || []).map(item => `${item.name} (x${item.quantity})`).join(', ');
+        return `<tr><td>${excelEscape(order.id)}</td><td>${excelEscape(order.customerName || 'N/A')}</td><td>${excelEscape(order.customerEmail || 'N/A')}</td><td>${excelEscape(itemsList || 'N/A')}</td><td>${Number(order.totalAmount || 0).toFixed(2)}</td><td>${excelEscape(order.status || 'pending')}</td><td>${excelEscape(order.date || 'N/A')}</td></tr>`;
+    }).join('');
+    const workbook = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial,sans-serif}h1{color:#1f4e78}h2{color:#666}table{border-collapse:collapse;width:100%}th{background:#1f4e78;color:#fff;font-weight:bold}th,td{border:1px solid #b7c9d6;padding:7px;text-align:left}td.amount{mso-number-format:"0.00"}</style></head><body><h1>KINGPIN CLOTHING MANAGEMENT SYSTEM</h1><h2>Sales &amp; Performance Report</h2><p><strong>Period:</strong> ${excelEscape(periodLabel)}</p><p><strong>Generated:</strong> ${excelEscape(new Date().toLocaleString())}</p><h2>Executive Summary</h2><table><tr><th>Total Sales</th><th>Total Orders</th><th>Unique Customers</th><th>Average Order Value</th></tr><tr><td class="amount">${totalSales.toFixed(2)}</td><td>${totalOrders}</td><td>${uniqueCustomers}</td><td class="amount">${totalOrders ? (totalSales / totalOrders).toFixed(2) : '0.00'}</td></tr></table><h2>Sales Order Details</h2><table><tr><th>Order ID</th><th>Customer Name</th><th>Email</th><th>Products</th><th>Total Amount</th><th>Status</th><th>Date</th></tr>${detailRows || '<tr><td colspan="7">No completed or delivered sales in this period.</td></tr>'}</table></body></html>`;
+    const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
 
     link.setAttribute('href', url);
-    const periodFileName = getReportPeriodLabel().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
-    link.setAttribute('download', `KINGPIN-Sales-Report-${periodFileName || reportDate}.pdf`);
+    const periodFileName = periodLabel.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+    link.setAttribute('download', `KINGPIN-Sales-Report-${periodFileName || reportDate}.xls`);
     link.style.visibility = 'hidden';
 
     document.body.appendChild(link);
@@ -7057,7 +7065,7 @@ Date: ${order.date}
     document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
-    alert('Report PDF generated and downloaded successfully!');
+    alert('Excel report generated and downloaded successfully!');
 }
 
 // Logo file preview handler
