@@ -548,11 +548,19 @@
                     <div class="measurements-section" style="border: 2px solid #d4af37; background: rgba(212, 175, 55, 0.1); padding: 20px; border-radius: 5px;">
                         <h3 style="color: #d4af37;">💳 Choose Payment Method</h3>
                         <div class="form-group">
-                            <label for="paymentMethod" style="color: #d4af37; font-weight: 600;">Payment method:</label>
-                            <select id="paymentMethod" required onchange="updatePaymentMethodUI()">
-                                <option value="gcash">GCash</option>
-                                <option value="pickup">Pickup at Shop</option>
-                            </select>
+                            <input type="hidden" id="paymentMethod" value="gcash">
+                            <div class="checkout-payment-options" role="group" aria-label="Payment and shop pickup options">
+                                <button type="button" class="checkout-payment-option" data-payment-option="gcash" aria-pressed="true" onclick="selectCheckoutPayment('gcash')">
+                                    <span class="checkout-option-label">Payment Method</span>
+                                    <strong>GCash</strong>
+                                    <span>Pay online via GCash</span>
+                                </button>
+                                <button type="button" class="checkout-payment-option" data-payment-option="pickup" aria-pressed="false" onclick="selectCheckoutPayment('pickup')">
+                                    <span class="checkout-option-label">In-store Payment</span>
+                                    <strong>Pickup at Shop</strong>
+                                    <span>Pay cash at the shop</span>
+                                </button>
+                            </div>
                         </div>
                         <p id="gcashPaymentInstruction" class="info-text" style="color: #ff6b6b; font-weight: 600;">⚠️ GCash proof of downpayment is required to place your order</p>
                         

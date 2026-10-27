@@ -2048,6 +2048,12 @@ function setupGcashPaymentPreview() {
     });
 }
 
+function selectCheckoutPayment(method) {
+    if (!['gcash', 'pickup'].includes(method)) return;
+    document.getElementById('paymentMethod').value = method;
+    updatePaymentMethodUI();
+}
+
 function updatePaymentMethodUI() {
     const paymentMethod = document.getElementById('paymentMethod');
     const proofInput = document.getElementById('customerGcashQRCode');
@@ -2055,6 +2061,9 @@ function updatePaymentMethodUI() {
     const qrContainer = document.getElementById('storeGcashQRContainer');
     const proofContainer = proofInput ? proofInput.closest('.form-group') : null;
     const isGcash = !paymentMethod || paymentMethod.value === 'gcash';
+    document.querySelectorAll('[data-payment-option]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.paymentOption === (isGcash ? 'gcash' : 'pickup')));
+    });
 
     if (proofInput) proofInput.required = isGcash;
     if (instruction) instruction.style.display = isGcash ? 'block' : 'none';
