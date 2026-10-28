@@ -5224,26 +5224,55 @@ function updateOrderDownpayment(orderId, amountValue) {
     loadCustomerOrders();
 }
 
-async function compressPaymentProof(file) {
-    const image = await createImageBitmap(file);
-    const maxDimension = 1600;
-    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(image.width * scale));
-    canvas.height = Math.max(1, Math.round(image.height * scale));
-    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-    image.close();
+const paymentProofCache = new WeakMap();
 
-    let quality = 0.82;
-    let proof = canvas.toDataURL('image/jpeg', quality);
-    while (proof.length > 1200000 && quality > 0.52) {
-        quality -= 0.1;
-        proof = canvas.toDataURL('image/jpeg', quality);
+function compressPaymentProof(file) {
+    const cached = paymentProofCache.get(file);
+    if (cached) return cached;
+    const pending = preparePaymentProof(file).catch(error => {
+        paymentProofCache.delete(file);
+        throw error;
+    });
+    paymentProofCache.set(file, pending);
+    return pending;
+}
+
+async function preparePaymentProof(file) {
+    let image;
+    if (typeof createImageBitmap === 'function') {
+        try { image = await createImageBitmap(file); } catch (error) { /* Some mobile browsers cannot decode with ImageBitmap. */ }
     }
-    if (proof.length > 1200000) {
-        throw new Error('The proof image is too large to save. Please upload a smaller image.');
+    let imageUrl = '';
+    try {
+        if (!image) {
+            imageUrl = URL.createObjectURL(file);
+            image = await new Promise((resolve, reject) => {
+                const element = new Image();
+                element.onload = () => resolve(element);
+                element.onerror = () => reject(new Error('Unable to read this proof image. Please choose another JPG, PNG, GIF, or WEBP image.'));
+                element.src = imageUrl;
+            });
+        }
+        const maxDimension = 1600;
+        const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Unable to process this proof image on your device. Please try another image.');
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        let quality = 0.82;
+        let proof = canvas.toDataURL('image/jpeg', quality);
+        while (proof.length > 1200000 && quality > 0.52) {
+            quality -= 0.1;
+            proof = canvas.toDataURL('image/jpeg', quality);
+        }
+        if (proof.length > 1200000) throw new Error('The proof image is too large to save. Please upload a smaller image.');
+        return proof;
+    } finally {
+        if (image && typeof image.close === 'function') image.close();
+        if (imageUrl) URL.revokeObjectURL(imageUrl);
     }
-    return proof;
 }
 
 function uploadOrderPaymentProof(orderId, input) {
