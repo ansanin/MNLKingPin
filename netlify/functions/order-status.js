@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 const { connectLambda, getStore } = require('@netlify/blobs');
 const { authenticateEvent } = require('./lib/auth');
+const { renderOrderUpdateEmail } = require('./lib/order-email');
 
 function jsonResponse(statusCode, body) {
     return {
@@ -43,7 +44,7 @@ exports.handler = async function handler(event) {
 
         const status = String(productionEvent.message || 'updated');
         const subject = `KingPin Order #${order.id} Status Update`;
-        const html = `<h2>KingPin Order Update</h2><p>Your order <strong>#${order.id}</strong> has been updated.</p><p><strong>New Status:</strong> ${status}</p><p>${order.productionRemarks || ''}</p><p>Thank you for choosing KingPin!</p>`;
+        const html = await renderOrderUpdateEmail(order, productionEvent, process.env.URL || 'https://mnlkingpin.netlify.app');
 
         if (smtpUser && smtpPass) {
             const transporter = nodemailer.createTransport({

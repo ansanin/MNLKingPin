@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 const { connectLambda, getStore } = require('@netlify/blobs');
 const { authenticateEvent } = require('./lib/auth');
+const { renderOrderUpdateEmail } = require('./lib/order-email');
 
 function jsonResponse(statusCode, body) {
     return {
@@ -10,9 +11,6 @@ function jsonResponse(statusCode, body) {
     };
 }
 
-function escapeHtml(value) {
-    return String(value || '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-}
 
 exports.handler = async function handler(event) {
     connectLambda(event);
@@ -41,9 +39,8 @@ exports.handler = async function handler(event) {
         if (!email) return jsonResponse(400, { error: 'Customer email is missing.' });
 
         const label = String(productionEvent.statusLabel || productionEvent.status).replace(/-/g, ' ');
-        const remarks = escapeHtml(productionEvent.remarks);
         const subject = `KingPin Order #${order.id}: ${label}`;
-        const html = `<h2>Production update</h2><p>Order <strong>#${escapeHtml(order.id)}</strong> is now at <strong>${escapeHtml(label)}</strong>.</p>${remarks ? `<p>${remarks}</p>` : ''}${order.estimatedCompletionDate ? `<p>Estimated completion: ${escapeHtml(order.estimatedCompletionDate)}</p>` : ''}`;
+        const html = await renderOrderUpdateEmail(order, productionEvent, process.env.URL || 'https://mnlkingpin.netlify.app');
 
         if (process.env.SMTP_USER && process.env.SMTP_PASS) {
             const transporter = nodemailer.createTransport({

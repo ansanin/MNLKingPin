@@ -20,12 +20,13 @@ const blobModule = {
 require.cache[blobModulePath] = { id: blobModulePath, filename: blobModulePath, loaded: true, exports: blobModule };
 
 let sentCount = 0;
+let sentMessage;
 const nodemailerPath = require.resolve('nodemailer');
 require.cache[nodemailerPath] = {
   id: nodemailerPath,
   filename: nodemailerPath,
   loaded: true,
-  exports: { createTransport: () => ({ async sendMail() { sentCount += 1; } }) }
+  exports: { createTransport: () => ({ async sendMail(message) { sentCount += 1; sentMessage = message; } }) }
 };
 
 const { signAccessToken } = require('../netlify/functions/lib/auth.js');
@@ -38,6 +39,8 @@ async function run() {
     id: 450,
     customerEmail: 'customer@example.com',
     estimatedCompletionDate: '2026-12-30',
+    paymentMethod: 'gcash', paymentStatus: 'verified', gcashDownpaymentAmount: 400, totalAmount: 800,
+    items: [{ id: 5, name: 'Jersey <Team>', quantity: 2 }],
     productionNotifications: [{
       id: 'event-1',
       type: 'stage-update',
@@ -46,6 +49,8 @@ async function run() {
       remarks: 'Queued <b>securely</b>.'
     }]
   });
+
+  await blobModule.getStore('kingpin-products').setJSON('catalog', [{ id: 5, thumbnailImage: '/.netlify/functions/product-image?key=' + 'a'.repeat(64) }]);
 
   const event = {
     httpMethod: 'POST',
@@ -56,6 +61,36 @@ async function run() {
   assert.strictEqual((await handler(event)).statusCode, 200);
   assert.strictEqual((await handler(event)).statusCode, 200);
   assert.strictEqual(sentCount, 1);
+  assert.match(sentMessage.html, /Order number:<\/strong> #450/);
+  assert.match(sentMessage.html, /Printing \/ Production/);
+  assert.match(sentMessage.html, /2026-12-30/);
+  assert.match(sentMessage.html, /PHP 800\.00/);
+  assert.match(sentMessage.html, /Verified downpayment:<\/strong> PHP 400\.00/);
+  assert.match(sentMessage.html, /Estimated remaining balance:<\/strong> PHP 400\.00/);
+  assert.match(sentMessage.html, /https:\/\/mnlkingpin\.netlify\.app\/\.netlify\/functions\/product-image/);
+  assert.match(sentMessage.html, /Jersey &lt;Team&gt;/);
+  assert.match(sentMessage.html, /Queued &lt;b&gt;securely&lt;\/b&gt;/);
+  const { renderOrderUpdateEmail, imageUrl } = require('../netlify/functions/lib/order-email');
+  assert.strictEqual(imageUrl('javascript:alert(1)', 'https://mnlkingpin.netlify.app'), '');
+  assert.strictEqual(imageUrl('/.netlify/functions/order-design?media=gcash-proof', 'https://mnlkingpin.netlify.app'), '');
+  const pending = await renderOrderUpdateEmail({ id: 451, paymentMethod: 'gcash', paymentStatus: 'downpayment-received', totalAmount: 800, gcashDownpaymentAmount: 400, items: [{ name: 'Custom', image: 'data:image/png;base64,AA==' }] }, { status: 'payment-verification' });
+  assert.match(pending, /awaiting verification/);
+  assert.doesNotMatch(pending, /Verified downpayment|Estimated remaining balance/);
+  assert.match(pending, /Not set by the shop yet/);
+  assert.match(pending, /Image unavailable/);
+  let resendPayload;
+  const originalFetch = global.fetch;
+  delete process.env.SMTP_USER; delete process.env.SMTP_PASS;
+  process.env.RESEND_API_KEY = 'test-api-key'; process.env.RESEND_FROM_EMAIL = 'orders@example.com';
+  global.fetch = async (url, options) => { resendPayload = JSON.parse(options.body); return { ok: true }; };
+  const order = await orderStore.get('order-450');
+  order.productionNotifications.push({ id: 'event-2', type: 'stage-update', status: 'quality-checking', statusLabel: 'Quality Checking' });
+  await orderStore.setJSON('order-450', order);
+  assert.strictEqual((await handler({ ...event, body: JSON.stringify({ orderId: 450, eventId: 'event-2' }) })).statusCode, 200);
+  assert.match(resendPayload.html, /Quality Checking/);
+  assert.match(resendPayload.html, /PHP 800\.00/);
+  assert.match(resendPayload.html, /product-image/);
+  global.fetch = originalFetch;
   console.log('production email background tests passed');
 }
 
