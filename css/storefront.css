@@ -1,4 +1,4 @@
-:root {
+﻿:root {
     --store-ink: #111416;
     --store-ink-raised: #1b1e20;
     --store-gold: #d7aa45;
@@ -1096,3 +1096,8 @@ body.light-mode #customerPage.storefront .storefront-bottom-nav:not([hidden]) {
 #customerPage.storefront .product-info .product-available-sizes { display: block; font-size: var(--fs-sm); color: #d2d2d2; }
 body.light-mode #customerPage.storefront .product-info .product-available-sizes { color: #444; }
 #customerPage .cart-count-badge { font-size: var(--fs-xs) !important; }
+
+/* Let the page scroll over the catalog instead of trapping scroll in the grid. */
+#customerPage.storefront[style*="display: block"] #productsList { overflow: visible !important; overscroll-behavior: auto; }
+#customerPage.storefront .product-image-gallery, #customerPage.storefront .modal-product-gallery { touch-action: pan-x pan-y; }
+#productModal .modal-content { overflow: hidden; }
