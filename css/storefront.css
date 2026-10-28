@@ -14,7 +14,7 @@
     overflow: visible;
     background: var(--store-ink);
     color: var(--store-text);
-    font-family: "Aptos", "Segoe UI", sans-serif;
+    font-family: var(--font-ui);
 }
 
 #customerPage.storefront::before {
@@ -82,7 +82,7 @@
     overflow: hidden;
     max-width: 150px;
     color: #f0ece3 !important;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     font-weight: 600;
     text-overflow: ellipsis;
 }
@@ -108,7 +108,7 @@
     color: #eeeae2;
     cursor: pointer;
     font: inherit;
-    font-size: 13px;
+    font-size: var(--fs-sm);
 }
 
 #customerPage.storefront .storefront-desktop-nav button:hover,
@@ -148,13 +148,13 @@
     border-radius: 6px;
     background: #1b1e20;
     color: #f2efe8;
-    font-size: 12px;
+    font-size: var(--fs-xs);
 }
 
 #customerPage.storefront .customer-quick-action {
     position: relative;
     padding-inline: 8px;
-    font-size: 17px;
+    font-size: var(--fs-lg);
 }
 
 #customerPage.storefront .customer-quick-action .notification-badge {
@@ -178,7 +178,7 @@
     border-color: rgba(215, 170, 69, .4) !important;
     background: #1b1e20 !important;
     color: #f2efe8 !important;
-    font-size: 12px;
+    font-size: var(--fs-xs);
 }
 
 #customerPage.storefront .nav-menu-items {
@@ -255,7 +255,7 @@
     display: block;
     margin-bottom: 8px;
     color: var(--store-gold);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: 800;
     letter-spacing: 1.7px;
 }
@@ -263,15 +263,15 @@
 #customerPage.storefront #storefrontHeroTitle {
     margin: 0;
     color: #efbd65;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: clamp(27px, 3.4vw, 43px);
+    font-family: var(--font-display);
+    font-size: var(--fs-2xl);
     line-height: 1.08;
 }
 
 #customerPage.storefront .storefront-hero-copy p {
     margin: 7px 0 0;
     color: #e0ddd7;
-    font-size: clamp(14px, 1.6vw, 18px);
+    font-size: var(--fs-lg);
 }
 
 #customerPage.storefront .storefront-hero-rule {
@@ -306,8 +306,8 @@
 #customerPage.storefront .products-section h2 {
     margin: 0;
     color: var(--store-text);
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: clamp(26px, 2.8vw, 35px);
+    font-family: var(--font-display);
+    font-size: var(--fs-2xl);
     line-height: 1.15;
 }
 
@@ -345,7 +345,7 @@
     border-radius: inherit;
     background: transparent;
     color: var(--store-text);
-    font-size: 14px;
+    font-size: var(--fs-sm);
 }
 
 #customerPage.storefront .search-bar input::placeholder {
@@ -381,7 +381,7 @@
     color: #f3f0e9;
     cursor: pointer;
     font: inherit;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     white-space: nowrap;
 }
 
@@ -395,7 +395,7 @@
 #customerPage.storefront .catalog-count {
     margin: 0 0 10px;
     color: #c1beb6;
-    font-size: 12px;
+    font-size: var(--fs-xs);
 }
 
 #customerPage.storefront .products-grid {
@@ -466,8 +466,8 @@
     min-height: 2.5em;
     margin: 0 0 5px;
     color: #f3f0e9;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 15px;
+    font-family: var(--font-display);
+    font-size: var(--fs-base);
     line-height: 1.25;
     overflow-wrap: anywhere;
 }
@@ -475,7 +475,7 @@
 #customerPage.storefront .product-info p {
     margin: 0 0 5px;
     color: #c1beb6;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     line-height: 1.35;
     overflow-wrap: anywhere;
 }
@@ -487,14 +487,14 @@
 #customerPage.storefront .product-price {
     margin: 2px 0 1px;
     color: #edbd61;
-    font-size: 17px;
+    font-size: var(--fs-lg);
     font-weight: 800;
 }
 
 #customerPage.storefront .product-stock {
     margin: 0 0 10px;
     color: #72c28b;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     font-weight: 700;
 }
 
@@ -511,7 +511,7 @@
     border-radius: 5px;
     background: linear-gradient(135deg, #d9aa42, #b98425);
     color: #171717;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     font-weight: 800;
 }
 
@@ -527,7 +527,7 @@
 #customerPage.storefront .catalog-empty-state h3 {
     margin: 0 0 6px;
     color: #f3f0e9;
-    font-family: Georgia, "Times New Roman", serif;
+    font-family: var(--font-display);
 }
 
 #customerPage.storefront .catalog-empty-state p {
@@ -548,7 +548,7 @@
     padding: 12px 0;
     border-top: 1px solid #34393b;
     color: #d4d0c8;
-    font-size: 13px;
+    font-size: var(--fs-sm);
 }
 
 #customerPage.storefront .customer-service-footer .btn {
@@ -583,15 +583,15 @@
 
 #customerPage.storefront .footer-shop-name {
     color: var(--store-gold);
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 21px;
+    font-family: var(--font-display);
+    font-size: var(--fs-xl);
     font-weight: 800;
 }
 
 #customerPage.storefront .website-footer-location,
 #customerPage.storefront .footer-shop-contact {
     color: #d4d0c8;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     overflow-wrap: anywhere;
 }
 
@@ -659,12 +659,12 @@
     color: #e4e0d8;
     cursor: pointer;
     font: inherit;
-    font-size: 10px;
+    font-size: var(--fs-xs);
 }
 
 #customerPage.storefront .storefront-bottom-nav button span {
     color: #e7b950;
-    font-size: 19px;
+    font-size: var(--fs-lg);
     line-height: 1;
 }
 
@@ -888,15 +888,15 @@ body.light-mode #customerPage.storefront .shop-site-footer {
 
     #customerPage.storefront #storefrontHeroTitle {
         max-width: 270px;
-        font-size: clamp(25px, 7vw, 31px);
+        font-size: var(--fs-2xl);
     }
 
     #customerPage.storefront .storefront-eyebrow {
-        font-size: 8px;
+        font-size: var(--fs-xs);
     }
 
     #customerPage.storefront .storefront-hero-copy p {
-        font-size: 13px;
+        font-size: var(--fs-sm);
     }
 
     #customerPage.storefront #storefrontHeroImage:not([hidden]) {
@@ -914,7 +914,7 @@ body.light-mode #customerPage.storefront .shop-site-footer {
     }
 
     #customerPage.storefront .products-section h2 {
-        font-size: 26px;
+        font-size: var(--fs-xl);
     }
 
     #customerPage.storefront .catalog-filters {
@@ -925,7 +925,7 @@ body.light-mode #customerPage.storefront .shop-site-footer {
     #customerPage.storefront .catalog-filter {
         min-height: 42px;
         padding-inline: 14px;
-        font-size: 11px;
+        font-size: var(--fs-xs);
     }
 
     #customerPage.storefront .products-grid {
@@ -946,25 +946,25 @@ body.light-mode #customerPage.storefront .shop-site-footer {
     }
 
     #customerPage.storefront .product-info h3 {
-        font-size: 13px;
+        font-size: var(--fs-sm);
     }
 
     #customerPage.storefront .product-info p {
-        font-size: 10px;
+        font-size: var(--fs-xs);
     }
 
     #customerPage.storefront .product-price {
-        font-size: 15px;
+        font-size: var(--fs-base);
     }
 
     #customerPage.storefront .product-stock {
-        font-size: 10px;
+        font-size: var(--fs-xs);
     }
 
     #customerPage.storefront .product-info .btn-small {
         min-height: 44px;
         padding: 7px 4px;
-        font-size: 10px;
+        font-size: var(--fs-xs);
     }
 
     #customerPage.storefront .customer-service-footer {
@@ -1034,7 +1034,7 @@ body.light-mode #customerPage.storefront .storefront-bottom-nav:not([hidden]) {
     display: none !important;
 }
 
-#customerPage.storefront:not(.is-shop-view) {
+#customerPage.storefront:not(.is-shop-view)[style*="display: block"] {
     display: block !important;
     height: auto !important;
     min-height: 100vh;
@@ -1088,3 +1088,11 @@ body.light-mode #customerPage.storefront .storefront-bottom-nav:not([hidden]) {
         padding: 20px 12px calc(88px + env(safe-area-inset-bottom));
     }
 }
+#customerPage.storefront .navbar { padding-inline: max(clamp(16px, 3.5vw, 48px), calc((100% - 1480px) / 2 + 48px)); }
+#customerPage.storefront .product-available-sizes, #customerPage.storefront .product-stock { font-size: var(--fs-sm); }
+#customerPage.storefront .product-price { font-size: var(--fs-base); }
+#customerPage.storefront .storefront-hero p, body.light-mode #customerPage.storefront .storefront-hero p { color: #f3f0e9; }
+
+#customerPage.storefront .product-info .product-available-sizes { display: block; font-size: var(--fs-sm); color: #d2d2d2; }
+body.light-mode #customerPage.storefront .product-info .product-available-sizes { color: #444; }
+#customerPage .cart-count-badge { font-size: var(--fs-xs) !important; }

@@ -2,8 +2,11 @@ const fs = require('fs/promises');
 const path = require('path');
 const { connectLambda, getStore } = require('@netlify/blobs');
 const { authenticateEvent } = require('./lib/auth');
+const { migrateProductImages, toProductListItem } = require('./lib/product-images');
 
 const productKey = 'catalog';
+const migrationKey = 'catalog-image-migration-v1';
+const allowedSizes = new Set(['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL']);
 
 function getProductsStore() {
     return getStore('kingpin-products');
@@ -30,6 +33,50 @@ async function loadInitialProducts() {
     }
 }
 
+function normalizedSizes(value) {
+    const sizes = Array.isArray(value) ? value : String(value || '').split(',');
+    return [...new Set(sizes.map(size => {
+        const normalized = String(size || '').trim().toUpperCase();
+        return normalized === 'XXL' ? '2XL' : normalized === 'XXXL' ? '3XL' : normalized;
+    }).filter(Boolean))];
+}
+
+function validateChangedProductSizes(products, existingProducts) {
+    const existingById = new Map((existingProducts || []).map(product => [String(product.id), product]));
+    for (const product of products) {
+        if (!product || typeof product !== 'object' || Array.isArray(product)) {
+            return 'Product data must contain valid product objects.';
+        }
+
+        const previous = existingById.get(String(product.id));
+        const changed = !previous || JSON.stringify(previous) !== JSON.stringify(product);
+        if (!changed) continue;
+
+        const sizes = normalizedSizes(product.availableSizes);
+        if (!sizes.length) return `Select at least one size for ${String(product.name || 'each product').slice(0, 120)}.`;
+        const unsupported = sizes.filter(size => !allowedSizes.has(size));
+        if (unsupported.length) return `Unsupported sizes for ${String(product.name || 'product').slice(0, 120)}: ${unsupported.join(', ')}.`;
+        product.availableSizes = sizes;
+    }
+    return '';
+}
+
+async function loadAndMigrateCatalog(store) {
+    let products = await store.get(productKey, { type: 'json' });
+    if (!Array.isArray(products)) {
+        products = await loadInitialProducts();
+        await store.setJSON(productKey, products);
+    }
+
+    const migrationComplete = await store.get(migrationKey, { type: 'text' });
+    if (migrationComplete !== 'complete') {
+        products = await migrateProductImages(products);
+        await store.setJSON(productKey, products);
+        await store.set(migrationKey, 'complete');
+    }
+    return products;
+}
+
 exports.handler = async function handler(event) {
     connectLambda(event);
 
@@ -39,13 +86,18 @@ exports.handler = async function handler(event) {
 
     try {
         if (event.httpMethod === 'GET') {
-            const store = getProductsStore();
-            let products = await store.get(productKey, { type: 'json' });
-            if (!Array.isArray(products)) {
-                products = await loadInitialProducts();
-                await store.setJSON(productKey, products);
+            const fullCatalogRequested = event.queryStringParameters?.view === 'admin';
+            if (fullCatalogRequested) {
+                const authentication = authenticateEvent(event);
+                if (!authentication.ok) return jsonResponse(authentication.statusCode, { error: authentication.error });
+                if (authentication.claims.role !== 'admin') return jsonResponse(403, { error: 'Admin access required.' });
             }
-            return jsonResponse(200, { products });
+
+            const store = getProductsStore();
+            const products = await loadAndMigrateCatalog(store);
+            return jsonResponse(200, {
+                products: fullCatalogRequested ? products : products.map(toProductListItem)
+            });
         }
 
         if (event.httpMethod !== 'POST') {
@@ -56,7 +108,12 @@ exports.handler = async function handler(event) {
         if (!authentication.ok) return jsonResponse(authentication.statusCode, { error: authentication.error });
         if (authentication.claims.role !== 'admin') return jsonResponse(403, { error: 'Admin access required.' });
 
-        const payload = JSON.parse(event.body || '{}');
+        let payload;
+        try {
+            payload = JSON.parse(event.body || '{}');
+        } catch (error) {
+            return jsonResponse(400, { error: 'Product data must be valid JSON.' });
+        }
         if (!Array.isArray(payload.products)) {
             return jsonResponse(400, { error: 'Products must be an array' });
         }
@@ -66,7 +123,11 @@ exports.handler = async function handler(event) {
         }
 
         const store = getProductsStore();
-        await store.setJSON(productKey, payload.products);
+    const existingProducts = await loadAndMigrateCatalog(store);
+    const preparedProducts = await migrateProductImages(payload.products);
+    const sizeError = validateChangedProductSizes(preparedProducts, existingProducts);
+    if (sizeError) return jsonResponse(400, { error: sizeError });
+    await store.setJSON(productKey, preparedProducts);
         return jsonResponse(200, { ok: true });
     } catch (error) {
         console.error('Netlify products function error:', error);

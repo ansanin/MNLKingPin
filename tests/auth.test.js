@@ -1,4 +1,4 @@
-const assert = require('assert');
+﻿const assert = require('assert');
 const {
   accountKey,
   authenticateEvent,
@@ -16,7 +16,8 @@ const blobModule = {
     const values = blobStores.get(name);
     return {
       async get(key) { return values.has(key) ? values.get(key) : null; },
-      async set(key, value) { values.set(key, value); },
+      async set(key, value, options = {}) { values.set(key, value); if (options.metadata) values.set(`${key}:metadata`, options.metadata); },
+      async getMetadata(key) { return values.has(key) ? { metadata: values.get(`${key}:metadata`) || {} } : null; },
       async setJSON(key, value) { values.set(key, value); },
       async list({ prefix = '' } = {}) {
         return {
@@ -41,6 +42,9 @@ require.cache[nodemailerModulePath] = {
   }
 };
 const { handler: productsHandler } = require('../netlify/functions/products.js');
+const { handler: heroHandler } = require('../netlify/functions/shop-hero.js');
+const { handler: orderStatusHandler } = require('../netlify/functions/order-status.js');
+const { handler: ordersHandler } = require('../netlify/functions/orders.js');
 const { handler: qrHandler } = require('../netlify/functions/gcash-qr.js');
 const { handler: footerHandler } = require('../netlify/functions/shop-footer.js');
 const { handler: cartHandler } = require('../netlify/functions/cart.js');
@@ -102,6 +106,10 @@ async function run() {
     headers: { authorization: ['Bearer', token].join(' ') }
   });
   assert.strictEqual((await productsHandler(postEvent('', { products: [] }))).statusCode, 401);
+  assert.strictEqual((await productsHandler(postEvent(customerToken, { products: [] }))).statusCode, 403);
+  assert.strictEqual((await heroHandler(postEvent(customerToken, {}))).statusCode, 403);
+  assert.strictEqual((await orderStatusHandler(postEvent(customerToken, {}))).statusCode, 403);
+  assert.strictEqual((await ordersHandler(postEvent(customerToken, { action: 'admin-update', orderId: '1', status: 'completed' }))).statusCode, 403);
   assert.strictEqual((await qrHandler(postEvent(customerToken, { gcashQRCode: 'data:image/png;base64,AA==' }))).statusCode, 403);
   assert.strictEqual((await footerHandler(postEvent(customerToken, {}))).statusCode, 403);
   assert.strictEqual((await shopBrandingHandler(postEvent(customerToken, {

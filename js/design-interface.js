@@ -151,7 +151,7 @@ function addTopsToCart() {
     
     // Validation
     if (!color || !fabric) {
-        alert('Please fill in all required fields (Color and Fabric)');
+        showStatusUpdateToast('Please fill in all required fields (Color and Fabric)');
         return;
     }
     
@@ -196,7 +196,7 @@ function addBottomsToCart() {
     
     // Validation
     if (!color || !fabric) {
-        alert('Please fill in all required fields (Color and Fabric)');
+        showStatusUpdateToast('Please fill in all required fields (Color and Fabric)');
         return;
     }
     
@@ -278,11 +278,11 @@ function setupFileUploadPreview() {
         const addedFiles = Array.from(files || []);
         if (!addedFiles.length) return;
         if (addedFiles.some(file => !file.type.startsWith('image/') && file.type !== 'application/pdf')) {
-            alert('Only image files and PDFs are supported.');
+            showStatusUpdateToast('Only image files and PDFs are supported.');
             return;
         }
         if (addedFiles.some(file => file.size > 10 * 1024 * 1024)) {
-            alert('Each file must be 10MB or smaller.');
+            showStatusUpdateToast('Each file must be 10MB or smaller.');
             return;
         }
 
@@ -369,7 +369,7 @@ async function addUploadedDesignToCart() {
     const itemDescription = document.getElementById('uploadItemDescription').value;
     
     if (!files.length || !clothingType || !itemDescription) {
-        alert('Please upload at least one file, select item type, and provide a description');
+        showStatusUpdateToast('Please upload at least one file, select item type, and provide a description');
         return;
     }
 
@@ -425,7 +425,7 @@ async function addUploadedDesignToCart() {
         updateCartDisplay();
     } catch (error) {
         console.error('Unable to add uploaded design to cart:', error);
-        alert(error.message || 'Unable to add the uploaded design to cart.');
+        showStatusUpdateToast(error.message || 'Unable to add the uploaded design to cart.');
     }
 }
 

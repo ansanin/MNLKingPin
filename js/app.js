@@ -56,23 +56,34 @@ function setCustomerActiveView(activeSectionId) {
         footer.hidden = !isShop;
     });
     if (typeof updateStorefrontNavigation === 'function') updateStorefrontNavigation();
+    window.scrollTo({ top: 0, behavior: 'instant' });
     return true;
 }
 
+function safeStorageSet(storage, key, value) {
+    try {
+        storage.setItem(key, value);
+        return true;
+    } catch (error) {
+        console.warn(`Unable to save ${key}; browser storage may be full or disabled.`, error);
+        return false;
+    }
+}
+
 function saveNavigationState(role, view) {
-    localStorage.setItem('kingpinNavigationState', JSON.stringify({ role, view }));
+    safeStorageSet(sessionStorage, 'kingpinNavigationState', JSON.stringify({ role, view }));
 }
 
 function loadNavigationState() {
     try {
-        return JSON.parse(localStorage.getItem('kingpinNavigationState') || 'null');
+        return JSON.parse(sessionStorage.getItem('kingpinNavigationState') || 'null');
     } catch (error) {
         return null;
     }
 }
 
 function clearNavigationState() {
-    localStorage.removeItem('kingpinNavigationState');
+    sessionStorage.removeItem('kingpinNavigationState');
 }
 
 function isAdminPortalPage() {
@@ -125,7 +136,7 @@ function applyTheme(theme) {
 
 function toggleTheme() {
     const nextTheme = document.body.classList.contains('light-mode') ? 'dark' : 'light';
-    localStorage.setItem('kingpinTheme', nextTheme);
+    safeStorageSet(localStorage, 'kingpinTheme', nextTheme);
     applyTheme(nextTheme);
 }
 
@@ -214,7 +225,7 @@ function addNotification(type, message, orderId = null) {
         timestamp: new Date().toLocaleString()
     };
     appData.notifications.push(notification);
-    console.log('Added notification:', notification);
+
     updateNotificationBadges();
 }
 
@@ -233,7 +244,7 @@ function showStatusUpdateToast(message) {
         position: fixed;
         bottom: 20px;
         right: 20px;
-        background-color: #4caf50;
+        background-color: #174c2c;
         color: white;
         padding: 16px 24px;
         border-radius: 5px;
@@ -243,7 +254,7 @@ function showStatusUpdateToast(message) {
         animation: slideInToast 0.3s ease-out;
         max-width: 300px;
     `;
-    toast.textContent = '✓ ' + message;
+    toast.textContent = message;
     
     document.body.appendChild(toast);
     
@@ -303,94 +314,13 @@ function updateNotificationBadges() {
     }
 }
 
-// ===== LOCAL STORAGE MANAGEMENT =====
-function compactOrderForStorage(order) {
-    if (!order || typeof order !== 'object') return order;
-
-    const compact = { ...order };
-
-    if (compact.items && Array.isArray(compact.items)) {
-        compact.items = compact.items.map(item => {
-            const nextItem = { ...item };
-
-            if (nextItem.image && typeof nextItem.image === 'string' && nextItem.image.startsWith('data:')) {
-                delete nextItem.image;
-            }
-
-            if (nextItem.productImage && typeof nextItem.productImage === 'string' && nextItem.productImage.startsWith('data:')) {
-                delete nextItem.productImage;
-            }
-
-            return nextItem;
-        });
-    }
-
-    if (typeof compact.gcashQRCode === 'string' && compact.gcashQRCode.startsWith('data:')) delete compact.gcashQRCode;
-    if (typeof compact.gcashPaymentProof === 'string' && compact.gcashPaymentProof.startsWith('data:')) delete compact.gcashPaymentProof;
-
-    return compact;
-}
-
-// Save orders to localStorage
+// Order records stay on the authenticated orders endpoint, not browser storage.
 function saveOrders() {
-    const trimmedOrders = (appData.orders || []).slice(-200).map(compactOrderForStorage);
-
-    try {
-        localStorage.setItem('kingpinOrders', JSON.stringify(trimmedOrders));
-        return;
-    } catch (error) {
-        console.warn('Quota exceeded while saving orders. Trimming older orders...', error);
-    }
-
-    const reducedOrders = trimmedOrders.slice(-60).map(compactOrderForStorage);
-
-    try {
-        localStorage.setItem('kingpinOrders', JSON.stringify(reducedOrders));
-        return;
-    } catch (secondError) {
-        console.warn('Storage still full. Saving only essential order details...', secondError);
-    }
-
-    const minimalOrders = reducedOrders.map(order => ({
-        id: order.id,
-        customerName: order.customerName,
-        customerEmail: order.customerEmail,
-        totalAmount: order.totalAmount,
-        status: order.status,
-        date: order.date,
-        paymentMethod: order.paymentMethod,
-        paymentStatus: order.paymentStatus,
-        gcashPaymentProofUrl: order.gcashPaymentProofUrl,
-        gcashQRCodeUrl: order.gcashQRCodeUrl,
-        gcashDownpaymentAmount: order.gcashDownpaymentAmount,
-        items: (order.items || []).map(item => ({
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price,
-            customization: {
-                size: item.customization?.size || '',
-                bottomSize: item.customization?.bottomSize || '',
-                color: item.customization?.color || '',
-                name: item.customization?.name || '',
-                number: item.customization?.number || ''
-            }
-        }))
-    })).slice(-30);
-
-    try {
-        localStorage.setItem('kingpinOrders', JSON.stringify(minimalOrders));
-    } catch (finalError) {
-        console.warn('Unable to save orders locally because browser storage is full.', finalError);
-        return false;
-    }
+    return true;
 }
 
-// Load orders from localStorage
 function loadOrders() {
-    const stored = localStorage.getItem('kingpinOrders');
-    if (stored) {
-        appData.orders = JSON.parse(stored);
-    }
+    appData.orders = [];
 }
 
 function getAuthenticatedHeaders(extraHeaders = {}) {
@@ -536,12 +466,12 @@ async function saveCustomerDesignDecision(orderId, decision, remarks = '') {
 
 // Save notifications to localStorage
 function saveNotifications() {
-    localStorage.setItem('kingpinNotification', JSON.stringify(appData.notifications));
+    safeStorageSet(sessionStorage, 'kingpinNotification', JSON.stringify(appData.notifications));
 }
 
 // Load notifications from localStorage
 function loadNotifications() {
-    const stored = localStorage.getItem('kingpinNotification');
+    const stored = sessionStorage.getItem('kingpinNotification');
     if (stored) {
         try {
             appData.notifications = JSON.parse(stored);
@@ -551,17 +481,17 @@ function loadNotifications() {
                     .replace(/\s+-\s+(GCash downpayment received|Cash on Delivery)\.?$/i, '')
             }));
             saveNotifications();
-            console.log('Loaded notifications:', appData.notifications);
+
             // Update badges after a small delay to ensure DOM is ready
             setTimeout(() => {
                 updateNotificationBadges();
-                console.log('Updated notification badges');
+
             }, 100);
         } catch (e) {
             console.error('Error loading notifications:', e);
         }
     } else {
-        console.log('No notifications found in localStorage');
+
     }
 }
 
@@ -586,7 +516,7 @@ function cacheUserCartLocally(cart) {
     const key = getUserCartStorageKey();
     if (!key) return;
     try {
-        localStorage.setItem(key, JSON.stringify(cart));
+        safeStorageSet(localStorage, key, JSON.stringify(cart));
     } catch (error) {
         console.warn('Unable to cache the cart on this device; it will still sync online.', error);
     }
@@ -620,7 +550,7 @@ async function requestSharedCart(method, cart) {
 }
 
 function saveUserCart() {
-    if (appData.currentRole !== 'customer' || !appData.currentUser) return Promise.resolve(false);
+    if (appData.currentRole !== 'customer' || !appData.currentUser) { safeStorageSet(localStorage, 'kingpinGuestCart', JSON.stringify(appData.cart)); return Promise.resolve(true); }
     const cartSnapshot = JSON.parse(JSON.stringify(appData.cart));
     cacheUserCartLocally(cartSnapshot);
 
@@ -641,7 +571,7 @@ function saveUserCart() {
 
 async function loadUserCart() {
     if (appData.currentRole !== 'customer' || !appData.currentUser) {
-        appData.cart = [];
+        try { appData.cart = JSON.parse(localStorage.getItem('kingpinGuestCart') || '[]'); if (!Array.isArray(appData.cart)) appData.cart = []; } catch { appData.cart = []; }
         return;
     }
 
@@ -837,20 +767,24 @@ function initializeData() {
 }
 
 // Load products from localStorage
-function fetchSharedProducts() {
+function fetchSharedProducts({ full = appData.currentRole === 'admin' } = {}) {
     if (sharedProductsRequest) return sharedProductsRequest;
 
     const isLocalServer = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    const query = full ? '?view=admin' : '';
     const endpoints = isLocalServer
-        ? ['api/products.php', 'api/products']
-        : ['api/products', '/.netlify/functions/products', 'api/products.php'];
+        ? [`api/products.php${query}`, `api/products${query}`]
+        : [`api/products${query}`, `/.netlify/functions/products${query}`];
 
     const request = (async () => {
         let lastError = new Error('Product API is not available on this host');
 
         for (const endpoint of endpoints) {
             try {
-                const response = await fetch(endpoint, { cache: 'no-store' });
+                const response = await fetch(endpoint, {
+                    cache: 'no-store',
+                    headers: full ? getAuthenticatedHeaders() : {}
+                });
                 const contentType = response.headers.get('content-type') || '';
                 if (!response.ok || !contentType.includes('application/json')) {
                     lastError = new Error(`Product API returned ${response.status}`);
@@ -865,12 +799,7 @@ function fetchSharedProducts() {
             }
         }
 
-        const staticResponse = await fetch('uploads/products.json', { cache: 'no-store' });
-        if (!staticResponse.ok) throw lastError;
-
-        const data = await staticResponse.json();
-        if (!Array.isArray(data.products)) throw lastError;
-        return data.products;
+        throw lastError;
     })();
 
     const sharedRequest = request.finally(() => {
@@ -880,6 +809,17 @@ function fetchSharedProducts() {
     });
     sharedProductsRequest = sharedRequest;
     return sharedRequest;
+}
+
+async function fetchProductDetails(productId) {
+    const isLocalServer = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    const endpoint = isLocalServer
+        ? `api/product-detail.php?id=${encodeURIComponent(productId)}`
+        : `/.netlify/functions/product-detail?id=${encodeURIComponent(productId)}`;
+    const response = await fetch(endpoint, { cache: 'no-store' });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.product) throw new Error(result.error || 'Unable to load product details.');
+    return result.product;
 }
 
 function getCachedProducts() {
@@ -895,21 +835,19 @@ function getCachedProducts() {
 }
 
 function cacheProductsLocally(products) {
-    const omitEmbeddedImage = image => typeof image === 'string' && image.startsWith('data:image/')
-        ? ''
-        : image;
-    const cachedProducts = products.map(product => ({
-        ...product,
-        image: omitEmbeddedImage(product.image),
-        images: Array.isArray(product.images)
-            ? product.images.map(omitEmbeddedImage).filter(Boolean)
-            : product.images,
-        sizeChartImage: omitEmbeddedImage(product.sizeChartImage)
+    const cachedProducts = (products || []).map(product => ({
+        id: product.id,
+        name: product.name,
+        type: product.type,
+        price: product.price,
+        stock: product.stock,
+        availableSizes: Array.isArray(product.availableSizes) ? product.availableSizes : [],
+        thumbnailUrl: product.thumbnailUrl || product.image || product.images?.[0] || ''
     }));
     const serializedProducts = JSON.stringify(cachedProducts);
 
     try {
-        localStorage.setItem('kingpinProducts', serializedProducts);
+        safeStorageSet(localStorage, 'kingpinProducts', serializedProducts);
         return true;
     } catch (error) {
         console.warn('Unable to cache products locally; retrying after removing the previous product cache.', error);
@@ -917,7 +855,7 @@ function cacheProductsLocally(products) {
 
     try {
         localStorage.removeItem('kingpinProducts');
-        localStorage.setItem('kingpinProducts', serializedProducts);
+        safeStorageSet(localStorage, 'kingpinProducts', serializedProducts);
         return true;
     } catch (error) {
         console.warn('Unable to cache products locally. The shared catalog remains available online.', error);
@@ -956,8 +894,8 @@ function loadProductsFromStorage() {
 // Keep a local copy only as an optional offline fallback.
 function saveShopLogo() {
     try {
-        localStorage.setItem('kingpinShopLogo', appData.shopLogo || '');
-        localStorage.setItem('kingpinShopName', appData.shopName);
+        safeStorageSet(localStorage, 'kingpinShopLogo', appData.shopLogo || '');
+        safeStorageSet(localStorage, 'kingpinShopName', appData.shopName);
     } catch (error) {
         console.warn('Unable to cache shop branding locally; shared branding remains available online.', error);
     }
@@ -1091,7 +1029,7 @@ async function loadShopFooterSettings() {
                 facebookUrl: normalizeFooterUrl(result.footerSettings.facebookUrl),
                 instagramUrl: normalizeFooterUrl(result.footerSettings.instagramUrl)
             };
-            localStorage.setItem('kingpinShopFooter', JSON.stringify(appData.footerSettings));
+            safeStorageSet(localStorage, 'kingpinShopFooter', JSON.stringify(appData.footerSettings));
             updateShopFooter();
             if (document.getElementById('settingsTab')?.style.display === 'block') {
                 populateShopFooterSettings();
@@ -1126,7 +1064,7 @@ async function saveShopFooterSettings(event) {
         facebookUrl,
         instagramUrl
     };
-    localStorage.setItem('kingpinShopFooter', JSON.stringify(appData.footerSettings));
+    safeStorageSet(localStorage, 'kingpinShopFooter', JSON.stringify(appData.footerSettings));
     updateShopFooter();
 
     let sharedSaveSucceeded = false;
@@ -1252,20 +1190,12 @@ function updateShopLogoDisplay() {
 
 // Save customers to localStorage
 function saveCustomers() {
-    localStorage.setItem('kingpinCustomers', JSON.stringify(appData.customers));
+    return true;
 }
 
 // Load customers from localStorage
 function loadCustomers() {
-    const stored = localStorage.getItem('kingpinCustomers');
-    if (stored) {
-        try {
-            appData.customers = JSON.parse(stored);
-        } catch (e) {
-            console.error('Error loading customers:', e);
-            appData.customers = [];
-        }
-    }
+    appData.customers = [];
 }
 
 // Show Customer Auth Section
@@ -1326,7 +1256,60 @@ function ensureSignupVerificationField(show) {
     return codeInput;
 }
 
+function requireCustomerLogin(destination) {
+    if (appData.currentRole === 'customer' && appData.currentUser) return false;
+
+    if (destination === 'checkout' && appData.cart.length) {
+        safeStorageSet(sessionStorage, 'kingpinGuestCheckoutCart', JSON.stringify(appData.cart));
+    }
+    safeStorageSet(sessionStorage, 'kingpinPendingCustomerDestination', destination);
+    document.getElementById('customerPage').style.display = 'none';
+    document.getElementById('adminPage').style.display = 'none';
+    document.getElementById('accessDeniedPage')?.style.setProperty('display', 'none');
+    document.getElementById('loginPage').style.display = 'block';
+    showCustomerAuth();
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    return true;
+}
+
+function mergeGuestCart(guestCart) {
+    if (!Array.isArray(guestCart) || !guestCart.length) return;
+    const merged = Array.isArray(appData.cart) ? appData.cart : [];
+
+    guestCart.forEach(guestItem => {
+        const customization = guestItem.customization || {};
+        const existing = merged.find(item =>
+            String(item.id) === String(guestItem.id)
+            && item.customization?.size === customization.size
+            && item.customization?.color === customization.color
+            && item.customization?.name === customization.name
+            && item.customization?.number === customization.number
+        );
+        if (existing) {
+            const requested = (Number(existing.quantity) || 0) + (Number(guestItem.quantity) || 1);
+            const stock = Number(existing.stock);
+            existing.quantity = Number.isFinite(stock) && stock > 0 ? Math.min(requested, stock) : requested;
+        } else {
+            merged.push({ ...guestItem, customization: { ...customization } });
+        }
+    });
+    appData.cart = merged;
+}
+
+async function resumeCustomerDestination(destination) {
+    if (!destination || appData.currentRole !== 'customer') return;
+    if (destination === 'orders') return viewOrders();
+    if (destination === 'support') return viewCustomerService();
+    if (destination === 'notifications') return viewCustomerNotifications();
+    if (destination === 'checkout') {
+        setCustomerActiveView('cartSection');
+        return checkout();
+    }
+    if (destination === 'shop') return goBackToShop();
+}
+
 async function establishAuthenticatedSession(result) {
+    const pendingDestination = sessionStorage.getItem('kingpinPendingCustomerDestination') || '';
     appData.authToken = result.token;
     appData.currentRole = result.role;
     appData.currentUser = result.user.email || result.user.username;
@@ -1337,11 +1320,26 @@ async function establishAuthenticatedSession(result) {
         customerAccounts[normalizeCustomerEmail(appData.currentUser)] = appData.currentUserProfile;
         saveCustomerAccounts(customerAccounts);
         await loadUserCart();
+        {
+            try {
+                const guestCart = JSON.parse(localStorage.getItem('kingpinGuestCart') || sessionStorage.getItem('kingpinGuestCheckoutCart') || '[]');
+                mergeGuestCart(guestCart);
+                await saveUserCart();
+            } catch (error) {
+                console.warn('Unable to merge the guest cart after sign-in.', error);
+            }
+            sessionStorage.removeItem('kingpinGuestCheckoutCart');
+            localStorage.removeItem('kingpinGuestCart');
+        }
     }
     saveCurrentSession();
     hideCustomerAuth();
     if (appData.currentRole === 'admin') showAdminDashboard();
-    else showCustomerDashboard();
+    else {
+        showCustomerDashboard();
+        sessionStorage.removeItem('kingpinPendingCustomerDestination');
+        await resumeCustomerDestination(pendingDestination);
+    }
 }
 
 function normalizeCustomerEmail(value) {
@@ -1350,77 +1348,14 @@ function normalizeCustomerEmail(value) {
 
 // Customer accounts storage
 function loadCustomerAccounts() {
-    const mergedAccounts = {};
-
-    const readStorage = (key) => {
-        const stored = localStorage.getItem(key);
-        if (!stored) return null;
-        try {
-            return JSON.parse(stored);
-        } catch (error) {
-            console.error(`Error loading customer accounts from ${key}:`, error);
-            return null;
-        }
-    };
-
-    const addFromObject = (source) => {
-        if (!source || typeof source !== 'object') return;
-
-        Object.entries(source).forEach(([key, value]) => {
-            if (!value || typeof value !== 'object') return;
-            const email = normalizeCustomerEmail(value.email || key);
-            if (!email) return;
-            mergedAccounts[email] = {
-                ...value,
-                email,
-                password: value.password || value.accountPassword || ''
-            };
-        });
-    };
-
-    const addFromArray = (source) => {
-        if (!Array.isArray(source)) return;
-
-        source.forEach(account => {
-            if (!account || typeof account !== 'object') return;
-            const email = normalizeCustomerEmail(account.email || account.username || '');
-            if (!email) return;
-            mergedAccounts[email] = {
-                ...account,
-                email,
-                password: account.password || account.accountPassword || ''
-            };
-        });
-    };
-
-    addFromObject(readStorage('kingpinCustomerAccounts'));
-    addFromObject(readStorage('kingpinCustomers'));
-    addFromArray(readStorage('kingpinCustomers'));
-    addFromArray(readStorage('customerDatabase'));
-
-    return mergedAccounts;
+    const email = normalizeCustomerEmail(appData.currentUser);
+    if (appData.currentRole !== 'customer' || !email || !appData.currentUserProfile) return {};
+    return { [email]: appData.currentUserProfile };
 }
 
 function saveCustomerAccounts(accounts) {
-    const cleaned = {};
-    Object.entries(accounts || {}).forEach(([key, value]) => {
-        const email = normalizeCustomerEmail(value?.email || key);
-        if (!email) return;
-        const safeProfile = { ...value, email };
-        delete safeProfile.password;
-        delete safeProfile.accountPassword;
-        cleaned[email] = {
-            ...safeProfile
-        };
-    });
-
-    localStorage.setItem('kingpinCustomerAccounts', JSON.stringify(cleaned));
-
-    const legacyList = Object.values(cleaned).map(account => ({
-        ...account,
-        email: normalizeCustomerEmail(account.email)
-    }));
-    localStorage.setItem('kingpinCustomers', JSON.stringify(legacyList));
+    const email = normalizeCustomerEmail(appData.currentUser);
+    if (email && accounts?.[email]) appData.currentUserProfile = accounts[email];
 }
 
 // Save current session
@@ -1431,8 +1366,8 @@ function saveCurrentSession() {
         userProfile: appData.currentUserProfile,
         savedAt: Date.now()
     };
-    localStorage.setItem('kingpinCurrentSession', JSON.stringify(session));
-    if (appData.authToken) sessionStorage.setItem('kingpinAccessToken', appData.authToken);
+    safeStorageSet(localStorage, 'kingpinCurrentSession', JSON.stringify(session));
+    if (appData.authToken) safeStorageSet(sessionStorage, 'kingpinAccessToken', appData.authToken);
 }
 
 function rememberQuickLogin() {
@@ -1483,6 +1418,11 @@ async function signupCustomer(e) {
     const phone = document.getElementById('customerSignupPhone').value.trim();
     const password = document.getElementById('customerSignupPassword').value;
     const errorMessage = document.getElementById('customerSignupErrorMessage');
+    const confirmPassword = document.getElementById('customerSignupConfirmPassword');
+    const phoneField = document.getElementById('customerSignupPhone');
+    const consent = document.getElementById('customerSignupConsent');
+    confirmPassword.setCustomValidity(confirmPassword.value === password ? '' : 'Passwords do not match.');
+    if (!phoneField.checkValidity() || !confirmPassword.checkValidity() || !consent.checked) { ( !phoneField.checkValidity() ? phoneField : !confirmPassword.checkValidity() ? confirmPassword : consent ).reportValidity(); return; }
     const codeInput = ensureSignupVerificationField(false);
     const verificationCode = codeInput?.value.trim() || '';
     
@@ -1492,7 +1432,7 @@ async function signupCustomer(e) {
             errorMessage.textContent = 'Username, name, email, and password are required.';
             errorMessage.style.display = 'block';
         }
-        alert('Please fill in all the required account details before creating an account.');
+        showStatusUpdateToast('Please fill in all the required account details before creating an account.');
         return;
     }
 
@@ -1533,6 +1473,7 @@ if (customerLoginFormElement) {
 const customerSignupFormElement = document.getElementById('customerSignupFormElement');
 if (customerSignupFormElement) {
     customerSignupFormElement.addEventListener('submit', signupCustomer);
+    ['customerSignupPassword', 'customerSignupConfirmPassword'].forEach(id => document.getElementById(id).addEventListener('input', () => document.getElementById('customerSignupConfirmPassword').setCustomValidity('')));
 }
 
 // Login customer
@@ -1682,21 +1623,33 @@ function forgotPassword() {
 
 async function logout() {
     closeCustomerNavMenu();
+    const savedTheme = localStorage.getItem('kingpinTheme') || 'dark';
 
     if (appData.currentRole === 'customer') {
         await saveUserCart();
     }
 
-    // Clear all session data before switching the UI
-    clearCurrentSession();
-    clearNavigationState();
-    localStorage.removeItem('kingpinSession');
-    localStorage.removeItem('kingpinCurrentSession');
-    localStorage.removeItem('kingpinForceLogin');
+    try {
+        localStorage.clear();
+        sessionStorage.clear();
+    } catch (error) {
+        console.warn('Unable to clear all browser storage during logout.', error);
+        ['kingpinCurrentSession', 'kingpinSession', 'kingpinOrders', 'orderHistory', 'kingpinCustomers', 'customerDatabase', 'kingpinNotification'].forEach(key => {
+            try { localStorage.removeItem(key); } catch (removeError) { /* storage may be disabled */ }
+        });
+    }
+    safeStorageSet(localStorage, 'kingpinTheme', savedTheme);
 
     appData.currentUser = null;
     appData.currentRole = null;
     appData.currentUserProfile = null;
+    appData.authToken = null;
+    appData.currentUserProfile = null;
+    appData.orders = [];
+    appData.customers = [];
+    appData.notifications = [];
+    appData.customerServiceMessages = [];
+    appData.selectedProduct = null;
     updateQuickLoginButton();
     appData.cart = [];
 
@@ -1966,7 +1919,7 @@ function setLogoPreviewDevice(device) {
 
 // Save GCash QR Code to localStorage
 function saveGCashQRCode() {
-    localStorage.setItem('kingpinGCashQR', appData.gcashQRCode);
+    safeStorageSet(localStorage, 'kingpinGCashQR', appData.gcashQRCode);
 }
 
 async function saveSharedGcashQRCode() {
@@ -2054,7 +2007,7 @@ function setupGcashPaymentPreview() {
             const validImageTypes = ['image/jpeg', 'image/jpg', 'image/jfif', 'image/png', 'image/gif', 'image/webp'];
             const validImageExtension = /\.(jpe?g|jfif|png|gif|webp)$/i.test(file.name);
             if (!validImageTypes.includes(file.type) && !validImageExtension) {
-                alert('Please upload a valid image file (JPG, JFIF, PNG, GIF, or WEBP)');
+                showStatusUpdateToast('Please upload a valid image file (JPG, JFIF, PNG, GIF, or WEBP)');
                 this.value = '';
                 previewContainer.style.display = 'none';
                 return;
@@ -2062,7 +2015,7 @@ function setupGcashPaymentPreview() {
             
             // Validate file size (max 5MB)
             if (file.size > 5 * 1024 * 1024) {
-                alert('File size must be less than 5MB');
+                showStatusUpdateToast('File size must be less than 5MB');
                 this.value = '';
                 previewContainer.style.display = 'none';
                 return;
@@ -2097,7 +2050,7 @@ async function setupCheckoutProofPreview(input) {
         preview.style.display = 'block';
     } catch (error) {
         input.value = '';
-        alert(error.message);
+        showStatusUpdateToast(error.message);
     }
 }
 
@@ -2232,7 +2185,7 @@ function showAdminTab(tabName) {
     
     // Load data when tabs are clicked
     if (tabName === 'products') {
-        console.log('Loading products tab. Current appData.products:', appData.products);
+
         loadAdminInventoryProducts();
     } else if (tabName === 'orders') {
         loadNotifications();
@@ -2475,6 +2428,7 @@ function startCustomerOrderRefresh() {
 }
 
 async function viewOrders() {
+    if (requireCustomerLogin('orders')) return;
     appData.notifications.forEach(notification => {
         if (notification.type === 'customer') {
             notification.read = true;
@@ -2494,6 +2448,7 @@ async function viewOrders() {
 }
 
 function viewPurchaseHistory() {
+    if (requireCustomerLogin('orders')) return;
     setCustomerActiveView('purchaseHistorySection');
     saveNavigationState('customer', 'viewPurchaseHistory');
     loadPurchaseHistory();
@@ -2527,6 +2482,7 @@ function updateFloatingBackButton() {
 }
 
 function viewCustomerNotifications() {
+    if (requireCustomerLogin('notifications')) return;
     setCustomerActiveView('notificationsSection');
     saveNavigationState('customer', 'viewCustomerNotifications');
     appData.notifications.forEach(notification => {
@@ -2539,6 +2495,7 @@ function viewCustomerNotifications() {
 }
 
 function viewCustomerService() {
+    if (requireCustomerLogin('support')) return;
     setCustomerActiveView('customerServiceSection');
     saveNavigationState('customer', 'viewCustomerService');
     updateFloatingBackButton();
@@ -2590,6 +2547,7 @@ async function sendCustomerServiceMessage(event) {
 }
 
 function viewCustomerSettings() {
+    if (requireCustomerLogin('account')) return;
     if (appData.currentRole !== 'customer' || !appData.currentUser) return;
 
     const accounts = loadCustomerAccounts();
@@ -2711,8 +2669,9 @@ function getIncompleteCartItems(fallbackSize = '', fallbackColor = '') {
 }
 
 function checkout() {
+    if (requireCustomerLogin('checkout')) return;
     if (appData.cart.length === 0) {
-        alert('Your cart is empty!');
+        showStatusUpdateToast('Your cart is empty!');
         return;
     }
 
@@ -2768,7 +2727,7 @@ function prepareProductImage(file) {
 
 function getProductImages(product) {
     const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
-    if (images.length === 0 && product.image) images.push(product.image);
+    if (images.length === 0 && (product.thumbnailUrl || product.image)) images.push(product.thumbnailUrl || product.image);
     return images;
 }
 
@@ -2861,7 +2820,7 @@ async function saveProducts() {
 
             const result = await response.json();
             if (result.ok === true) {
-                console.log('Products synced to shared server.');
+
                 sharedProductsRequest = null;
                 cacheProductsLocally(appData.products);
                 return true;
@@ -3100,12 +3059,11 @@ function displayProducts(products) {
         const availableSizes = getAvailableProductSizes(product);
         productCard.innerHTML = `
             <div class="product-image-gallery" aria-label="${product.name} photos">
-                ${productImages.map(image => `<img src="${image.src}" alt="${image.alt}" class="product-image${image.isSizeChart ? ' size-chart-product-image' : ''}" loading="eager" decoding="async">`).join('')}
+                ${productImages.map(image => `<img src="${image.src}" alt="${image.alt}" class="product-image${image.isSizeChart ? ' size-chart-product-image' : ''}" loading="lazy" width="400" height="400" decoding="async">`).join('')}
             </div>
             <div class="product-info">
                 <h3>${product.name}</h3>
                 <p style="color: #4a9eff; font-weight: 600; margin-bottom: 8px;">${typeLabels[product.type] || product.type}</p>
-                <p style="color: #a0a0a0; font-size: 0.85em; margin-bottom: 8px;">Premium Quality Jersey</p>
                 <p class="product-available-sizes">Sizes: ${availableSizes.length ? availableSizes.join(', ') : 'Not set'}</p>
                 <div class="product-price">₱${formatStorefrontPrice(product.price)}</div>
                 <div class="product-stock ${stockClass}">${stockText}</div>
@@ -3124,23 +3082,12 @@ function displayProducts(products) {
 
 // Open Product Modal
 async function openProductModal(product) {
-    const requestedProduct = product;
     try {
-        sharedProductsRequest = null;
-        const latestProducts = await fetchSharedProducts();
-        appData.products = latestProducts;
-        cacheProductsLocally(latestProducts);
-        product = latestProducts.find(item =>
-            String(item.id) === String(requestedProduct.id) || item.name === requestedProduct.name
-        ) || requestedProduct;
-
-        if (document.getElementById('searchProducts') && document.getElementById('categoryFilter')) {
-            filterProducts();
-        } else {
-            displayProducts(latestProducts);
-        }
+        product = await fetchProductDetails(product.id);
     } catch (error) {
-        console.warn('Unable to refresh products before opening details:', error);
+        console.warn('Unable to load product details:', error);
+        showStatusUpdateToast('Unable to load product details. Please try again.');
+        return;
     }
 
     appData.selectedProduct = product;
@@ -3175,9 +3122,12 @@ async function openProductModal(product) {
     stockElement.className = `stock ${stockClass}${isOutOfStock ? ' out-of-stock' : ''}`;
     stockElement.textContent = stock > 0 ? `Stock Available: ${stock}` : 'Out of Stock';
 
+    const noSizes = getAvailableProductSizes(product).length === 0;
+    const sizeMessage = document.getElementById('modalProductSizesUnavailable');
+    if (sizeMessage) sizeMessage.hidden = !noSizes;
     document.querySelectorAll('#productModal .modal-actions button').forEach(button => {
-        button.disabled = isOutOfStock;
-        button.setAttribute('aria-disabled', String(isOutOfStock));
+        button.disabled = isOutOfStock || noSizes;
+        button.setAttribute('aria-disabled', String(button.disabled));
     });
     
     document.getElementById('modalProductQuantity').value = 1;
@@ -3230,11 +3180,13 @@ async function openProductModal(product) {
     displayProductRatings(product);
     
     document.getElementById('productModal').style.display = 'block';
+    document.body.classList.add('product-modal-open');
 }
 
 // Close Product Modal
 function closeProductModal() {
     document.getElementById('productModal').style.display = 'none';
+    document.body.classList.remove('product-modal-open');
     appData.selectedProduct = null;
 }
 
@@ -3256,7 +3208,7 @@ function loadProductRatings() {
 
 // Save product ratings to localStorage
 function saveProductRatings(ratings) {
-    localStorage.setItem('kingpinProductRatings', JSON.stringify(ratings));
+    safeStorageSet(localStorage, 'kingpinProductRatings', JSON.stringify(ratings));
 }
 
 // Initialize ratings for a product if not exists
@@ -3400,26 +3352,26 @@ function submitProductRating() {
     
     const selectedRating = parseInt(document.getElementById('selectedRating').value);
     if (selectedRating === 0) {
-        alert('Please select a rating before submitting.');
+        showStatusUpdateToast('Please select a rating before submitting.');
         return;
     }
     
     const orderId = parseInt(document.getElementById('customerOrderId').value) || 0;
     if (orderId === 0) {
-        alert('No valid order found. Please verify your completed order.');
+        showStatusUpdateToast('No valid order found. Please verify your completed order.');
         return;
     }
     
     // Verify order exists and is completed
     const order = appData.orders.find(o => o.id === orderId);
     if (!order || (order.status !== 'completed' && order.status !== 'delivered')) {
-        alert('This order is not marked as completed yet.');
+        showStatusUpdateToast('This order is not marked as completed yet.');
         return;
     }
     
     // Check if already reviewed
     if (hasCustomerReviewedOrder(orderId)) {
-        alert('You have already reviewed this product from this order.');
+        showStatusUpdateToast('You have already reviewed this product from this order.');
         return;
     }
     
@@ -3466,7 +3418,7 @@ function getQuantityValidationMessage(stock) {
 
 // Add to Cart
 function addToCart() {
-    if (!appData.selectedProduct) return;
+    if (!appData.selectedProduct || !getAvailableProductSizes(appData.selectedProduct).length) return;
 
     const quantity = Number(document.getElementById('modalProductQuantity').value);
     const customName = '';
@@ -3478,22 +3430,22 @@ function addToCart() {
     
     // Size and color are selected in the checkout/order step, not in the product popup.
     if (customSizeElement && !customSize) {
-        alert('Please select a size');
+        showFieldError(customSizeElement, 'Please select a size.');
         return;
     }
     if (customColorElement && !customColor) {
-        alert('Please select a color');
+        showFieldError(customColorElement, 'Please select a color.');
         return;
     }
     
     // Check if product is in stock
     if (appData.selectedProduct.stock <= 0) {
-        alert('This product is out of stock');
+        showStatusUpdateToast('This product is out of stock');
         return;
     }
     
     if (!isValidQuantity(quantity, appData.selectedProduct.stock)) {
-        alert(getQuantityValidationMessage(appData.selectedProduct.stock));
+        showStatusUpdateToast(getQuantityValidationMessage(appData.selectedProduct.stock));
         return;
     }
 
@@ -3510,7 +3462,7 @@ function addToCart() {
         // Check if adding more would exceed available stock
         const totalRequested = existingItem.quantity + quantity;
         if (totalRequested > appData.selectedProduct.stock) {
-            alert(`Cannot add more. Available stock: ${appData.selectedProduct.stock}`);
+            showStatusUpdateToast(`Cannot add more. Available stock: ${appData.selectedProduct.stock}`);
             return;
         }
         existingItem.quantity += quantity;
@@ -3528,7 +3480,8 @@ function addToCart() {
     }
 
     // Build customization message
-    let customMsg = ` (${customSize}, ${customColor})`;
+    const customParts = [customSize, customColor].filter(Boolean);
+    let customMsg = customParts.length ? ` (${customParts.join(', ')})` : '';
     if (customName || customNumber) {
         customMsg += ' - ';
         if (customName) customMsg += `Name: ${customName}`;
@@ -3544,8 +3497,9 @@ function addToCart() {
 
 // Place Order Directly (from product modal)
 function placeOrderDirect() {
+    if (appData.selectedProduct && !getAvailableProductSizes(appData.selectedProduct).length) return;
     if (!appData.selectedProduct) {
-        alert('Please select a product first');
+        showStatusUpdateToast('Please select a product first');
         return;
     }
 
@@ -3558,22 +3512,22 @@ function placeOrderDirect() {
     const customColor = customColorElement ? customColorElement.value.trim() : '';
 
     if (customSizeElement && !customSize) {
-        alert('Please select a size');
+        showFieldError(customSizeElement, 'Please select a size.');
         return;
     }
     if (customColorElement && !customColor) {
-        alert('Please select a color');
+        showFieldError(customColorElement, 'Please select a color.');
         return;
     }
     
     // Check if product is in stock
     if (appData.selectedProduct.stock <= 0) {
-        alert('This product is out of stock');
+        showStatusUpdateToast('This product is out of stock');
         return;
     }
     
     if (!isValidQuantity(quantity, appData.selectedProduct.stock)) {
-        alert(getQuantityValidationMessage(appData.selectedProduct.stock));
+        showStatusUpdateToast(getQuantityValidationMessage(appData.selectedProduct.stock));
         return;
     }
 
@@ -3604,11 +3558,8 @@ function placeOrderDirect() {
     updateCartDisplay();
     saveUserCart();
     
-    // Open payment checkout directly after the first Place Order click.
-    setCustomerActiveView('checkoutSection');
-    loadSharedGcashQRCode();
-    updateCheckoutDisplay();
-    updatePaymentMethodUI();
+    // Apply the same authentication gate as the cart checkout.
+    checkout();
 }
 
 // Update Cart Count
@@ -3871,11 +3822,11 @@ function saveCustomizationEdit() {
     
     // Validate size and color
     if (!customSize) {
-        alert('Please select a size');
+        showStatusUpdateToast('Please select a size.');
         return;
     }
     if (!customColor) {
-        alert('Please select a color');
+        showStatusUpdateToast('Please select a color.');
         return;
     }
     
@@ -3889,7 +3840,7 @@ function saveCustomizationEdit() {
     cartItem.customization.number = customNumber;
     
     // Show confirmation
-    alert('✓ Customization updated successfully!');
+    showStatusUpdateToast('✓ Customization updated successfully!');
     
     // Close modal and update display
     closeEditCustomizationModal();
@@ -3911,7 +3862,7 @@ function updateCartQuantity(index, change) {
         updateCartCount();
         saveUserCart();  // Save cart to localStorage
     } else {
-        alert(getQuantityValidationMessage(cartItem.stock));
+        showStatusUpdateToast(getQuantityValidationMessage(cartItem.stock));
     }
 }
 
@@ -3920,7 +3871,7 @@ function updateCartQuantityDirect(index, value) {
     if (!cartItem) return;
     const newQuantity = Number(value);
     if (!isValidQuantity(newQuantity, cartItem.stock)) {
-        alert(getQuantityValidationMessage(cartItem.stock));
+        showStatusUpdateToast(getQuantityValidationMessage(cartItem.stock));
         updateCartDisplay();
         return;
     }
@@ -3999,6 +3950,7 @@ function updateCheckoutDisplay() {
     
     if (!checkoutItems) {
         document.getElementById('checkoutTotal').textContent = total.toFixed(2);
+    const desktopTotal = document.getElementById('checkoutDesktopTotal'); if (desktopTotal) desktopTotal.textContent = total.toFixed(2);
         return;
     }
 
@@ -4069,6 +4021,7 @@ function updateCheckoutDisplay() {
     });
     
     document.getElementById('checkoutTotal').textContent = total.toFixed(2);
+    const summaryTotal = document.getElementById('checkoutDesktopTotal'); if (summaryTotal) summaryTotal.textContent = total.toFixed(2);
 }
 
 
@@ -4247,11 +4200,11 @@ async function processCustomerOrder() {
     }
 
     if (appData.cart.length === 0) {
-        alert('Your cart is empty. Please add an item before placing an order.');
+        showStatusUpdateToast('Your cart is empty. Please add an item before placing an order.');
         return;
     }
 
-    sessionStorage.setItem(orderProcessingKey, '1');
+    safeStorageSet(sessionStorage, orderProcessingKey, '1');
     const placeOrderButton = document.getElementById('placeCustomerOrderButton');
     if (placeOrderButton) {
         placeOrderButton.disabled = true;
@@ -4278,33 +4231,18 @@ async function processCustomerOrder() {
         teamSizes: [],
         teamNotes: document.getElementById('teamNotes') ? document.getElementById('teamNotes').value : ''
     });
-    
-    console.log('Order processing started', {
-        customerName,
-        customerEmail,
-        customerPhone,
-        customerAddress,
-        paymentMethod,
-        checkoutName,
-        checkoutNumber,
-        checkoutSize,
-        checkoutBottomSize,
-        checkoutColor,
-        teamOrderInput,
-        cartLength: appData.cart.length
-    });
 
     const missingFields = [];
     const customerEmailField = document.getElementById('customerEmail');
-    if (!customerName) missingFields.push('buong pangalan');
+    if (!customerName) missingFields.push('full name');
     if (!customerEmail) {
         missingFields.push('email');
     } else if (customerEmailField && !customerEmailField.checkValidity()) {
-        missingFields.push('valid na email');
+        missingFields.push('valid email');
     }
-    if (!customerPhone) missingFields.push('numero ng telepono');
+    if (!customerPhone) missingFields.push('phone number');
     if (!customerAddress) missingFields.push('delivery address');
-    if (!paymentMethod) missingFields.push('paraan ng bayad');
+    if (!paymentMethod) missingFields.push('payment method');
     if (checkoutNumber && (!Number.isInteger(Number(checkoutNumber)) || Number(checkoutNumber) < 0 || Number(checkoutNumber) > 99)) {
         missingFields.push('jersey number between 0 and 99');
     }
@@ -4325,22 +4263,26 @@ async function processCustomerOrder() {
     const incompleteItems = getIncompleteCartItems(checkoutSize, checkoutColor);
     if (incompleteItems.length > 0) {
         const itemNames = [...new Set(incompleteItems.map(item => item.name))].join(', ');
-        missingFields.push(`size o kulay para sa ${itemNames}`);
+        missingFields.push(`size or color for ${itemNames}`);
     }
 
     if (missingFields.length > 0) {
+        const customerFields = ['customerName', 'customerEmail', 'customerPhone', 'customerAddress'].map(id => document.getElementById(id));
+        const invalid = customerFields.filter(field => !field.checkValidity());
+        customerFields.forEach(field => { field.classList.toggle('field-invalid', invalid.includes(field)); field.setAttribute('aria-invalid', String(invalid.includes(field))); if (invalid.includes(field)) showFieldError(field, field.validationMessage || 'This field is required.', false); });
+        if (invalid.length) { const panel = document.getElementById('checkoutCustomerPanel'); const toggle = document.querySelector('[aria-controls=checkoutCustomerPanel]'); if (panel.hidden) toggleCheckoutInfoPanel('checkoutCustomerPanel', toggle); invalid[0].scrollIntoView({behavior: 'smooth', block: 'center'}); invalid[0].focus({preventScroll: true}); }
         sessionStorage.removeItem(orderProcessingKey);
         if (placeOrderButton) {
             placeOrderButton.disabled = false;
             placeOrderButton.style.opacity = '1';
             placeOrderButton.style.cursor = 'pointer';
         }
-        alert(`Kulang ang kinakailangang impormasyon: ${missingFields.join(', ')}. Pakikumpleto muna bago mag-place ng order.`);
+        showStatusUpdateToast(`Please complete the required information: ${missingFields.join(', ')}.`);
         return;
     }
     
     if (!customerName) {
-        alert('Please enter your name');
+        showStatusUpdateToast('Please enter your name');
         sessionStorage.removeItem('kingpinOrderProcessing');
         const placeOrderButtonReset = document.getElementById('placeCustomerOrderButton');
         if (placeOrderButtonReset) {
@@ -4352,7 +4294,7 @@ async function processCustomerOrder() {
     }
     
     if (!customerEmail) {
-        alert('Please enter your email');
+        showStatusUpdateToast('Please enter your email');
         sessionStorage.removeItem('kingpinOrderProcessing');
         const placeOrderButtonReset = document.getElementById('placeCustomerOrderButton');
         if (placeOrderButtonReset) {
@@ -4364,7 +4306,7 @@ async function processCustomerOrder() {
     }
     
     if (!customerPhone) {
-        alert('Please enter your phone number');
+        showStatusUpdateToast('Please enter your phone number');
         sessionStorage.removeItem('kingpinOrderProcessing');
         const placeOrderButtonReset = document.getElementById('placeCustomerOrderButton');
         if (placeOrderButtonReset) {
@@ -4376,7 +4318,7 @@ async function processCustomerOrder() {
     }
     
     if (!customerAddress) {
-        alert('Please enter your delivery address');
+        showStatusUpdateToast('Please enter your delivery address');
         sessionStorage.removeItem('kingpinOrderProcessing');
         const placeOrderButtonReset = document.getElementById('placeCustomerOrderButton');
         if (placeOrderButtonReset) {
@@ -4396,7 +4338,7 @@ async function processCustomerOrder() {
             if (!/^image\/(jpeg|png|gif|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Upload a valid proof image up to 5 MB.');
             checkoutProof = await compressPaymentProof(file);
         }
-        if (!confirm(paymentMethod === 'gcash'
+        if (!await confirmAction(paymentMethod === 'gcash'
             ? 'Confirm this order and submit your GCash proof for verification? Your order receipt will appear after saving.'
             : 'Confirm shop pickup with cash payment at the shop? Your receipt will show payment pending.')) return;
         const downpaymentAmount = paymentMethod === 'gcash' ? Number(totalAmount) / 2 : 0;
@@ -4465,7 +4407,7 @@ async function processCustomerOrder() {
                 const product = appData.products[targetIndex];
                 const currentStock = Number(product.stock) || 0;
                 const nextStock = Math.max(0, currentStock - quantityToReduce);
-                console.log(`Decreasing stock for ${product.name}: ${currentStock} -> ${nextStock}`);
+
                 product.stock = nextStock;
             } else {
                 console.warn('No matching product found for stock deduction:', cartItem);
@@ -4473,7 +4415,7 @@ async function processCustomerOrder() {
         });
         
         // Save updated products to localStorage
-        console.log('Saving products:', appData.products);
+
         saveProductsWithoutBlocking();
         
         appData.orders.push(orderData);
@@ -4509,7 +4451,7 @@ async function processCustomerOrder() {
             messageDiv.style.display = 'block';
         }
 
-        sessionStorage.setItem('kingpinLastOrderSuccess', JSON.stringify({
+        safeStorageSet(sessionStorage, 'kingpinLastOrderSuccess', JSON.stringify({
             orderId: orderData.id,
             message: `✅ Order #${orderData.id} placed successfully! Receipt is ready.`,
             timestamp: Date.now()
@@ -4530,7 +4472,7 @@ async function processCustomerOrder() {
         loadNotifications();
     } catch (error) {
         console.error('Error processing order:', error);
-        alert('Error placing order: ' + error.message);
+        showStatusUpdateToast('Error placing order: ' + error.message);
     } finally {
         sessionStorage.removeItem('kingpinOrderProcessing');
         const placeOrderButtonReset = document.getElementById('placeCustomerOrderButton');
@@ -5130,14 +5072,14 @@ function setOrderReviewRating(orderId, productId, rating) {
 
 // Store review draft (auto-save comment)
 function storeReviewDraft(orderId, productId, comment) {
-    sessionStorage.setItem(`review-draft-${orderId}-${productId}`, comment);
+    safeStorageSet(sessionStorage, `review-draft-${orderId}-${productId}`, comment);
 }
 
 // Submit product review from My Orders
 function submitOrderProductReview(orderId, productId, productName) {
     const rating = parseInt(document.querySelector(`.review-rating-${orderId}-${productId}`).value) || 0;
     if (rating === 0) {
-        alert('Please select a rating for ' + productName);
+        showStatusUpdateToast('Please select a rating for ' + productName);
         return;
     }
     
@@ -5145,19 +5087,19 @@ function submitOrderProductReview(orderId, productId, productName) {
     const order = appData.orders.find(o => o.id === orderId);
     
     if (!order) {
-        alert('Order not found.');
+        showStatusUpdateToast('Order not found.');
         return;
     }
     
     // Verify order is completed
     if (!isOrderCompleted(order)) {
-        alert('This order is not marked as completed yet.');
+        showStatusUpdateToast('This order is not marked as completed yet.');
         return;
     }
     
     // Check if already reviewed from this order
     if (hasCustomerReviewedOrder(orderId)) {
-        alert('You have already reviewed a product from this order.');
+        showStatusUpdateToast('You have already reviewed a product from this order.');
         return;
     }
     
@@ -5201,19 +5143,19 @@ async function requestOrderAction(orderId, requestType, reason) {
     const order = appData.orders.find(item => item.id === orderId);
     if (!order) return;
     if (order.requestStatus === 'pending') {
-        alert('This order already has a pending request.');
+        showStatusUpdateToast('This order already has a pending request.');
         loadCustomerOrders();
         return;
     }
     if ((isOrderCompleted(order) || String(order.status || '').trim().toLowerCase() === 'cancelled') && requestType === 'cancel') {
-        alert('This order can no longer be cancelled.');
+        showStatusUpdateToast('This order can no longer be cancelled.');
         loadCustomerOrders();
         return;
     }
 
     const requestLabel = requestType === 'cancel' ? 'Cancel / Change of Mind' : 'Refund';
     if (!reason) return;
-    if (!confirm(`Submit a ${requestLabel} request for order #${orderId}?\nReason: ${reason}`)) {
+    if (!await confirmAction(`Submit a ${requestLabel} request for order #${orderId}?\nReason: ${reason}`)) {
         loadCustomerOrders();
         return;
     }
@@ -5272,7 +5214,7 @@ function updateOrderDownpayment(orderId, amountValue) {
 
     const parsedValue = Number(amountValue);
     if (!Number.isFinite(parsedValue) || parsedValue < 0) {
-        alert('Please enter a valid downpayment amount.');
+        showStatusUpdateToast('Please enter a valid downpayment amount.');
         return;
     }
 
@@ -5311,12 +5253,12 @@ function uploadOrderPaymentProof(orderId, input) {
     const validTypes = ['image/jpeg', 'image/jpg', 'image/jfif', 'image/png', 'image/gif', 'image/webp'];
     const validExtension = /\.(jpe?g|jfif|png|gif|webp)$/i.test(file.name);
     if (!validTypes.includes(file.type) && !validExtension) {
-        alert('Please upload a valid image file.');
+        showStatusUpdateToast('Please upload a valid image file.');
         input.value = '';
         return;
     }
     if (file.size > 5 * 1024 * 1024) {
-        alert('File size must be less than 5MB.');
+        showStatusUpdateToast('File size must be less than 5MB.');
         input.value = '';
         return;
     }
@@ -5371,7 +5313,7 @@ function uploadOrderPaymentProof(orderId, input) {
             : `Proof could not sync with admin. Please try again.`);
     }).catch(error => {
         console.error('Unable to process GCash payment proof:', error);
-        alert(error.message || 'Unable to process the payment proof. Please try another image.');
+        showStatusUpdateToast(error.message || 'Unable to process the payment proof. Please try another image.');
         input.value = '';
     });
 }
@@ -5508,9 +5450,8 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
             availableSizes
         };
 
-        console.log('Adding new product:', newProduct);
         appData.products.push(newProduct);
-        console.log('Total products after add:', appData.products.length);
+
         saveProducts().then(() => {
             displayProducts(appData.products);
             uploadMessage.className = 'message success';
@@ -5548,20 +5489,20 @@ function editProduct(index) {
     
     // Scroll to form
     document.querySelector('.add-product-form').scrollIntoView({ behavior: 'smooth' });
-    alert('Edit mode enabled. Update the form and submit to save changes.');
+    showStatusUpdateToast('Edit mode enabled. Update the form and submit to save changes.');
 }
 
 // Delete Product
-function deleteProduct(index) {
+async function deleteProduct(index) {
     if (index < 0 || index >= appData.products.length) {
-        alert('Invalid product index');
+        showStatusUpdateToast('Invalid product index');
         return;
     }
     
     const productName = appData.products[index].name;
-    if (confirm(`Are you sure you want to delete "${productName}"?`)) {
+    if (await confirmAction(`Are you sure you want to delete "${productName}"?`)) {
         appData.products.splice(index, 1);
-        console.log('Product deleted. Remaining products:', appData.products.length);
+
         saveProductsWithoutBlocking();
         
         // Show success message
@@ -5582,7 +5523,7 @@ let currentEditPriceIndex = null;
 
 function editPrice(index) {
     if (index < 0 || index >= appData.products.length) {
-        alert('Invalid product index');
+        showStatusUpdateToast('Invalid product index');
         return;
     }
     
@@ -5600,8 +5541,7 @@ function editPrice(index) {
     // Focus on price input
     document.getElementById('editPriceInput').focus();
     document.getElementById('editPriceInput').select();
-    
-    console.log('Edit price modal opened for product index:', index);
+
 }
 
 function closeEditPriceModal() {
@@ -5612,7 +5552,7 @@ function closeEditPriceModal() {
 
 function saveEditedPrice() {
     if (currentEditPriceIndex === null || currentEditPriceIndex < 0) {
-        alert('No product selected');
+        showStatusUpdateToast('No product selected');
         return;
     }
     
@@ -5631,8 +5571,7 @@ function saveEditedPrice() {
     
     // Update price
     product.price = newPrice;
-    console.log(`Product "${product.name}" price updated: ₱${oldPrice.toFixed(2)} → ₱${newPrice.toFixed(2)}`);
-    
+
     // Save to storage
     saveProductsWithoutBlocking();
     
@@ -5648,6 +5587,8 @@ function saveEditedPrice() {
         closeEditPriceModal();
     }, 1500);
 }
+
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && document.getElementById('productModal').style.display === 'block') closeProductModal(); });
 
 // Close modal when clicking outside
 window.onclick = function(event) {
@@ -5713,7 +5654,7 @@ let currentEditProductIndex = null;
 
 function openEditProductModal(index) {
     if (index < 0 || index >= appData.products.length) {
-        alert('Invalid product index');
+        showStatusUpdateToast('Invalid product index');
         return;
     }
     
@@ -5779,7 +5720,7 @@ function closeEditProductModal() {
 // Save Product Edit
 function saveProductEdit() {
     if (currentEditProductIndex === null) {
-        alert('No product selected');
+        showStatusUpdateToast('No product selected');
         return;
     }
     
@@ -5881,9 +5822,9 @@ function saveProductEdit() {
 }
 
 // Toggle Product Stock (Mark as Out of Stock / Restock)
-function toggleProductStock(index) {
+async function toggleProductStock(index) {
     if (index < 0 || index >= appData.products.length) {
-        alert('Invalid product index');
+        showStatusUpdateToast('Invalid product index');
         return;
     }
     
@@ -5891,11 +5832,11 @@ function toggleProductStock(index) {
     
     if (product.stock > 0) {
         // Mark as out of stock
-        if (confirm(`Mark "${product.name}" as out of stock?`)) {
+        if (await confirmAction(`Mark "${product.name}" as out of stock?`)) {
             product.stock = 0;
             saveProductsWithoutBlocking();
             loadAdminInventoryProducts();
-            alert('✓ Product marked as out of stock');
+            showStatusUpdateToast('✓ Product marked as out of stock');
         }
     } else {
         // Restock - Ask for quantity
@@ -5904,24 +5845,24 @@ function toggleProductStock(index) {
             product.stock = parseInt(quantity);
             saveProductsWithoutBlocking();
             loadAdminInventoryProducts();
-            alert(`✓ Product restocked with ${quantity} units`);
+            showStatusUpdateToast(`✓ Product restocked with ${quantity} units`);
         }
     }
 }
 
 // Delete Admin Product
-function deleteAdminProduct(index) {
+async function deleteAdminProduct(index) {
     if (index < 0 || index >= appData.products.length) {
-        alert('Invalid product index');
+        showStatusUpdateToast('Invalid product index');
         return;
     }
     
     const product = appData.products[index];
-    if (confirm(`Are you sure you want to delete "${product.name}"? This cannot be undone.`)) {
+    if (await confirmAction(`Are you sure you want to delete "${product.name}"? This cannot be undone.`)) {
         appData.products.splice(index, 1);
         saveProductsWithoutBlocking();
         loadAdminInventoryProducts();
-        alert('✓ Product deleted successfully');
+        showStatusUpdateToast('✓ Product deleted successfully');
     }
 }
 
@@ -6346,7 +6287,7 @@ function viewOrderDetails(orderStr) {
         document.getElementById('orderDetailsModal').style.display = 'block';
     } catch (e) {
         console.error('Error viewing order details:', e);
-        alert('Error loading order details');
+        showStatusUpdateToast('Error loading order details');
     }
 }
 
@@ -6456,7 +6397,7 @@ function calculateSuggestedSize() {
     const length = parseFloat(document.getElementById('lengthMeasurement').value);
 
     if (!chest || !waist || !length) {
-        alert('Please enter all measurements');
+        showStatusUpdateToast('Please enter all measurements');
         return;
     }
 
@@ -6486,92 +6427,12 @@ function calculateSuggestedSize() {
 
 // Save Order to History
 function saveOrderToHistory(orderData, updateCustomerProfile = true) {
-    let history = JSON.parse(localStorage.getItem('orderHistory')) || [];
-    const existingIndex = history.findIndex(item => Number(item.id) === Number(orderData.id));
-
-    if (existingIndex >= 0) {
-        history[existingIndex] = orderData;
-    } else {
-        history.push(orderData);
-    }
-
-    try {
-        localStorage.setItem('orderHistory', JSON.stringify(history.slice(-200)));
-    } catch (error) {
-        console.warn('orderHistory quota exceeded; trimming older history entries.', error);
-        try {
-            localStorage.setItem('orderHistory', JSON.stringify(history.slice(-50)));
-        } catch (finalError) {
-            console.warn('Unable to save order history locally because browser storage is full.', finalError);
-        }
-    }
-    
-    if (updateCustomerProfile) {
-        saveCustomerProfile(orderData);
-    }
+    return true;
 }
 
 // Save Customer Profile
 function saveCustomerProfile(orderData) {
-    let customers = JSON.parse(localStorage.getItem('customerDatabase')) || [];
-    
-    // Check if customer already exists
-    const existingCustomer = customers.find(c => c.email === orderData.customerEmail);
-    
-    if (existingCustomer) {
-        // Update existing customer
-        existingCustomer.name = orderData.customerName;
-        existingCustomer.phone = orderData.customerPhone;
-        existingCustomer.address = orderData.customerAddress;
-        existingCustomer.lastOrderDate = orderData.date;
-        existingCustomer.totalOrders = (existingCustomer.totalOrders || 0) + 1;
-        existingCustomer.totalSpent = (existingCustomer.totalSpent || 0) + orderData.totalAmount;
-        
-        // Update measurements if provided
-        if (orderData.measurements && orderData.measurements.chest !== 'Not provided') {
-            existingCustomer.measurements = orderData.measurements;
-        }
-        
-        // Add to order history
-        existingCustomer.orderHistory = existingCustomer.orderHistory || [];
-        existingCustomer.orderHistory.push({
-            orderId: orderData.id,
-            date: orderData.date,
-            amount: orderData.totalAmount,
-            status: orderData.status
-        });
-        
-        // Keep only last 10 orders
-        if (existingCustomer.orderHistory.length > 10) {
-            existingCustomer.orderHistory = existingCustomer.orderHistory.slice(-10);
-        }
-    } else {
-        // Create new customer
-        const newCustomer = {
-            email: orderData.customerEmail,
-            name: orderData.customerName,
-            phone: orderData.customerPhone,
-            address: orderData.customerAddress,
-            measurements: orderData.measurements || {},
-            preferences: {
-                favoriteCategories: [],
-                favoriteProducts: []
-            },
-            totalOrders: 1,
-            totalSpent: orderData.totalAmount,
-            registrationDate: orderData.date,
-            lastOrderDate: orderData.date,
-            orderHistory: [{
-                orderId: orderData.id,
-                date: orderData.date,
-                amount: orderData.totalAmount,
-                status: orderData.status
-            }]
-        };
-        customers.push(newCustomer);
-    }
-    
-    localStorage.setItem('customerDatabase', JSON.stringify(customers));
+    return true;
 }
 
 // ===== ADMIN: HISTORY MANAGEMENT =====
@@ -6584,7 +6445,35 @@ function updateShowAdminTab() {
 // Load Customers Table
 function loadCustomersTable() {
     const customersList = document.getElementById('customersList');
-    const customers = JSON.parse(localStorage.getItem('customerDatabase')) || [];
+    const orders = getReportOrders().slice().sort((first, second) => new Date(first.date) - new Date(second.date));
+    const customersByEmail = new Map();
+    orders.forEach(order => {
+        const email = normalizeCustomerEmail(order.customerEmail);
+        if (!email) return;
+        const customer = customersByEmail.get(email) || {
+            email,
+            name: order.customerName || '',
+            phone: order.customerPhone || '',
+            address: order.customerAddress || '',
+            measurements: order.measurements || {},
+            registrationDate: order.date,
+            lastOrderDate: order.date,
+            totalOrders: 0,
+            totalSpent: 0,
+            orderHistory: []
+        };
+        customer.name = order.customerName || customer.name;
+        customer.phone = order.customerPhone || customer.phone;
+        customer.address = order.customerAddress || customer.address;
+        customer.lastOrderDate = order.date || customer.lastOrderDate;
+        customer.totalOrders += 1;
+        customer.totalSpent += Number(order.totalAmount) || 0;
+        customer.orderHistory.push({ orderId: order.id, date: order.date, amount: Number(order.totalAmount) || 0, status: order.status });
+        if (order.measurements?.chest && order.measurements.chest !== 'Not provided') customer.measurements = order.measurements;
+        customersByEmail.set(email, customer);
+    });
+    const customers = Array.from(customersByEmail.values());
+    appData.customers = customers;
 
     customersList.innerHTML = '';
 
@@ -6619,14 +6508,14 @@ function loadCustomersTable() {
 
 // View Customer Details
 function viewCustomerDetails(index) {
-    const customers = JSON.parse(localStorage.getItem('customerDatabase')) || [];
-    const customer = customers[index];
+    const customer = appData.customers[index];
+    if (!customer) return;
     
     const orderHistory = customer.orderHistory ? 
         customer.orderHistory.map(o => `#${o.orderId} (${o.date}: ₱${o.amount.toFixed(2)})`).join(', ') :
         'No orders';
     
-    alert(`CUSTOMER PROFILE\n\nName: ${customer.name}\nEmail: ${customer.email}\nPhone: ${customer.phone}\nAddress: ${customer.address}\n\nMeasurements:\nChest: ${customer.measurements?.chest || 'N/A'}cm\nWaist: ${customer.measurements?.waist || 'N/A'}cm\nLength: ${customer.measurements?.length || 'N/A'}cm\n\nTotal Orders: ${customer.totalOrders}\nTotal Spent: ₱${customer.totalSpent.toFixed(2)}\nReg Date: ${customer.registrationDate}\nLast Order: ${customer.lastOrderDate}`);
+    showStatusUpdateToast(`CUSTOMER PROFILE\n\nName: ${customer.name}\nEmail: ${customer.email}\nPhone: ${customer.phone}\nAddress: ${customer.address}\n\nMeasurements:\nChest: ${customer.measurements?.chest || 'N/A'}cm\nWaist: ${customer.measurements?.waist || 'N/A'}cm\nLength: ${customer.measurements?.length || 'N/A'}cm\n\nTotal Orders: ${customer.totalOrders}\nTotal Spent: ₱${customer.totalSpent.toFixed(2)}\nReg Date: ${customer.registrationDate}\nLast Order: ${customer.lastOrderDate}`);
 }
 
 // Setup Customer Search
@@ -6646,10 +6535,10 @@ function setupCustomerSearch() {
 
 // Export Customers to CSV
 function exportCustomersToCSV() {
-    const customers = JSON.parse(localStorage.getItem('customerDatabase')) || [];
+    const customers = appData.customers || [];
 
     if (customers.length === 0) {
-        alert('No customers to export');
+        showStatusUpdateToast('No customers to export');
         return;
     }
 
@@ -6671,32 +6560,17 @@ function exportCustomersToCSV() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    alert('Customers exported successfully!');
+    showStatusUpdateToast('Customers exported successfully!');
 }
 
 // Load History Table
 function loadHistoryTable() {
     const historyList = document.getElementById('historyList');
     if (!historyList) return;
-    const storedHistory = JSON.parse(localStorage.getItem('orderHistory') || '[]');
-    const liveCompletedOrders = (appData.orders || [])
+    const liveCompletedOrders = getReportOrders()
         .filter(order => isOrderInPurchaseHistory(order))
         .map(order => ({ ...order }));
-    const historyById = new Map(storedHistory.map(order => [String(order.id), order]));
-    liveCompletedOrders.forEach(order => {
-        const storedOrder = historyById.get(String(order.id));
-        const storedItems = storedOrder?.items || [];
-        const mergedItems = (order.items || []).map((item, index) => {
-            const storedItem = storedItems.find(savedItem => Number(savedItem.id) === Number(item.id)) || storedItems[index];
-            return {
-                ...storedItem,
-                ...item,
-                image: item.image || item.productImage || storedItem?.image || storedItem?.productImage
-            };
-        });
-        historyById.set(String(order.id), { ...storedOrder, ...order, items: mergedItems });
-    });
-    const history = [...historyById.values()];
+    const history = liveCompletedOrders;
     
     const selectedYear = document.getElementById('yearSelector').value;
     const selectedMonth = document.getElementById('monthSelector').value;
@@ -6793,10 +6667,10 @@ function setupHistorySearch() {
 
 // Export History to CSV
 function exportHistoryToCSV() {
-    const history = JSON.parse(localStorage.getItem('orderHistory')) || [];
+    const history = getReportOrders().filter(order => isOrderInPurchaseHistory(order));
 
     if (history.length === 0) {
-        alert('No history to export');
+        showStatusUpdateToast('No history to export');
         return;
     }
 
@@ -6820,22 +6694,13 @@ function exportHistoryToCSV() {
     link.click();
     document.body.removeChild(link);
 
-    alert('History exported successfully!');
+    showStatusUpdateToast('History exported successfully!');
 }
 
 // ===== ADMIN: REPORTS & ANALYTICS =====
 
 function getReportOrders() {
-    const storedHistory = JSON.parse(localStorage.getItem('orderHistory') || '[]');
-    const ordersById = new Map();
-
-    [...storedHistory, ...(appData.orders || [])].forEach(order => {
-        if (order && order.id != null) {
-            ordersById.set(String(order.id), order);
-        }
-    });
-
-    return [...ordersById.values()];
+    return Array.isArray(appData.orders) ? appData.orders : [];
 }
 
 function getSoldOrders() {
@@ -7031,7 +6896,7 @@ function generateFullReport() {
     const soldOrders = allOrders.filter(order => ['completed', 'delivered'].includes(order.status));
 
     if (allOrders.length === 0) {
-        alert('No data to generate report');
+        showStatusUpdateToast('No data to generate report');
         return;
     }
 
@@ -7088,7 +6953,7 @@ Date: ${order.date}
     document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
-    alert('Excel report generated and downloaded successfully!');
+    showStatusUpdateToast('Excel report generated and downloaded successfully!');
 }
 
 // Logo file preview handler
@@ -7192,3 +7057,39 @@ document.getElementById('checkoutForm').addEventListener('submit', function(e) {
     e.preventDefault();
     processCustomerOrder();
 });
+
+function confirmAction(message) {
+    return new Promise(resolve => {
+        const dialog = document.createElement('dialog');
+        dialog.className = 'confirm-dialog';
+        dialog.innerHTML = '<form method="dialog"><p></p><div class="confirm-actions"><button class="btn btn-secondary" value="cancel">Cancel</button><button class="btn btn-primary" value="confirm">Confirm</button></div></form>';
+        dialog.querySelector('p').textContent = message;
+        document.body.appendChild(dialog);
+        dialog.addEventListener('close', () => { const accepted = dialog.returnValue === 'confirm'; dialog.remove(); resolve(accepted); }, { once: true });
+        dialog.showModal();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-current-year]').forEach(element => element.textContent = new Date().getFullYear());
+    if (!appData.currentUser) loadUserCart().then(() => { updateCartCount(); updateCartDisplay(); });
+});
+
+function showFieldError(field, message, focus = true) {
+    if (!field) { showStatusUpdateToast(message); return; }
+    let error = field.parentElement.querySelector('.inline-field-error');
+    if (!error) { error = document.createElement('small'); error.className = 'inline-field-error'; error.setAttribute('role', 'alert'); field.insertAdjacentElement('afterend', error); }
+    error.textContent = message; field.setAttribute('aria-invalid', 'true'); if (focus) field.focus();
+    field.addEventListener('input', () => { if (field.checkValidity()) { error.remove(); field.removeAttribute('aria-invalid'); field.classList.remove('field-invalid'); } });
+    field.addEventListener('change', () => { if (field.checkValidity()) { error.remove(); field.removeAttribute('aria-invalid'); field.classList.remove('field-invalid'); } });
+}
+
+document.addEventListener('invalid', event => {
+    const field = event.target;
+    if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
+        let error = field.parentElement.querySelector('.inline-field-error');
+        if (!error) { error = document.createElement('small'); error.className = 'inline-field-error'; error.setAttribute('role', 'alert'); field.insertAdjacentElement('afterend', error); }
+        error.textContent = field.validationMessage; field.setAttribute('aria-invalid', 'true');
+        field.addEventListener('input', () => { if (field.validity.valid) { error.remove(); field.removeAttribute('aria-invalid'); } });
+    }
+}, true);

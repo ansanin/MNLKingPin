@@ -55,10 +55,10 @@ function syncStorefrontCatalog(visibleProducts) {
     if (count) count.textContent = `${productCount} ${productCount === 1 ? 'product' : 'products'}`;
 
     const featuredProduct = Array.isArray(appData.products)
-        ? appData.products.find(product => product && (product.image || (Array.isArray(product.images) && product.images.length)))
+           ? appData.products.find(product => product && (product.thumbnailUrl || product.image || (Array.isArray(product.images) && product.images.length)))
         : null;
     const featuredImage = appData.storefrontHero?.image || (featuredProduct
-        ? (Array.isArray(featuredProduct.images) && featuredProduct.images.length ? featuredProduct.images[0] : featuredProduct.image)
+           ? (featuredProduct.thumbnailUrl || (Array.isArray(featuredProduct.images) && featuredProduct.images.length ? featuredProduct.images[0] : featuredProduct.image))
         : '');
 
     if (heroImage && featuredImage) {
@@ -95,7 +95,7 @@ function normalizeStorefrontHero(hero) {
 
 function cacheStorefrontHero() {
     try {
-        localStorage.setItem('kingpinStorefrontHero', JSON.stringify(appData.storefrontHero));
+        safeStorageSet(localStorage, 'kingpinStorefrontHero', JSON.stringify(appData.storefrontHero));
     } catch (error) {
         console.warn('Unable to cache the hero banner locally.', error);
     }
@@ -110,8 +110,8 @@ function populateStorefrontHeroForm() {
     document.getElementById('storefrontHeroSubtitleInput').value = hero.subtitle;
     document.getElementById('storefrontHeroUseCatalogImage').checked = !hero.image;
     const preview = document.getElementById('storefrontHeroPreview');
-    const firstProduct = appData.products.find(product => product && (product.image || product.images?.length));
-    const previewImage = hero.image || (firstProduct ? (firstProduct.images?.[0] || firstProduct.image) : '');
+        const firstProduct = appData.products.find(product => product && (product.thumbnailUrl || product.image || product.images?.length));
+    const previewImage = hero.image || (firstProduct ? (firstProduct.thumbnailUrl || firstProduct.images?.[0] || firstProduct.image) : '');
     preview.hidden = !previewImage;
     if (previewImage) preview.src = previewImage;
 }
@@ -231,7 +231,10 @@ function updateStorefrontNavigation(activeDestination) {
 }
 
 function navigateStorefront(destination) {
-    if (appData.currentRole !== 'customer') return;
+    if (appData.currentRole !== 'customer' || !appData.currentUser) {
+        requireCustomerLogin(destination);
+        return;
+    }
 
     if (destination === 'shop') {
         document.getElementById('designSection').style.display = 'none';
