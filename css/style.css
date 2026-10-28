@@ -7444,3 +7444,13 @@ body.light-mode #loginPage .login-brand-panel .login-brand-subtitle { color: #ff
 body.light-mode #loginPage .login-brand-panel .brand-description { color: #c7c7c7; }
 body.light-mode #loginPage .login-back { color: #48525c; }
 body.light-mode #loginPage .login-theme-toggle { color: #26313a !important; background: #fff !important; }
+
+/* Give checkout room to breathe on tablets and larger screens. */
+#customerPage .checkout-section { width: 100%; max-width: 1160px; box-sizing: border-box; }
+#customerPage .checkout-layout, #customerPage #checkoutForm, #customerPage #checkoutItemsList { min-width: 0; width: 100%; }
+#customerPage .checkout-section input, #customerPage .checkout-section select, #customerPage .checkout-section textarea { max-width: 100%; box-sizing: border-box; }
+@media (max-width: 1024px) {
+    #customerPage .checkout-layout { display: block; }
+    #customerPage .checkout-desktop-summary { display: none; }
+    #customerPage .checkout-section { padding: clamp(16px, 3vw, 28px); }
+}
