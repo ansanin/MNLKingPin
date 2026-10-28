@@ -6069,6 +6069,22 @@ async function saveAdminProductionDetails(orderId) {
     }
 }
 
+async function checkOrderEmailDelivery(orderId) {
+    const output = document.getElementById(`emailDeliveryStatus-${orderId}`);
+    if (!output) return;
+    output.textContent = 'Checking email status...';
+    try {
+        const response = await fetch(`/.netlify/functions/production-email-status?orderId=${encodeURIComponent(orderId)}`, { headers: getAuthenticatedHeaders(), cache: 'no-store' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Unable to check email status.');
+        if (!result.configured) { output.textContent = 'Email service is not configured in Netlify. Contact the site administrator.'; return; }
+        if (!result.deliveries.length) { output.textContent = 'No email-triggering status update was found for this order.'; return; }
+        const event = result.deliveries[result.deliveries.length - 1];
+        const messages = { provider_accepted: 'Email provider accepted the message. Check the customer inbox and spam folder.', failed: event.reason === 'email_not_configured' ? 'Email service was not configured when this update was sent.' : event.reason === 'missing_customer_email' ? 'This order has no customer email address.' : 'Email sending failed. Check Netlify function logs.', unknown: 'No delivery result was recorded for this update. It may have been created before email status tracking was added.' };
+        output.textContent = (event.stage ? event.stage + ': ' : '') + (messages[event.state] || messages.unknown);
+    } catch (error) { output.textContent = error.message; }
+}
+
 async function verifyAdminOrderPayment(orderId) {
     const remarks = document.getElementById(`productionRemarks-${orderId}`)?.value || '';
     try {
@@ -6264,10 +6280,12 @@ function viewOrderDetails(orderStr) {
                     <div class="production-admin-actions">
                         <button type="button" class="btn btn-primary btn-small" onclick="submitAdminProductionStage(${Number(order.id) || 0})">Update Production Status</button>
                         <button type="button" class="btn btn-secondary btn-small" onclick="saveAdminProductionDetails(${Number(order.id) || 0})">Save ETA / Remarks</button>
+                        <button type="button" class="btn btn-secondary btn-small" onclick="checkOrderEmailDelivery(${Number(order.id) || 0})">Check Email Status</button>
                         ${order.paymentStatus === 'verified' ? '' : `<button type="button" class="btn btn-secondary btn-small" onclick="verifyAdminOrderPayment(${Number(order.id) || 0})">Verify Payment</button>`}
                     </div>
                     <label class="production-admin-remarks">Upload final design<input id="finalDesignFile-${Number(order.id) || 0}" type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" onchange="uploadFinalOrderDesign(${Number(order.id) || 0}, this)"></label>
                 </div>
+                <p id="emailDeliveryStatus-${Number(order.id) || 0}" role="status"></p>
                 <p><strong>Design approval:</strong> ${escapeDetailText(String(order.designApproval?.status || 'not-requested').replace(/-/g, ' '))}</p>
             </section>${buildProductionTrackingHtml(order)}`
             : '';

@@ -20,6 +20,8 @@ exports.handler = async function handler(event) {
     if (!authentication.ok) return jsonResponse(authentication.statusCode, { error: authentication.error });
     if (authentication.claims.role !== 'admin') return jsonResponse(403, { error: 'Admin access required.' });
 
+    let emailStore;
+    let failureKey;
     try {
         const { orderId, eventId } = JSON.parse(event.body || '{}');
         if (!orderId || !eventId) return jsonResponse(400, { error: 'Order and production event are required.' });
@@ -31,12 +33,13 @@ exports.handler = async function handler(event) {
         const productionEvent = (order.productionNotifications || []).find(item => item.id === eventId && item.type === 'stage-update');
         if (!productionEvent?.status) return jsonResponse(404, { error: 'Production email event not found.' });
 
-        const emailStore = getStore('kingpin-production-email-status');
+        emailStore = getStore('kingpin-production-email-status');
+        failureKey = `failed-${String(orderId)}-${String(eventId)}`;
         const sentKey = `sent-${String(orderId)}-${String(eventId)}`;
         if (await emailStore.get(sentKey, { type: 'json' })) return jsonResponse(200, { ok: true, duplicate: true });
 
         const email = String(order.customerEmail || '').trim();
-        if (!email) return jsonResponse(400, { error: 'Customer email is missing.' });
+        if (!email) { await emailStore.setJSON(failureKey, { reason: 'missing_customer_email', at: new Date().toISOString() }); console.error('Production email: customer email is missing.'); return jsonResponse(400, { error: 'Customer email is missing.' }); }
 
         const label = String(productionEvent.statusLabel || productionEvent.status).replace(/-/g, ' ');
         const subject = `KingPin Order #${order.id}: ${label}`;
@@ -64,13 +67,16 @@ exports.handler = async function handler(event) {
             });
             if (!response.ok) throw new Error(`Email provider returned ${response.status}`);
         } else {
+            await emailStore.setJSON(failureKey, { reason: 'email_not_configured', at: new Date().toISOString() });
+            console.error('Production email is not configured for this function.');
             return jsonResponse(503, { error: 'Production email is not configured.' });
         }
 
-        await emailStore.setJSON(sentKey, { sentAt: new Date().toISOString() });
+        try { await emailStore.setJSON(sentKey, { sentAt: new Date().toISOString() }); } catch (error) { console.error('Production email was accepted by the provider, but delivery status could not be recorded.', error); }
         return jsonResponse(200, { ok: true });
     } catch (error) {
         console.error('Production email background function failed:', error);
-        return jsonResponse(502, { error: 'Production email could not be sent.' });
+        if (emailStore && failureKey) { try { await emailStore.setJSON(failureKey, { reason: 'provider_or_processing_error', at: new Date().toISOString() }); } catch (statusError) { console.error('Unable to record email failure.', statusError); } }
+        throw error; // A thrown failure permits Netlify background retries.
     }
 };

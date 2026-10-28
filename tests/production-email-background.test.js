@@ -31,6 +31,7 @@ require.cache[nodemailerPath] = {
 
 const { signAccessToken } = require('../netlify/functions/lib/auth.js');
 const { handler } = require('../netlify/functions/production-email-background.js');
+const { handler: statusHandler } = require('../netlify/functions/production-email-status.js');
 const adminToken = signAccessToken({ sub: 'admin', role: 'admin' });
 
 async function run() {
@@ -90,6 +91,28 @@ async function run() {
   assert.match(resendPayload.html, /Quality Checking/);
   assert.match(resendPayload.html, /PHP 800\.00/);
   assert.match(resendPayload.html, /product-image/);
+  global.fetch = originalFetch;
+  delete process.env.RESEND_API_KEY; delete process.env.RESEND_FROM_EMAIL;
+  order.productionNotifications.push({ id: 'event-3', type: 'stage-update', status: 'printing', statusLabel: 'Printing' });
+  await orderStore.setJSON('order-450', order);
+  const missing = await handler({ ...event, body: JSON.stringify({ orderId: 450, eventId: 'event-3' }) });
+  assert.strictEqual(missing.statusCode, 503);
+  const statusEvent = { httpMethod: 'GET', headers: { authorization: `Bearer ${adminToken}` }, queryStringParameters: { orderId: '450' } };
+  assert.strictEqual((await statusHandler({ ...statusEvent, headers: {} })).statusCode, 401);
+  const customerToken = signAccessToken({ sub: 'customer@example.com', role: 'customer' });
+  assert.strictEqual((await statusHandler({ ...statusEvent, headers: { authorization: `Bearer ${customerToken}` } })).statusCode, 403);
+  const status = JSON.parse((await statusHandler(statusEvent)).body);
+  assert.strictEqual(status.configured, false);
+  assert.strictEqual(status.deliveries.find(item => item.eventId === 'event-1').state, 'provider_accepted');
+  assert.strictEqual(status.deliveries.find(item => item.eventId === 'event-3').reason, 'email_not_configured');
+  assert.ok(!JSON.stringify(status).includes('customer@example.com'));
+  process.env.RESEND_API_KEY = 'test-api-key'; process.env.RESEND_FROM_EMAIL = 'orders@example.com';
+  global.fetch = async () => ({ ok: false, status: 500 });
+  order.productionNotifications.push({ id: 'event-4', type: 'stage-update', status: 'printing' });
+  await orderStore.setJSON('order-450', order);
+  await assert.rejects(() => handler({ ...event, body: JSON.stringify({ orderId: 450, eventId: 'event-4' }) }), /Email provider returned 500/);
+  const failed = JSON.parse((await statusHandler(statusEvent)).body).deliveries.find(item => item.eventId === 'event-4');
+  assert.strictEqual(failed.reason, 'provider_or_processing_error');
   global.fetch = originalFetch;
   console.log('production email background tests passed');
 }
