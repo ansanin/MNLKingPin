@@ -4355,18 +4355,6 @@ body.light-mode .floating-back-button button:hover {
     padding-right: 6px;
 }
 
-#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-image-gallery {
-    height: 88px;
-    flex: 0 0 88px;
-}
-
-#customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-image {
-    height: 88px;
-    min-height: 88px;
-    flex: 0 0 100%;
-    aspect-ratio: auto;
-}
-
 #customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-info {
     display: flex;
     flex-direction: column;
