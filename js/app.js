@@ -367,18 +367,25 @@ async function saveOrderToSharedServer(order, action = 'customer-update') {
         ? ['api/orders.php', 'api/orders', '/.netlify/functions/orders']
         : ['api/orders', '/.netlify/functions/orders', 'api/orders.php'];
     for (const endpoint of endpoints) {
+        let response;
         try {
-            const response = await fetch(endpoint, {
+            response = await fetch(endpoint, {
                 method: 'POST',
                 headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ action, order })
             });
-            if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) continue;
-            const result = await response.json();
-            if (result.ok === true) return result.order || true;
         } catch (error) {
-            console.warn(`Unable to save shared order to ${endpoint}:`, error);
+            if (action === 'create') throw new Error('Could not confirm whether your order was saved. Check My Orders before trying again.');
+            continue;
         }
+        if ([404, 405].includes(response.status)) continue;
+        const isJson = (response.headers.get('content-type') || '').includes('application/json');
+        const result = isJson ? await response.json().catch(() => ({})) : {};
+        if (response.status === 401) throw new Error('Your session has expired. Please sign in again and retry.');
+        if (response.status === 413) throw new Error('The order attachments are too large. Please upload smaller files.');
+        if (!response.ok) throw new Error(result.error || `Order service error (${response.status}). Please try again.`);
+        if (result.ok === true) return result.order || true;
+        if (action === 'create') throw new Error('Could not confirm whether your order was saved. Check My Orders before trying again.');
     }
     throw new Error('Shared order API unavailable');
 }
@@ -4392,7 +4399,7 @@ async function processCustomerOrder() {
             if (savedOrder && typeof savedOrder === 'object') Object.assign(orderData, savedOrder);
         } catch (error) {
             console.error('Unable to deliver order to admin:', error);
-            throw new Error('Hindi naipadala ang order sa admin. Pakisubukan muli; hindi muna inalis ang laman ng cart.');
+            throw error;
         }
         if (orderData.gcashQRCode && String(orderData.gcashQRCode).startsWith('data:image/')) {
             orderData.gcashQRCodeUrl = `/.netlify/functions/order-design?orderId=${orderData.id}&media=gcash-qr`;

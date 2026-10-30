@@ -282,8 +282,11 @@ exports.handler = async function handler(event) {
         if (action === 'create') {
             if (claims.role !== 'customer') return jsonResponse(403, { error: 'Customer access required.' });
             const order = payload.order;
-            if (!order?.id || !order.customerEmail || String(order.customerEmail).toLowerCase() !== String(claims.sub).toLowerCase()) {
+            if (!order?.id || !order.customerEmail) {
                 return jsonResponse(400, { error: 'A valid order for the signed-in customer is required.' });
+            }
+            if (String(order.customerEmail).trim().toLowerCase() !== String(claims.sub).trim().toLowerCase()) {
+                return jsonResponse(400, { error: 'The checkout email must match the email you used to sign in.' });
             }
             const teamOrder = normalizeTeamOrderInput(order.teamOrder);
             if (teamOrder.isTeamOrder) {

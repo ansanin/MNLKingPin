@@ -1,0 +1,26 @@
+const assert = require('assert');
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync(require('path').join(__dirname, '../js/app.js'), 'utf8');
+const begin = source.indexOf('async function saveOrderToSharedServer(');
+const end = source.indexOf('\nasync function refreshCustomerProfile', begin);
+assert(begin >= 0 && end > begin);
+let calls = 0;
+let fetchImpl;
+const context = { window: { location: { hostname: 'example.com' } }, getAuthenticatedHeaders: () => ({}), fetch: (...args) => { calls++; return fetchImpl(...args); } };
+vm.runInNewContext(source.slice(begin, end), context);
+const response = (status, body) => ({ status, ok: status >= 200 && status < 300, headers: { get: () => 'application/json' }, json: async () => body });
+(async () => {
+  fetchImpl = async () => response(400, { error: 'Email does not match.' });
+  await assert.rejects(() => context.saveOrderToSharedServer({}, 'create'), /Email does not match/);
+  assert.strictEqual(calls, 1);
+  calls = 0;
+  fetchImpl = async () => { throw new Error('connection lost'); };
+  await assert.rejects(() => context.saveOrderToSharedServer({}, 'create'), /Check My Orders/);
+  assert.strictEqual(calls, 1);
+  calls = 0;
+  fetchImpl = async () => calls === 1 ? response(404, {}) : response(201, { ok: true, order: { id: 12 } });
+  assert.strictEqual((await context.saveOrderToSharedServer({}, 'create')).id, 12);
+  assert.strictEqual(calls, 2);
+  console.log('Order submission tests passed');
+})().catch(error => { console.error(error); process.exitCode = 1; });
