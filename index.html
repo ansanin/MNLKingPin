@@ -665,6 +665,7 @@
                         <button class="btn btn-secondary" onclick="showAdminTab('products')">Products</button>
                         <button class="btn btn-secondary notification-btn" onclick="showAdminTab('orders')">Orders <span class="notification-badge" data-notification-badge="admin-orders" style="display:none;">0</span></button>
                         <button class="btn btn-secondary notification-btn" onclick="showAdminTab('messages')">Messages <span class="notification-badge" data-notification-badge="admin-messages" style="display:none;">0</span></button>
+                        <button class="btn btn-secondary" onclick="showAdminTab('customers')">Customers</button>
                         <button class="btn btn-secondary" onclick="showAdminTab('history')">History</button>
                         <button class="btn btn-secondary" onclick="showAdminTab('reports')">Reports</button>
                         <button class="btn btn-secondary" onclick="showAdminTab('settings')">Settings</button>
@@ -1039,9 +1040,9 @@
 
             <!-- Customer Database Management -->
             <div id="customersTab" class="admin-tab" style="display: none;">
-                <h2>Customer Database</h2>
+                <h2>Customer List</h2>
                 <div class="history-controls">
-                    <input type="text" id="customerSearch" placeholder="Search by name or email..." class="search-input">
+                    <input type="search" id="customerSearch" placeholder="Search customers by name..." aria-label="Search customers by name" class="search-input" oninput="renderCustomersTable()">
                     <button class="btn btn-secondary" onclick="exportCustomersToCSV()">📥 Export Customers</button>
                 </div>
                 <div class="orders-table">
@@ -1052,10 +1053,6 @@
                                 <th>Email</th>
                                 <th>Phone</th>
                                 <th>Total Orders</th>
-                                <th>Total Spent</th>
-                                <th>Last Order</th>
-                                <th>Measurements</th>
-                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="customersList">
@@ -1449,7 +1446,7 @@
     <script src="js/team-order.js?v=20261019-team-order-3"></script>
     <script src="js/production-tracking.js?v=20261015-production-1"></script>
     <script src="js/order-media.js?v=20261019-multi-design-1"></script>
-    <script src="js/app.js?v=20261029-email-status-1"></script>
+    <script src="js/app.js?v=20261030-customer-list-1"></script>
     <script src="js/storefront.js"></script>
     <script src="js/design-interface.js?v=20261020-hide-upload-filenames-1"></script>
     <script>

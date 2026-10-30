@@ -2169,6 +2169,7 @@ function showAdminTab(tabName) {
     document.getElementById('productsTab').style.display = tabName === 'products' ? 'block' : 'none';
     document.getElementById('ordersTab').style.display = tabName === 'orders' ? 'block' : 'none';
     document.getElementById('messagesTab').style.display = tabName === 'messages' ? 'block' : 'none';
+    document.getElementById('customersTab').style.display = tabName === 'customers' ? 'block' : 'none';
     document.getElementById('historyTab').style.display = tabName === 'history' ? 'block' : 'none';
     document.getElementById('reportsTab').style.display = tabName === 'reports' ? 'block' : 'none';
     document.getElementById('settingsTab').style.display = tabName === 'settings' ? 'block' : 'none';
@@ -2192,6 +2193,8 @@ function showAdminTab(tabName) {
         loadAdminOrders();
     } else if (tabName === 'messages') {
         loadAdminMessages();
+    } else if (tabName === 'customers') {
+        loadCustomersTable();
     } else if (tabName === 'history') {
         loadHistoryTable();
     } else if (tabName === 'reports') {
@@ -6489,95 +6492,44 @@ function updateShowAdminTab() {
     // This function is deprecated - using main showAdminTab instead
 }
 
-// Load Customers Table
-function loadCustomersTable() {
-    const customersList = document.getElementById('customersList');
-    const orders = getReportOrders().slice().sort((first, second) => new Date(first.date) - new Date(second.date));
-    const customersByEmail = new Map();
-    orders.forEach(order => {
-        const email = normalizeCustomerEmail(order.customerEmail);
-        if (!email) return;
-        const customer = customersByEmail.get(email) || {
-            email,
-            name: order.customerName || '',
-            phone: order.customerPhone || '',
-            address: order.customerAddress || '',
-            measurements: order.measurements || {},
-            registrationDate: order.date,
-            lastOrderDate: order.date,
-            totalOrders: 0,
-            totalSpent: 0,
-            orderHistory: []
-        };
-        customer.name = order.customerName || customer.name;
-        customer.phone = order.customerPhone || customer.phone;
-        customer.address = order.customerAddress || customer.address;
-        customer.lastOrderDate = order.date || customer.lastOrderDate;
-        customer.totalOrders += 1;
-        customer.totalSpent += Number(order.totalAmount) || 0;
-        customer.orderHistory.push({ orderId: order.id, date: order.date, amount: Number(order.totalAmount) || 0, status: order.status });
-        if (order.measurements?.chest && order.measurements.chest !== 'Not provided') customer.measurements = order.measurements;
-        customersByEmail.set(email, customer);
-    });
-    const customers = Array.from(customersByEmail.values());
-    appData.customers = customers;
+// Load the registered customer list from the server.
+async function loadCustomersTable() {
+    const list = document.getElementById('customersList');
+    list.innerHTML = '<tr><td colspan="4">Loading customers...</td></tr>';
+    appData.customers = [];
+    try {
+        const response = await fetch('/.netlify/functions/customers', { headers: getAuthenticatedHeaders(), cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Unable to load customers.');
+        appData.customers = Array.isArray(result.customers) ? result.customers : [];
+        renderCustomersTable();
+    } catch (error) {
+        list.replaceChildren();
+        const row = list.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = 4;
+        cell.textContent = error.message || 'Unable to load customers.';
+    }
+}
 
-    customersList.innerHTML = '';
-
-    if (customers.length === 0) {
-        customersList.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No customers yet</td></tr>';
+function renderCustomersTable() {
+    const list = document.getElementById('customersList');
+    const query = document.getElementById('customerSearch').value.trim().toLowerCase();
+    const customers = appData.customers.filter(customer => String(customer.name || '').toLowerCase().includes(query));
+    list.replaceChildren();
+    if (!customers.length) {
+        const row = list.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = 4;
+        cell.textContent = query ? 'No matching customers.' : 'No registered customers yet.';
         return;
     }
-
-    customers.forEach((customer, index) => {
-        const row = document.createElement('tr');
-        const measurements = customer.measurements ? 
-            `C: ${customer.measurements.chest}, W: ${customer.measurements.waist}, L: ${customer.measurements.length}` : 
-            'Not provided';
-        
-        row.innerHTML = `
-            <td>${customer.name}</td>
-            <td>${customer.email}</td>
-            <td>${customer.phone}</td>
-            <td><strong>${customer.totalOrders}</strong></td>
-            <td>₱${customer.totalSpent.toFixed(2)}</td>
-            <td>${customer.lastOrderDate}</td>
-            <td style="font-size: 0.85em;">${measurements}</td>
-            <td>
-                <button class="btn-edit" onclick="viewCustomerDetails(${index})">View</button>
-            </td>
-        `;
-        customersList.appendChild(row);
-    });
-
-    setupCustomerSearch();
-}
-
-// View Customer Details
-function viewCustomerDetails(index) {
-    const customer = appData.customers[index];
-    if (!customer) return;
-    
-    const orderHistory = customer.orderHistory ? 
-        customer.orderHistory.map(o => `#${o.orderId} (${o.date}: ₱${o.amount.toFixed(2)})`).join(', ') :
-        'No orders';
-    
-    showStatusUpdateToast(`CUSTOMER PROFILE\n\nName: ${customer.name}\nEmail: ${customer.email}\nPhone: ${customer.phone}\nAddress: ${customer.address}\n\nMeasurements:\nChest: ${customer.measurements?.chest || 'N/A'}cm\nWaist: ${customer.measurements?.waist || 'N/A'}cm\nLength: ${customer.measurements?.length || 'N/A'}cm\n\nTotal Orders: ${customer.totalOrders}\nTotal Spent: ₱${customer.totalSpent.toFixed(2)}\nReg Date: ${customer.registrationDate}\nLast Order: ${customer.lastOrderDate}`);
-}
-
-// Setup Customer Search
-function setupCustomerSearch() {
-    const searchInput = document.getElementById('customerSearch');
-    if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            const searchTerm = this.value.toLowerCase();
-            const rows = document.getElementById('customersList').querySelectorAll('tr');
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(searchTerm) ? '' : 'none';
-            });
+    customers.forEach(customer => {
+        const row = list.insertRow();
+        [customer.name, customer.email, customer.phone || 'Not provided', customer.totalOrders].forEach(value => {
+            row.insertCell().textContent = String(value ?? '');
         });
-    }
+    });
 }
 
 // Export Customers to CSV
@@ -6589,13 +6541,13 @@ function exportCustomersToCSV() {
         return;
     }
 
-    let csv = 'Name,Email,Phone,Address,Total Orders,Total Spent,Measurements,Registration Date\n';
-
+    const csvCell = value => {
+        const text = String(value ?? '');
+        return '"' + (/^[\s]*[=+@\-\t\r]/.test(text) ? "'" : '') + text.replace(/"/g, '""') + '"';
+    };
+    let csv = 'Name,Email,Phone,Total Orders\n';
     customers.forEach(customer => {
-        const measurements = customer.measurements ? 
-            `Chest:${customer.measurements.chest}cm Waist:${customer.measurements.waist}cm Length:${customer.measurements.length}cm` :
-            'Not provided';
-        csv += `"${customer.name}","${customer.email}","${customer.phone}","${customer.address}",${customer.totalOrders},${customer.totalSpent},"${measurements}","${customer.registrationDate}"\n`;
+        csv += [customer.name, customer.email, customer.phone, customer.totalOrders].map(csvCell).join(',') + '\n';
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

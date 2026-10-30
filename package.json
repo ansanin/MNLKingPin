@@ -4,7 +4,7 @@
   "description": "A complete web-based clothing e-commerce and inventory management system with separate customer and admin dashboards.",
   "main": "server.js",
   "scripts": {
-    "test": "node tests/team-order.test.js && node tests/order-attachments.test.js && node tests/order-media.test.js && node tests/auth.test.js && node tests/production-tracking.test.js && node tests/order-production.test.js && node tests/production-email-background.test.js",
+    "test": "node tests/team-order.test.js && node tests/order-attachments.test.js && node tests/order-media.test.js && node tests/auth.test.js && node tests/production-tracking.test.js && node tests/order-production.test.js && node tests/production-email-background.test.js && node tests/customers.test.js",
     "start": "node server.js"
   },
   "keywords": [],
