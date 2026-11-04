@@ -7365,6 +7365,36 @@ body.light-mode .footer-social-link:focus-visible {
     object-fit: contain;
 }
 
+.team-player-fields {
+    display: grid;
+    gap: 12px;
+}
+
+.team-player-card {
+    min-width: 0;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid #665a32;
+    border-radius: 6px;
+}
+
+.team-player-card legend {
+    padding: 0 6px;
+    color: #d4af37;
+    font-weight: 700;
+}
+
+.team-player-input-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+    gap: 10px;
+}
+
+.team-player-input-grid .form-group {
+    min-width: 0;
+    margin-bottom: 0;
+}
+
 .product-size-picker {
     margin: 16px 0;
 }

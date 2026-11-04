@@ -41,14 +41,35 @@ $teamOrder = $order['teamOrder'] ?? [];
 if (!empty($teamOrder['isTeamOrder'])) {
     $totalPlayers = filter_var($teamOrder['totalPlayers'] ?? null, FILTER_VALIDATE_INT);
     $teamNotes = trim((string) ($teamOrder['teamNotes'] ?? ''));
+    $teamSizes = is_array($teamOrder['teamSizes'] ?? null) ? $teamOrder['teamSizes'] : [];
     if ($totalPlayers === false || $totalPlayers < 5) {
         http_response_code(400);
         echo json_encode(['error' => 'Team orders require at least 5 players.']);
         exit;
     }
-    if ($teamNotes === '') {
+    $playerDetailsValid = count($teamSizes) === $totalPlayers;
+    foreach ($teamSizes as $index => $player) {
+        if (!is_array($player)) {
+            $playerDetailsValid = false;
+            break;
+        }
+        $jerseyNumber = filter_var($player['jerseyNumber'] ?? null, FILTER_VALIDATE_INT);
+        if (
+            (int) ($player['player'] ?? 0) !== $index + 1
+            || trim((string) ($player['surname'] ?? '')) === ''
+            || $jerseyNumber === false
+            || $jerseyNumber < 0
+            || $jerseyNumber > 99
+            || trim((string) ($player['topSize'] ?? '')) === ''
+            || trim((string) ($player['bottomSize'] ?? '')) === ''
+        ) {
+            $playerDetailsValid = false;
+            break;
+        }
+    }
+    if (($teamSizes && !$playerDetailsValid) || (!$teamSizes && $teamNotes === '')) {
         http_response_code(400);
-        echo json_encode(['error' => 'Exact player sizes and team notes are required.']);
+        echo json_encode(['error' => 'Surname, jersey number, upper size, and lower size for every player are required.']);
         exit;
     }
 

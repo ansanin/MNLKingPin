@@ -4136,6 +4136,7 @@ document.addEventListener('DOMContentLoaded', function() {
             teamPlayersField.value = teamPlayersField.value || String(MIN_TEAM_PLAYERS);
         }
         teamPlayersField.addEventListener('input', () => {
+            renderTeamPlayerFields();
             updateCartDisplay();
             updateCheckoutDisplay();
         });
@@ -4153,8 +4154,7 @@ function toggleTeamOrderFields() {
     const fields = [
         document.getElementById('teamName'),
         document.getElementById('teamType'),
-        teamPlayersField,
-        document.getElementById('teamNotes')
+        teamPlayersField
     ];
 
     const isChecked = Boolean(checkbox && checkbox.checked);
@@ -4176,9 +4176,84 @@ function toggleTeamOrderFields() {
         }
     }
 
+    renderTeamPlayerFields();
     renderTeamCategorySizeChart();
     updateCartDisplay();
     updateCheckoutDisplay();
+}
+
+const teamPlayerFieldValues = new Map();
+
+function renderTeamPlayerFields() {
+    const container = document.getElementById('teamPlayerFields');
+    const playerCount = Number(document.getElementById('teamPlayers')?.value);
+    if (!container) return;
+
+    container.querySelectorAll('[data-player-field]').forEach(field => {
+        teamPlayerFieldValues.set(`${field.dataset.player}-${field.dataset.playerField}`, field.value);
+    });
+
+    container.replaceChildren();
+    if (!Number.isInteger(playerCount) || playerCount < MIN_TEAM_PLAYERS) return;
+
+    const isTeamOrder = Boolean(document.getElementById('isTeamOrder')?.checked);
+    const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
+    for (let player = 1; player <= playerCount; player += 1) {
+        const card = document.createElement('fieldset');
+        card.className = 'team-player-card';
+        card.disabled = !isTeamOrder;
+
+        const legend = document.createElement('legend');
+        legend.textContent = `Player ${player}`;
+        card.appendChild(legend);
+
+        const fields = document.createElement('div');
+        fields.className = 'team-player-input-grid';
+        [
+            { key: 'surname', label: 'Surname', type: 'text', placeholder: 'Surname' },
+            { key: 'jerseyNumber', label: 'Jersey number', type: 'number', placeholder: '0-99', min: '0', max: '99' },
+            { key: 'topSize', label: 'Upper size', type: 'select' },
+            { key: 'bottomSize', label: 'Lower size', type: 'select' }
+        ].forEach(definition => {
+            const group = document.createElement('div');
+            group.className = 'form-group';
+            const label = document.createElement('label');
+            const field = definition.type === 'select'
+                ? document.createElement('select')
+                : document.createElement('input');
+            const id = `teamPlayer${player}${definition.key}`;
+            label.htmlFor = id;
+            label.textContent = definition.label;
+            field.id = id;
+            field.dataset.player = String(player);
+            field.dataset.playerField = definition.key;
+            field.required = true;
+            if (definition.type === 'select') {
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = '-- Select size --';
+                field.appendChild(placeholder);
+                sizeOptions.forEach(size => {
+                    const option = document.createElement('option');
+                    option.value = size;
+                    option.textContent = size;
+                    field.appendChild(option);
+                });
+            } else {
+                field.type = definition.type;
+                field.placeholder = definition.placeholder;
+                if (definition.min) field.min = definition.min;
+                if (definition.max) field.max = definition.max;
+                if (definition.type === 'text') field.maxLength = 80;
+            }
+            field.value = teamPlayerFieldValues.get(`${player}-${definition.key}`) || '';
+            group.append(label, field);
+            fields.appendChild(group);
+        });
+
+        card.appendChild(fields);
+        container.appendChild(card);
+    }
 }
 
 function placeCustomerOrder(event) {
@@ -4233,13 +4308,27 @@ async function processCustomerOrder() {
     const checkoutBottomSize = document.getElementById('checkoutBottomSize') ? document.getElementById('checkoutBottomSize').value.trim() : '';
     const checkoutColor = document.getElementById('checkoutColor') ? document.getElementById('checkoutColor').value.trim() : '';
     const paymentMethod = document.getElementById('paymentMethod').value;
+    const totalTeamPlayers = Number(document.getElementById('teamPlayers')?.value);
+    const teamSizes = [];
+    if (Number.isInteger(totalTeamPlayers) && totalTeamPlayers >= MIN_TEAM_PLAYERS) {
+        for (let player = 1; player <= totalTeamPlayers; player += 1) {
+            const getValue = field => document.querySelector(`#teamPlayerFields [data-player="${player}"][data-player-field="${field}"]`)?.value || '';
+            teamSizes.push({
+                player,
+                surname: getValue('surname'),
+                jerseyNumber: getValue('jerseyNumber'),
+                topSize: getValue('topSize'),
+                bottomSize: getValue('bottomSize')
+            });
+        }
+    }
     const teamOrderInput = normalizeTeamOrderInput({
         isTeamOrder: document.getElementById('isTeamOrder') ? document.getElementById('isTeamOrder').checked : false,
         teamName: document.getElementById('teamName') ? document.getElementById('teamName').value : '',
         teamType: document.getElementById('teamType') ? document.getElementById('teamType').value : '',
-        totalPlayers: document.getElementById('teamPlayers') ? document.getElementById('teamPlayers').value : 0,
-        teamSizes: [],
-        teamNotes: document.getElementById('teamNotes') ? document.getElementById('teamNotes').value : ''
+        totalPlayers: totalTeamPlayers,
+        teamSizes,
+        teamNotes: ''
     });
 
     const missingFields = [];
@@ -4267,7 +4356,9 @@ async function processCustomerOrder() {
         if (!teamOrderInput.teamName) missingFields.push('team name');
         if (!teamOrderInput.teamType) missingFields.push('team category');
         if (!isValidTeamPlayerCount(teamOrderInput.totalPlayers)) missingFields.push(`at least ${MIN_TEAM_PLAYERS} team players`);
-        if (!teamOrderInput.teamNotes) missingFields.push('exact sizes and required team notes');
+        if (!areTeamPlayerDetailsComplete(teamOrderInput.teamSizes, teamOrderInput.totalPlayers)) {
+            missingFields.push('surname, jersey number (0-99), upper size, and lower size for every player');
+        }
     }
 
     const incompleteItems = getIncompleteCartItems(checkoutSize, checkoutColor);
@@ -4524,7 +4615,7 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
     }).join('');
     const measurements = order.measurements || {};
     const teamSizesHtml = order.teamOrder && Array.isArray(order.teamOrder.teamSizes) && order.teamOrder.teamSizes.length
-        ? `<div style="margin-top: 12px; padding: 10px; border: 1px solid #d4af37; border-radius: 6px; background: rgba(212, 175, 55, 0.08);"><strong>Team Player Sizes:</strong><br>${buildTeamSizeSummary(order.teamOrder.teamSizes)}</div>`
+        ? `<div style="margin-top: 12px; padding: 10px; border: 1px solid #d4af37; border-radius: 6px; background: rgba(212, 175, 55, 0.08);"><strong>Team Player Details:</strong><br>${escapeProductionHtml(buildTeamSizeSummary(order.teamOrder.teamSizes))}</div>`
         : '';
     const teamNotesHtml = order.teamOrder?.teamNotes
         ? `<div style="margin-top: 12px; padding: 10px; border: 1px solid #d4af37; border-radius: 6px;"><strong>Team Notes:</strong><br>${escapeProductionHtml(order.teamOrder.teamNotes)}</div>`
@@ -4815,13 +4906,13 @@ function loadCustomerOrders() {
                     <h4>Player sizes</h4>
                     <div class="customer-order-team-size-grid">
                         ${teamOrder.teamSizes.map(size => `<div class="customer-order-team-size">
-                            <strong>Player ${size.player}</strong>
+                            <strong>Player ${size.player}${size.surname ? ` — ${escapeProductionHtml(size.surname)}` : ''}${size.jerseyNumber ? ` (#${escapeProductionHtml(size.jerseyNumber)})` : ''}</strong>
                             <span><small>Upper</small>${escapeProductionHtml(size.topSize || '—')}</span>
-                            <span><small>Bottom</small>${escapeProductionHtml(size.bottomSize || '—')}</span>
+                            <span><small>Lower</small>${escapeProductionHtml(size.bottomSize || '—')}</span>
                         </div>`).join('')}
                     </div>
                 </div>` : ''}
-                ${teamOrder.teamNotes ? `<div class="customer-order-team-notes"><h4>Team notes</h4><p>${escapeProductionHtml(teamOrder.teamNotes)}</p></div>` : ''}
+                ${!teamOrder.teamSizes.length && teamOrder.teamNotes ? `<div class="customer-order-team-notes"><h4>Team notes</h4><p>${escapeProductionHtml(teamOrder.teamNotes)}</p></div>` : ''}
             </section>`
             : '';
         const measurements = order.measurements;
@@ -6269,9 +6360,9 @@ function viewOrderDetails(orderStr) {
                 </div>
                 ${teamOrder.teamSizes.length ? `<div class="admin-order-team-sizes">
                     <strong>Player Sizes</strong>
-                    ${teamOrder.teamSizes.map(size => `<div class="admin-order-team-size-row"><strong>Player ${size.player}</strong><span>Upper: ${escapeDetailText(size.topSize || 'N/A')}</span><span>Bottom: ${escapeDetailText(size.bottomSize || 'N/A')}</span></div>`).join('')}
+                    ${teamOrder.teamSizes.map(size => `<div class="admin-order-team-size-row"><strong>Player ${size.player}${size.surname ? ` — ${escapeDetailText(size.surname)}` : ''}${size.jerseyNumber ? ` (#${escapeDetailText(size.jerseyNumber)})` : ''}</strong><span>Upper: ${escapeDetailText(size.topSize || 'N/A')}</span><span>Lower: ${escapeDetailText(size.bottomSize || 'N/A')}</span></div>`).join('')}
                 </div>` : ''}
-                ${teamOrder.teamNotes ? `<div class="admin-order-team-notes"><strong>Notes</strong><div>${escapeDetailText(teamOrder.teamNotes)}</div></div>` : ''}
+                ${!teamOrder.teamSizes.length && teamOrder.teamNotes ? `<div class="admin-order-team-notes"><strong>Team Notes</strong><div>${escapeDetailText(teamOrder.teamNotes)}</div></div>` : ''}
             </div>`
             : '';
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);

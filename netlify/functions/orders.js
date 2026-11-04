@@ -1,7 +1,7 @@
 const { connectLambda, getStore } = require('@netlify/blobs');
 const { authenticateEvent, signAccessToken } = require('./lib/auth');
 const { PRODUCTION_STAGES, normalizeProductionStatus, validateProductionTransition } = require('../../js/production-tracking');
-const { MIN_TEAM_PLAYERS, isValidTeamPlayerCount, normalizeTeamOrderInput } = require('../../js/team-order');
+const { MIN_TEAM_PLAYERS, isValidTeamPlayerCount, areTeamPlayerDetailsComplete, normalizeTeamOrderInput } = require('../../js/team-order');
 
 function jsonResponse(statusCode, body) {
     return {
@@ -293,7 +293,11 @@ exports.handler = async function handler(event) {
                 if (!isValidTeamPlayerCount(teamOrder.totalPlayers)) {
                     return jsonResponse(400, { error: `Team orders require at least ${MIN_TEAM_PLAYERS} players.` });
                 }
-                if (!teamOrder.teamNotes) return jsonResponse(400, { error: 'Exact player sizes and team notes are required.' });
+                if (teamOrder.teamSizes.length
+                    ? !areTeamPlayerDetailsComplete(teamOrder.teamSizes, teamOrder.totalPlayers)
+                    : !teamOrder.teamNotes) {
+                    return jsonResponse(400, { error: 'Surname, jersey number, upper size, and lower size for every player are required.' });
+                }
                 order.teamOrder = teamOrder;
                 order.totalAmount = (order.items || []).reduce((sum, item) => {
                     const unitPrice = Number(item.price);

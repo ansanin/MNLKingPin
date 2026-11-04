@@ -11,13 +11,16 @@
             return value
                 .map(item => {
                     const legacySize = String(item && item.size || '').trim();
+                    const jerseyNumber = item && (item.jerseyNumber ?? item.number);
                     return {
                         player: Number(item && item.player),
+                        surname: String(item && item.surname || '').trim(),
+                        jerseyNumber: String(jerseyNumber ?? '').trim(),
                         topSize: String(item && (item.topSize || item.upperSize) || legacySize).trim(),
                         bottomSize: String(item && item.bottomSize || '').trim()
                     };
                 })
-                .filter(item => Number.isFinite(item.player) && item.player > 0 && (item.topSize || item.bottomSize));
+                .filter(item => Number.isInteger(item.player) && item.player > 0);
         }
 
         if (typeof value === 'string') {
@@ -36,6 +39,8 @@
                 return matches
                     .map(match => ({
                         player: Number(match[1]),
+                        surname: '',
+                        jerseyNumber: '',
                         topSize: String(match[2]).trim(),
                         bottomSize: ''
                     }))
@@ -81,7 +86,29 @@
             return '';
         }
 
-        return normalized.map(item => `Player ${item.player}: Upper ${item.topSize || '—'} / Bottom ${item.bottomSize || '—'}`).join(' • ');
+        return normalized.map(item => {
+            const name = item.surname ? `: ${item.surname}` : '';
+            const number = item.jerseyNumber ? ` (#${item.jerseyNumber})` : '';
+            return `Player ${item.player}${name}${number}: Upper ${item.topSize || '—'} / Lower ${item.bottomSize || '—'}`;
+        }).join(' • ');
+    }
+
+    function areTeamPlayerDetailsComplete(teamSizes, totalPlayers) {
+        const normalized = parseTeamSizes(teamSizes);
+        const count = Number(totalPlayers);
+        if (!isValidTeamPlayerCount(count) || normalized.length !== count) return false;
+
+        return normalized.every((item, index) => {
+            const jerseyNumber = Number(item.jerseyNumber);
+            return item.player === index + 1
+                && Boolean(item.surname)
+                && /^\d+$/.test(item.jerseyNumber)
+                && Number.isInteger(jerseyNumber)
+                && jerseyNumber >= 0
+                && jerseyNumber <= 99
+                && Boolean(item.topSize)
+                && Boolean(item.bottomSize);
+        });
     }
 
     function buildTeamOrderLabel(input) {
@@ -95,7 +122,7 @@
         const teamType = normalized.teamType ? ` • ${normalized.teamType}` : '';
         const playerCount = normalized.totalPlayers > 0 ? ` • ${normalized.totalPlayers} players` : '';
         const sizeSummary = normalized.teamSizes.length
-            ? ` • sizes: ${normalized.teamSizes.map(item => `${item.player}:U${item.topSize || '—'}/B${item.bottomSize || '—'}`).join(', ')}`
+            ? ` • sizes: ${normalized.teamSizes.map(item => `${item.player}${item.surname ? `:${item.surname}` : ''}${item.jerseyNumber ? `#${item.jerseyNumber}` : ''}:U${item.topSize || '—'}/L${item.bottomSize || '—'}`).join(', ')}`
             : '';
 
         return `${teamName}${teamType}${playerCount}${sizeSummary}`;
@@ -104,6 +131,7 @@
     const api = {
         MIN_TEAM_PLAYERS,
         isValidTeamPlayerCount,
+        areTeamPlayerDetailsComplete,
         normalizeTeamOrderInput,
         buildTeamOrderLabel,
         buildTeamSizeSummary,
@@ -112,6 +140,7 @@
 
     global.MIN_TEAM_PLAYERS = api.MIN_TEAM_PLAYERS;
     global.isValidTeamPlayerCount = api.isValidTeamPlayerCount;
+    global.areTeamPlayerDetailsComplete = api.areTeamPlayerDetailsComplete;
     global.normalizeTeamOrderInput = api.normalizeTeamOrderInput;
     global.buildTeamOrderLabel = api.buildTeamOrderLabel;
     global.buildTeamSizeSummary = api.buildTeamSizeSummary;

@@ -210,6 +210,38 @@ async function testOrderDesignAttachments() {
     assert.strictEqual(validTeamOrder.statusCode, 201);
     assert.strictEqual(JSON.parse(validTeamOrder.body).order.totalAmount, 3000);
 
+    const playerSizes = Array.from({ length: 5 }, (_, index) => ({
+        player: index + 1,
+        surname: `Player ${index + 1}`,
+        jerseyNumber: String(index + 1),
+        topSize: 'M',
+        bottomSize: 'S'
+    }));
+    const structuredTeamOrder = await ordersHandler({
+        httpMethod: 'POST',
+        headers: { authorization: `Bearer ${customerToken}` },
+        body: JSON.stringify({ action: 'create', order: {
+            id: 203,
+            customerEmail: 'customer@example.com',
+            items: [{ price: 600, quantity: 1 }],
+            teamOrder: { isTeamOrder: true, teamName: 'Team Beta', teamType: 'Volleyball', totalPlayers: 5, teamSizes: playerSizes }
+        } })
+    });
+    assert.strictEqual(structuredTeamOrder.statusCode, 201);
+    assert.deepStrictEqual(JSON.parse(structuredTeamOrder.body).order.teamOrder.teamSizes, playerSizes);
+
+    const incompleteTeamOrder = await ordersHandler({
+        httpMethod: 'POST',
+        headers: { authorization: `Bearer ${customerToken}` },
+        body: JSON.stringify({ action: 'create', order: {
+            id: 204,
+            customerEmail: 'customer@example.com',
+            items: [{ price: 600, quantity: 1 }],
+            teamOrder: { isTeamOrder: true, teamName: 'Team Gamma', teamType: 'Basketball', totalPlayers: 5, teamSizes: playerSizes.slice(0, 4) }
+        } })
+    });
+    assert.strictEqual(incompleteTeamOrder.statusCode, 400);
+
     console.log('order attachment tests passed');
 }
 

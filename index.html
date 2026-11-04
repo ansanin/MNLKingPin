@@ -555,8 +555,8 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="teamNotes">Team Notes (required):</label>
-                            <textarea id="teamNotes" rows="3" placeholder="Required: each player's exact size, any size adjustments, and other order notes..."></textarea>
+                            <label>Player Details (required):</label>
+                            <div id="teamPlayerFields" class="team-player-fields" aria-live="polite"></div>
                         </div>
                     </div>
 
@@ -565,7 +565,7 @@
                             <span>👕 Size Information</span><span class="checkout-info-chevron" aria-hidden="true">+</span>
                         </button>
                         <div id="checkoutSizingPanel" class="checkout-info-panel" hidden>
-                            <p>Choose a product to see its available sizes and size chart. For team orders, select a team category and provide each player's exact size in Team Notes.</p>
+                            <p>Choose a product to see its available sizes and size chart. For team orders, enter each player's surname, jersey number, upper size, and lower size in the player fields.</p>
                             <div id="checkoutSizeChart" class="team-size-chart"></div>
                         </div>
                     </section>
@@ -1443,10 +1443,10 @@
         </div>
     </div>
 
-    <script src="js/team-order.js?v=20261019-team-order-3"></script>
+    <script src="js/team-order.js?v=20261104-player-details-1"></script>
     <script src="js/production-tracking.js?v=20261015-production-1"></script>
     <script src="js/order-media.js?v=20261019-multi-design-1"></script>
-    <script src="js/app.js?v=20261030-order-errors-1"></script>
+    <script src="js/app.js?v=20261104-player-details-1"></script>
     <script src="js/storefront.js"></script>
     <script src="js/design-interface.js?v=20261020-hide-upload-filenames-1"></script>
     <script>
