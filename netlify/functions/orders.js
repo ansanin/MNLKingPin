@@ -361,6 +361,7 @@ exports.handler = async function handler(event) {
                 }
                 order.gcashPaymentProof = proof;
                 order.paymentStatus = 'downpayment-received';
+                delete order.paymentRejectionReason;
                 addProductionHistory(order, 'payment-proof-uploaded', order.productionStatus, 'customer');
                 order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
                 order.productionNotifications.push({ id: require('crypto').randomUUID(), type: 'payment-proof', message: 'Customer uploaded GCash payment proof.', timestamp: new Date().toISOString(), read: false });
@@ -451,6 +452,34 @@ exports.handler = async function handler(event) {
                 statusLabel: stageLabel(order.productionStatus),
                 remarks: notifyRemarks,
                 message: 'The admin verified your payment.',
+                timestamp: new Date().toISOString(),
+                read: false
+            });
+        } else if (operation === 'reject-payment') {
+            if (!['order-placed', 'payment-verification'].includes(order.productionStatus)) {
+                return jsonResponse(409, { error: 'Payment proof can only be rejected before design approval.' });
+            }
+            if (String(order.paymentMethod).toLowerCase() !== 'gcash'
+                || order.paymentStatus !== 'downpayment-received'
+                || (!order.gcashPaymentProof && !order.gcashPaymentProofUrl)) {
+                return jsonResponse(409, { error: 'A submitted GCash payment proof is required before it can be rejected.' });
+            }
+            const reason = String(payload.reason || '').trim();
+            if (!reason) return jsonResponse(400, { error: 'A reason is required to reject the payment proof.' });
+            if (reason.length > 1000) return jsonResponse(400, { error: 'The rejection reason must be 1000 characters or fewer.' });
+
+            order.paymentStatus = 'rejected';
+            order.paymentRejectionReason = reason;
+            addProductionHistory(order, 'payment-rejected', order.productionStatus, 'admin', reason);
+            order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
+            emailEventId = require('crypto').randomUUID();
+            order.productionNotifications.push({
+                id: emailEventId,
+                type: 'stage-update',
+                status: order.productionStatus,
+                statusLabel: stageLabel(order.productionStatus),
+                remarks: `Payment proof rejected: ${reason}`,
+                message: `Your GCash payment proof was rejected. Reason: ${reason} Please upload a new proof.`,
                 timestamp: new Date().toISOString(),
                 read: false
             });

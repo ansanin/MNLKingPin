@@ -4197,7 +4197,6 @@ function renderTeamPlayerFields() {
     if (!Number.isInteger(playerCount) || playerCount < MIN_TEAM_PLAYERS) return;
 
     const isTeamOrder = Boolean(document.getElementById('isTeamOrder')?.checked);
-    const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
     for (let player = 1; player <= playerCount; player += 1) {
         const card = document.createElement('fieldset');
         card.className = 'team-player-card';
@@ -4212,8 +4211,8 @@ function renderTeamPlayerFields() {
         [
             { key: 'surname', label: 'Surname', type: 'text', placeholder: 'Surname' },
             { key: 'jerseyNumber', label: 'Jersey number', type: 'number', placeholder: '0-99', min: '0', max: '99' },
-            { key: 'topSize', label: 'Upper size', type: 'select' },
-            { key: 'bottomSize', label: 'Lower size', type: 'select' }
+            { key: 'topSize', label: 'Upper size', type: 'text', placeholder: 'e.g., M' },
+            { key: 'bottomSize', label: 'Lower size', type: 'text', placeholder: 'e.g., M' }
         ].forEach(definition => {
             const group = document.createElement('div');
             group.className = 'form-group';
@@ -4228,24 +4227,11 @@ function renderTeamPlayerFields() {
             field.dataset.player = String(player);
             field.dataset.playerField = definition.key;
             field.required = true;
-            if (definition.type === 'select') {
-                const placeholder = document.createElement('option');
-                placeholder.value = '';
-                placeholder.textContent = '-- Select size --';
-                field.appendChild(placeholder);
-                sizeOptions.forEach(size => {
-                    const option = document.createElement('option');
-                    option.value = size;
-                    option.textContent = size;
-                    field.appendChild(option);
-                });
-            } else {
-                field.type = definition.type;
-                field.placeholder = definition.placeholder;
-                if (definition.min) field.min = definition.min;
-                if (definition.max) field.max = definition.max;
-                if (definition.type === 'text') field.maxLength = 80;
-            }
+            field.type = definition.type;
+            field.placeholder = definition.placeholder;
+            if (definition.min) field.min = definition.min;
+            if (definition.max) field.max = definition.max;
+            if (definition.type === 'text') field.maxLength = definition.key === 'surname' ? 80 : 24;
             field.value = teamPlayerFieldValues.get(`${player}-${definition.key}`) || '';
             group.append(label, field);
             fields.appendChild(group);
@@ -4757,6 +4743,7 @@ function buildProductionTrackingHtml(order, customerView = false) {
         <div class="production-timeline-wrap"><div class="production-timeline">${timelineHtml}</div></div>
         <p><strong>Current stage:</strong> ${escapeProductionHtml(getProductionStageLabel(status))}</p>
         <p><strong>Payment verification:</strong> ${escapeProductionHtml(paymentStatus)}</p>
+        ${order.paymentStatus === 'rejected' && order.paymentRejectionReason ? `<p class="production-exception-status"><strong>Payment proof rejected:</strong> ${escapeProductionHtml(order.paymentRejectionReason)} Please upload a new proof.</p>` : ''}
         ${order.estimatedCompletionDate ? `<p><strong>Estimated completion:</strong> ${escapeProductionHtml(order.estimatedCompletionDate)}</p>` : ''}
         ${order.productionRemarks ? `<p><strong>Latest remarks:</strong> ${escapeProductionHtml(order.productionRemarks)}</p>` : ''}
         ${latestNotification ? `<p class="production-update-notice"><strong>Latest update:</strong> ${escapeProductionHtml(latestNotification.message)} <time>${escapeProductionHtml(formatProductionTimestamp(latestNotification.timestamp))}</time></p>` : ''}
@@ -4932,7 +4919,7 @@ function loadCustomerOrders() {
         const orderGcashQr = getOrderMediaSource(order, 'gcashQRCode') || (paymentMethod === 'gcash' ? (appData.gcashQRCode || localStorage.getItem('kingpinGCashQR')) : null);
         const paymentProof = getOrderMediaSource(order, 'gcashPaymentProof');
         const gcashProofHtml = paymentProof
-            ? `<p style="color: #4caf50;">Downpayment proof saved — ${order.paymentStatus === 'verified' ? 'verified by admin' : 'awaiting admin verification'}</p><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="Saved GCash downpayment proof"></a>`
+            ? `<p style="color: ${order.paymentStatus === 'rejected' ? '#ff6b6b' : '#4caf50'};">${order.paymentStatus === 'rejected' ? `Proof rejected: ${escapeProductionHtml(order.paymentRejectionReason || 'Please upload a new proof.')}` : `Downpayment proof saved — ${order.paymentStatus === 'verified' ? 'verified by admin' : 'awaiting admin verification'}`}</p><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="Saved GCash downpayment proof"></a>`
             : '<p style="color: #ffb74d;">Proof not uploaded yet</p>';
         
         const productionTrackingHtml = buildProductionTrackingHtml(order, true);
@@ -4962,7 +4949,7 @@ function loadCustomerOrders() {
             <div class="order-total">Total: ₱${order.totalAmount.toFixed(2)}</div>
             <button type="button" class="btn btn-small view-receipt-button" onclick="viewCustomerReceipt(${order.id})">View Receipt</button>
             ${paymentMethod === 'gcash' && orderGcashQr ? `<div class="order-gcash-qr"><strong>GCash Installment QR:</strong><button type="button" class="btn btn-small qr-view-button" onclick="openGcashQrViewer('${orderGcashQr}')">View larger</button><img src="${orderGcashQr}" alt="GCash installment QR code" onclick="openGcashQrViewer('${orderGcashQr}')"></div>` : ''}
-            ${paymentMethod === 'gcash' ? `<div class="order-payment-proof"><strong>GCash Downpayment Proof:</strong><p class="half-payment-notice">Downpayment amount: ₱${requiredDownpayment.toFixed(2)}</p>${gcashProofHtml}${paymentProof ? '<p>Your proof is saved with this order and available to the admin. No need to upload again.</p>' : `<input type="file" accept="image/*" onchange="uploadOrderPaymentProof(${order.id}, this)">`}</div>` : ''}
+            ${paymentMethod === 'gcash' ? `<div class="order-payment-proof"><strong>GCash Downpayment Proof:</strong><p class="half-payment-notice">Downpayment amount: ₱${requiredDownpayment.toFixed(2)}</p>${gcashProofHtml}${paymentProof && order.paymentStatus !== 'rejected' ? '<p>Your proof is saved with this order and available to the admin. No need to upload again.</p>' : `<p>${order.paymentStatus === 'rejected' ? 'Upload a new payment proof to resubmit it for verification.' : 'Upload your payment proof.'}</p><input type="file" accept="image/*" onchange="uploadOrderPaymentProof(${order.id}, this)">`}</div>` : ''}
             <div class="order-actions"><strong>Order action:</strong><div class="order-action-buttons"><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'cancel')">Cancel / Change of Mind</button><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'refund')">Request Refund</button></div><div id="orderReason-${order.id}" class="order-reason-options"></div>${order.requestType ? `<p class="order-request-status">Request: ${order.requestType === 'cancel' ? 'Cancel / Change of Mind' : 'Refund'} (${order.requestStatus || 'pending'})</p>` : ''}</div>
             ${getOrderReviewsSection(order)}
         `;
@@ -5404,6 +5391,7 @@ function uploadOrderPaymentProof(orderId, input) {
 
         order.gcashPaymentProof = proof;
         order.paymentStatus = 'downpayment-received';
+        delete order.paymentRejectionReason;
         let sharedSaveSucceeded = false;
         try {
             const savedOrder = await saveOrderToSharedServer(order, 'customer-update');
@@ -6198,6 +6186,29 @@ async function verifyAdminOrderPayment(orderId) {
     }
 }
 
+async function rejectAdminOrderPayment(orderId) {
+    const enteredReason = prompt('Why is this payment proof being rejected?');
+    if (enteredReason === null) return;
+    const reason = enteredReason.trim();
+    if (!reason) {
+        showStatusUpdateToast('Enter a reason to reject the payment proof.');
+        return;
+    }
+    if (reason.length > 1000) {
+        showStatusUpdateToast('The rejection reason must be 1000 characters or fewer.');
+        return;
+    }
+
+    try {
+        const updatedOrder = await saveAdminOrderOperation(orderId, 'reject-payment', { reason });
+        applyServerOrderUpdate(updatedOrder);
+        viewOrderDetails(orderId);
+        showStatusUpdateToast(`Payment proof rejected for order #${orderId}.`);
+    } catch (error) {
+        showStatusUpdateToast(error.message);
+    }
+}
+
 async function uploadFinalOrderDesign(orderId, input) {
     const file = input.files?.[0];
     if (!file) return;
@@ -6367,7 +6378,7 @@ function viewOrderDetails(orderStr) {
             : '';
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
         const paymentProof = getOrderMediaSource(order, 'gcashPaymentProof');
-        const paymentHtml = `<div class="admin-order-customer-info"><h3>Payment</h3><div class="admin-order-customer-field"><strong>Method:</strong> ${paymentMethod.toUpperCase()}</div><div class="admin-order-customer-field"><strong>Status:</strong> ${String(order.paymentStatus || 'pending').replace('-', ' ')}</div>${order.gcashDownpaymentAmount ? `<div class="admin-order-customer-field"><strong>Downpayment:</strong> ₱${Number(order.gcashDownpaymentAmount).toFixed(2)}</div>` : ''}${paymentMethod === 'gcash' ? paymentProof ? `<div class="admin-order-customer-field"><strong>Proof:</strong> Uploaded<br><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="GCash payment proof for order #${order.id}" style="max-width:240px; max-height:180px; object-fit:contain; margin-top:8px; border:1px solid #4caf50; border-radius:4px;"></a></div>` : '<div class="admin-order-customer-field">Payment proof not uploaded yet</div>' : ''}</div>`;
+        const paymentHtml = `<div class="admin-order-customer-info"><h3>Payment</h3><div class="admin-order-customer-field"><strong>Method:</strong> ${paymentMethod.toUpperCase()}</div><div class="admin-order-customer-field"><strong>Status:</strong> ${String(order.paymentStatus || 'pending').replace('-', ' ')}</div>${order.paymentRejectionReason ? `<div class="admin-order-customer-field"><strong>Rejection reason:</strong> ${escapeDetailText(order.paymentRejectionReason)}</div>` : ''}${order.gcashDownpaymentAmount ? `<div class="admin-order-customer-field"><strong>Downpayment:</strong> ₱${Number(order.gcashDownpaymentAmount).toFixed(2)}</div>` : ''}${paymentMethod === 'gcash' ? paymentProof ? `<div class="admin-order-customer-field"><strong>Proof:</strong> Uploaded<br><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="GCash payment proof for order #${order.id}" style="max-width:240px; max-height:180px; object-fit:contain; margin-top:8px; border:1px solid #4caf50; border-radius:4px;"></a></div>` : '<div class="admin-order-customer-field">Payment proof not uploaded yet</div>' : ''}</div>`;
         const currentProductionStatus = getOrderProductionStatus(order);
         const stageOptions = [...window.KingPinProductionTracking.PRODUCTION_STAGES, { id: 'on-hold', label: 'On Hold' }, { id: 'cancelled', label: 'Cancelled' }]
             .map(stage => `<option value="${stage.id}" ${stage.id === currentProductionStatus ? 'selected' : ''}>${escapeDetailText(stage.label)}</option>`).join('');
@@ -6382,7 +6393,8 @@ function viewOrderDetails(orderStr) {
                         <button type="button" class="btn btn-primary btn-small" onclick="submitAdminProductionStage(${Number(order.id) || 0})">Update Production Status</button>
                         <button type="button" class="btn btn-secondary btn-small" onclick="saveAdminProductionDetails(${Number(order.id) || 0})">Save ETA / Remarks</button>
                         <button type="button" class="btn btn-secondary btn-small" onclick="checkOrderEmailDelivery(${Number(order.id) || 0})">Check Email Status</button>
-                        ${order.paymentStatus === 'verified' ? '' : `<button type="button" class="btn btn-secondary btn-small" onclick="verifyAdminOrderPayment(${Number(order.id) || 0})">Verify Payment</button>`}
+                        ${order.paymentStatus === 'verified' || order.paymentStatus === 'rejected' ? '' : `<button type="button" class="btn btn-secondary btn-small" onclick="verifyAdminOrderPayment(${Number(order.id) || 0})">Verify Payment</button>`}
+                        ${paymentMethod === 'gcash' && order.paymentStatus === 'downpayment-received' ? `<button type="button" class="btn btn-secondary btn-small" onclick="rejectAdminOrderPayment(${Number(order.id) || 0})">Reject Payment</button>` : ''}
                     </div>
                     <label class="production-admin-remarks">Upload final design<input id="finalDesignFile-${Number(order.id) || 0}" type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" onchange="uploadFinalOrderDesign(${Number(order.id) || 0}, this)"></label>
                 </div>

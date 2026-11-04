@@ -62,10 +62,20 @@ async function run() {
   assert.strictEqual((await post(customerToken, { action: 'create', order: orderPayload('jersey.customer@example.com') })).statusCode, 201);
   assert.strictEqual((await post(otherCustomerToken, { action: 'create', order: orderPayload('other@example.com') })).statusCode, 201);
 
+  const paymentProof = `data:image/png;base64,${Buffer.from('payment proof').toString('base64')}`;
+  const gcashOrder = {
+    ...orderPayload('jersey.customer@example.com'),
+    id: 3003,
+    paymentMethod: 'gcash',
+    gcashPaymentProof: paymentProof
+  };
+  assert.strictEqual((await post(customerToken, { action: 'create', order: gcashOrder })).statusCode, 201);
+
   const customerOrders = await ordersHandler(request('GET', customerToken, null));
-  assert.deepStrictEqual(JSON.parse(customerOrders.body).orders.map(order => order.id), [3001]);
+  assert.deepStrictEqual(JSON.parse(customerOrders.body).orders.map(order => order.id), [3001, 3003]);
   const forbiddenUpdate = await post(customerToken, { action: 'admin-update', operation: 'verify-payment', orderId: 3002 });
   assert.strictEqual(forbiddenUpdate.statusCode, 403);
+  assert.strictEqual((await post(customerToken, { action: 'admin-update', operation: 'reject-payment', orderId: 3003, reason: 'Wrong amount' })).statusCode, 403);
   const forbiddenRead = await post(otherCustomerToken, { action: 'customer-approval', orderId: 3001, decision: 'approved' });
   assert.strictEqual(forbiddenRead.statusCode, 403);
 
@@ -73,6 +83,24 @@ async function run() {
   process.env.RESEND_API_KEY = 'test-email-key';
   process.env.RESEND_FROM_EMAIL = 'orders@example.com';
   global.fetch = async () => ({ ok: false, text: async () => 'test email outage' });
+
+  const missingRejectionReason = await post(adminToken, { action: 'admin-update', operation: 'reject-payment', orderId: 3003, reason: ' ' });
+  assert.strictEqual(missingRejectionReason.statusCode, 400);
+  const longRejectionReason = await post(adminToken, { action: 'admin-update', operation: 'reject-payment', orderId: 3003, reason: 'x'.repeat(1001) });
+  assert.strictEqual(longRejectionReason.statusCode, 400);
+  const rejectedPayment = await post(adminToken, { action: 'admin-update', operation: 'reject-payment', orderId: 3003, reason: 'The amount does not match the order.' });
+  assert.strictEqual(rejectedPayment.statusCode, 200);
+  assert.strictEqual(JSON.parse(rejectedPayment.body).order.paymentStatus, 'rejected');
+  assert.strictEqual(JSON.parse(rejectedPayment.body).order.paymentRejectionReason, 'The amount does not match the order.');
+  assert.ok(JSON.parse(rejectedPayment.body).order.productionNotifications.some(event => event.message.includes('The amount does not match the order.')));
+  assert.strictEqual((await post(adminToken, { action: 'admin-update', operation: 'verify-payment', orderId: 3003 })).statusCode, 409);
+
+  const resubmittedProof = `data:image/png;base64,${Buffer.from('corrected payment proof').toString('base64')}`;
+  const proofResubmission = await post(customerToken, { action: 'customer-update', order: { id: 3003, gcashPaymentProof: resubmittedProof } });
+  assert.strictEqual(proofResubmission.statusCode, 200);
+  assert.strictEqual(JSON.parse(proofResubmission.body).order.paymentStatus, 'downpayment-received');
+  assert.strictEqual(JSON.parse(proofResubmission.body).order.paymentRejectionReason, undefined);
+  assert.strictEqual((await post(adminToken, { action: 'admin-update', operation: 'verify-payment', orderId: 3003 })).statusCode, 200);
 
   assert.strictEqual((await post(adminToken, { action: 'admin-update', operation: 'production-stage', orderId: 3001, productionStatus: 'printing' })).statusCode, 409);
   const paymentStage = await post(adminToken, { action: 'admin-update', operation: 'production-stage', orderId: 3001, productionStatus: 'payment-verification', estimatedCompletionDate: '2026-12-31', remarks: 'Proof received.' });
