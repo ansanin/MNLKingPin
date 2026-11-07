@@ -7563,3 +7563,5 @@ body.light-mode .customer-inline-note { color: #5f6b73; }
 body.light-mode .customer-inline-status { color: #c0392b; }
 .customer-admin-edit-note { margin-top: 2px; color: #d4af37; font-size: .72rem; }
 body.light-mode .customer-admin-edit-note { color: #8a6d12; }
+.report-card-note { margin: 4px 0 0; color: #a0a0a0; font-size: .8rem; }
+body.light-mode #adminPage .report-card-note { color: #5f6b73; }

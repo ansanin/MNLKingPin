@@ -6953,33 +6953,86 @@ async function confirmCustomerDelete() {
 }
 
 // Export Customers to CSV
-function exportCustomersToCSV() {
-    const customers = appData.customers || [];
-
+// Customer list as an Excel workbook: a summary of every customer, then each
+// customer's orders (products, total amount, date and status).
+async function exportCustomersToCSV() {
+    const customers = (appData.customers || []).filter(customer => customer.status !== 'old-email');
     if (customers.length === 0) {
         showStatusUpdateToast('No customers to export');
         return;
     }
+    showStatusUpdateToast('Preparing the customer Excel file...');
+    await refreshReportOrders();
 
-    const csvCell = value => {
-        const text = String(value ?? '');
-        return '"' + (/^[\s]*[=+@\-\t\r]/.test(text) ? "'" : '') + text.replace(/"/g, '""') + '"';
-    };
-    let csv = 'Name,Email,Phone,Total Orders\n';
-    customers.forEach(customer => {
-        csv += [customer.name, customer.email, customer.phone, customer.totalOrders].map(csvCell).join(',') + '\n';
+    const ordersByEmail = new Map();
+    getReportOrders().forEach(order => {
+        const email = String(order.customerEmail || '').trim().toLowerCase();
+        if (!email) return;
+        if (!ordersByEmail.has(email)) ordersByEmail.set(email, []);
+        ordersByEmail.get(email).push(order);
     });
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    // Text cells use the "@" (text) format so Excel never runs them as formulas.
+    const text = value => `<td class="text">${excelEscape(value)}</td>`;
+    const money = value => `<td class="amount">${Number(value || 0).toFixed(2)}</td>`;
+    const orderDate = order => {
+        const placed = getOrderPlacedDate(order);
+        return placed ? placed.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : (order.date || '');
+    };
+    const products = order => (order.items || []).map(item => `${item.name} (x${item.quantity || 1})`).join(', ') || 'N/A';
+
+    let grandTotal = 0;
+    let grandOrders = 0;
+    const summaryRows = [];
+    const detailSections = [];
+    customers.forEach(customer => {
+        const orders = (ordersByEmail.get(String(customer.accountEmail || customer.email).toLowerCase()) || [])
+            .slice()
+            .sort((first, second) => (getOrderPlacedDate(second) || 0) - (getOrderPlacedDate(first) || 0));
+        const total = orders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+        grandTotal += total;
+        grandOrders += orders.length;
+        const lastOrder = orders[0] ? orderDate(orders[0]) : 'No orders yet';
+        summaryRows.push(`<tr>${text(customer.name)}${text(customer.email)}${text(customer.phone || 'Not provided')}<td>${orders.length}</td>${money(total)}${text(lastOrder)}</tr>`);
+
+        const orderRows = orders.map(order => `<tr>${text(`#${order.id}`)}${text(orderDate(order))}${text(products(order))}${money(order.totalAmount)}${text(String(order.status || 'pending').toUpperCase())}</tr>`).join('');
+        detailSections.push(`<tr><td colspan="5" class="customer-head">${excelEscape(customer.name)} &nbsp;·&nbsp; ${excelEscape(customer.email)}${customer.phone ? ` &nbsp;·&nbsp; ${excelEscape(customer.phone)}` : ''}</td></tr>`
+            + (orderRows || '<tr><td colspan="5" class="muted">No orders yet.</td></tr>')
+            + (orders.length ? `<tr class="subtotal"><td colspan="3" class="text">Total for ${excelEscape(customer.name)} (${orders.length} order${orders.length === 1 ? '' : 's'})</td>${money(total)}<td></td></tr>` : '')
+            + '<tr><td colspan="5" class="spacer"></td></tr>');
+    });
+
+    const workbook = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+body{font-family:Arial,sans-serif;background:#fff;color:#222}h1{color:#1f4e78}h2{color:#444}
+table{border-collapse:collapse;width:100%}
+th{background:#1f4e78;color:#fff;font-weight:bold}
+th,td{border:1px solid #b7c9d6;padding:7px;text-align:left;vertical-align:top}
+td.text{mso-number-format:"\\@"}td.amount{mso-number-format:"#,##0.00";text-align:right}
+td.customer-head{background:#dbe7f3;font-weight:bold}
+tr.subtotal td{background:#f3f6f9;font-weight:bold}
+td.muted{color:#777;font-style:italic}td.spacer{border:none;height:8px}
+</style></head><body>
+<h1>KINGPIN CLOTHING MANAGEMENT SYSTEM</h1>
+<h2>Customer Orders Report</h2>
+<p><strong>Generated:</strong> ${excelEscape(new Date().toLocaleString('en-PH'))}</p>
+<p><strong>Customers:</strong> ${customers.length} &nbsp; <strong>Orders:</strong> ${grandOrders} &nbsp; <strong>Total Amount:</strong> ${grandTotal.toFixed(2)}</p>
+<h2>Customer Summary</h2>
+<table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Total Orders</th><th>Total Amount</th><th>Last Order</th></tr>${summaryRows.join('')}</table>
+<h2>Orders per Customer</h2>
+<table><tr><th>Order #</th><th>Date</th><th>Products</th><th>Total Amount</th><th>Status</th></tr>${detailSections.join('')}</table>
+</body></html>`;
+
+    const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `customers-${new Date().toLocaleDateString()}.csv`);
+    link.setAttribute('download', `KINGPIN-Customer-Orders-${new Date().toISOString().slice(0, 10)}.xls`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showStatusUpdateToast('Customers exported successfully!');
+    URL.revokeObjectURL(url);
+    showStatusUpdateToast('Customer Excel file downloaded.');
 }
 
 // Load History Table
@@ -7145,7 +7198,7 @@ function refreshReportOrders() {
 }
 
 function getSoldOrders() {
-    return getReportOrders().filter(order => ['completed', 'delivered'].includes(order.status));
+    return getReportOrders().filter(isSoldOrder);
 }
 
 function parseReportDate(value) {
@@ -7228,7 +7281,17 @@ function getCalendarDayKey(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+// A sale is any order that was not cancelled and whose payment was not
+// rejected, whatever its production stage. Completed orders are also shown
+// on their own so the admin can see how much is already finished.
 function isSoldOrder(order) {
+    if (!order) return false;
+    return String(order.status || '').toLowerCase() !== 'cancelled'
+        && String(order.productionStatus || '').toLowerCase() !== 'cancelled'
+        && String(order.paymentStatus || '').toLowerCase() !== 'rejected';
+}
+
+function isCompletedOrder(order) {
     return ['completed', 'delivered'].includes(order?.status);
 }
 
@@ -7299,7 +7362,7 @@ function renderSalesCalendar() {
     document.getElementById('salesCalendarTitle').textContent = salesCalendarMonth.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
     const summary = document.getElementById('salesCalendarSummary');
     if (summary) {
-        let text = `${monthOrders} order${monthOrders === 1 ? '' : 's'} placed · ${formatPeso(monthSales)} completed sales`;
+        let text = `${monthOrders} order${monthOrders === 1 ? '' : 's'} placed · ${formatPeso(monthSales)} sales`;
         if (busiestKey) {
             const busiestDate = new Date(`${busiestKey}T00:00:00`);
             text += ` · Busiest: ${busiestDate.toLocaleDateString('en-PH', { weekday: 'long', month: 'short', day: 'numeric' })} (${busiestCount})`;
@@ -7388,7 +7451,7 @@ function generateReports({ refresh = true } = {}) {
     }
     renderSalesCalendar();
     const allOrders = filterReportOrders(getReportOrders());
-    const soldOrders = allOrders.filter(order => ['completed', 'delivered'].includes(order.status));
+    const soldOrders = allOrders.filter(isSoldOrder);
 
     // Calculate metrics
     const totalSales = soldOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
@@ -7401,6 +7464,12 @@ function generateReports({ refresh = true } = {}) {
     document.getElementById('totalOrders').textContent = totalOrders;
     document.getElementById('totalCustomers').textContent = uniqueCustomers;
     document.getElementById('avgOrderValue').textContent = avgOrderValue.toFixed(2);
+    const completedOrders = soldOrders.filter(isCompletedOrder);
+    const completedNote = document.getElementById('completedSalesNote');
+    if (completedNote) {
+        const completedTotal = completedOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+        completedNote.textContent = `Completed: ${formatPeso(completedTotal)} (${completedOrders.length} order${completedOrders.length === 1 ? '' : 's'})`;
+    }
 
     // Generate top products report
     generateTopProductsReport(soldOrders);
@@ -7514,7 +7583,7 @@ function excelEscape(value) {
 // Generate Full Report as an Excel-compatible workbook
 function generateFullReport() {
     const allOrders = filterReportOrders(getReportOrders());
-    const soldOrders = allOrders.filter(order => ['completed', 'delivered'].includes(order.status));
+    const soldOrders = allOrders.filter(isSoldOrder);
 
     if (allOrders.length === 0) {
         showStatusUpdateToast('No data to generate report');
@@ -7559,7 +7628,7 @@ Date: ${order.date}
         const itemsList = (order.items || []).map(item => `${item.name} (x${item.quantity})`).join(', ');
         return `<tr><td>${excelEscape(order.id)}</td><td>${excelEscape(order.customerName || 'N/A')}</td><td>${excelEscape(order.customerEmail || 'N/A')}</td><td>${excelEscape(itemsList || 'N/A')}</td><td>${Number(order.totalAmount || 0).toFixed(2)}</td><td>${excelEscape(order.status || 'pending')}</td><td>${excelEscape(order.date || 'N/A')}</td></tr>`;
     }).join('');
-    const workbook = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial,sans-serif}h1{color:#1f4e78}h2{color:#666}table{border-collapse:collapse;width:100%}th{background:#1f4e78;color:#fff;font-weight:bold}th,td{border:1px solid #b7c9d6;padding:7px;text-align:left}td.amount{mso-number-format:"0.00"}</style></head><body><h1>KINGPIN CLOTHING MANAGEMENT SYSTEM</h1><h2>Sales &amp; Performance Report</h2><p><strong>Period:</strong> ${excelEscape(periodLabel)}</p><p><strong>Generated:</strong> ${excelEscape(new Date().toLocaleString())}</p><h2>Executive Summary</h2><table><tr><th>Total Sales</th><th>Total Orders</th><th>Unique Customers</th><th>Average Order Value</th></tr><tr><td class="amount">${totalSales.toFixed(2)}</td><td>${totalOrders}</td><td>${uniqueCustomers}</td><td class="amount">${totalOrders ? (totalSales / totalOrders).toFixed(2) : '0.00'}</td></tr></table><h2>Sales Order Details</h2><table><tr><th>Order ID</th><th>Customer Name</th><th>Email</th><th>Products</th><th>Total Amount</th><th>Status</th><th>Date</th></tr>${detailRows || '<tr><td colspan="7">No completed or delivered sales in this period.</td></tr>'}</table></body></html>`;
+    const workbook = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial,sans-serif}h1{color:#1f4e78}h2{color:#666}table{border-collapse:collapse;width:100%}th{background:#1f4e78;color:#fff;font-weight:bold}th,td{border:1px solid #b7c9d6;padding:7px;text-align:left}td.amount{mso-number-format:"0.00"}</style></head><body><h1>KINGPIN CLOTHING MANAGEMENT SYSTEM</h1><h2>Sales &amp; Performance Report</h2><p><strong>Period:</strong> ${excelEscape(periodLabel)}</p><p><strong>Generated:</strong> ${excelEscape(new Date().toLocaleString())}</p><h2>Executive Summary</h2><table><tr><th>Total Sales</th><th>Total Orders</th><th>Unique Customers</th><th>Average Order Value</th></tr><tr><td class="amount">${totalSales.toFixed(2)}</td><td>${totalOrders}</td><td>${uniqueCustomers}</td><td class="amount">${totalOrders ? (totalSales / totalOrders).toFixed(2) : '0.00'}</td></tr></table><h2>Sales Order Details</h2><table><tr><th>Order ID</th><th>Customer Name</th><th>Email</th><th>Products</th><th>Total Amount</th><th>Status</th><th>Date</th></tr>${detailRows || '<tr><td colspan="7">No sales in this period.</td></tr>'}</table></body></html>`;
     const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
