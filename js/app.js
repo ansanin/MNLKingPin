@@ -7480,6 +7480,88 @@ function generateReports({ refresh = true } = {}) {
     if (label) label.textContent = getReportPeriodLabel();
 }
 
+// ===== ADMIN: RECOMPUTE ORDER PRICES =====
+// Shows which orders change with the current product prices, then saves them
+// only after the admin confirms.
+
+async function requestOrderPriceRecompute(apply) {
+    const response = await fetch('/.netlify/functions/orders', {
+        method: 'POST',
+        headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ action: 'recompute-prices', apply })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Unable to recompute order prices.');
+    return result;
+}
+
+async function previewOrderPriceRecompute() {
+    const box = document.getElementById('priceRecomputeResult');
+    const button = document.getElementById('priceRecomputePreviewBtn');
+    button.disabled = true;
+    box.hidden = false;
+    box.textContent = 'Checking orders against the current product prices...';
+    try {
+        const result = await requestOrderPriceRecompute(false);
+        if (!result.ordersChanged) {
+            box.innerHTML = `<p>All ${result.ordersChecked} orders already use the current product prices. Nothing to change.</p>`;
+            return;
+        }
+        const rows = result.changes.map(change => `<tr>
+            <td>#${escapeReportText(change.orderId)}</td>
+            <td>${escapeReportText(change.customerName || 'N/A')}</td>
+            <td>${change.items.map(item => `${escapeReportText(item.name)}: ${formatPeso(item.oldPrice)} → ${formatPeso(item.newPrice)}`).join('<br>')}</td>
+            <td>${formatPeso(change.totalBefore)}</td>
+            <td><strong>${formatPeso(change.totalAfter)}</strong></td>
+            <td>${escapeReportText(String(change.status).toUpperCase())}</td>
+        </tr>`).join('');
+        box.innerHTML = `
+            <p><strong>${result.ordersChanged}</strong> of ${result.ordersChecked} orders will change. Total of all orders: ${formatPeso(result.totalBefore)} → <strong>${formatPeso(result.totalAfter)}</strong>.</p>
+            <p class="price-recompute-warning">This updates the saved orders, including completed ones. Customers will see the new totals in My Orders. Downpayments already paid are not changed.</p>
+            <div class="sales-calendar-table-wrap"><table>
+                <thead><tr><th>Order</th><th>Customer</th><th>Price change</th><th>Old Total</th><th>New Total</th><th>Status</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table></div>
+            <div class="price-recompute-actions">
+                <button type="button" class="btn btn-primary" onclick="applyOrderPriceRecompute()">Apply New Prices to ${result.ordersChanged} Order${result.ordersChanged === 1 ? '' : 's'}</button>
+                <button type="button" class="btn btn-secondary" onclick="cancelOrderPriceRecompute()">Cancel</button>
+            </div>`;
+    } catch (error) {
+        box.textContent = `Could not check prices: ${error.message}`;
+    } finally {
+        button.disabled = false;
+    }
+}
+
+function cancelOrderPriceRecompute() {
+    const box = document.getElementById('priceRecomputeResult');
+    box.hidden = true;
+    box.replaceChildren();
+}
+
+async function applyOrderPriceRecompute() {
+    const box = document.getElementById('priceRecomputeResult');
+    box.querySelectorAll('button').forEach(button => { button.disabled = true; });
+    try {
+        const result = await requestOrderPriceRecompute(true);
+        // Saved data can take about a minute to show in reads, so update the
+        // loaded orders now with the totals that were just saved.
+        const changesById = new Map(result.changes.map(change => [String(change.orderId), change]));
+        [appData.reportOrders, appData.orders].forEach(list => (list || []).forEach(order => {
+            const change = changesById.get(String(order.id));
+            if (!change) return;
+            change.items.forEach(item => { if (order.items?.[item.index]) order.items[item.index].price = item.newPrice; });
+            order.totalAmount = change.totalAfter;
+        }));
+        generateReports({ refresh: false });
+        box.innerHTML = `<p class="price-recompute-done">Updated ${result.ordersChanged} order${result.ordersChanged === 1 ? '' : 's'}. Sales &amp; Reports now use the new totals (${formatPeso(result.totalAfter)} for all orders).</p>`;
+        showStatusUpdateToast(`Updated prices on ${result.ordersChanged} order${result.ordersChanged === 1 ? '' : 's'}.`);
+    } catch (error) {
+        box.querySelectorAll('button').forEach(button => { button.disabled = false; });
+        showStatusUpdateToast(`Prices were not updated: ${error.message}`);
+    }
+}
+
 // Generate Top Products Report
 function generateTopProductsReport(orders) {
     const productSales = {};

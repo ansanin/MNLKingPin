@@ -7565,3 +7565,11 @@ body.light-mode .customer-inline-status { color: #c0392b; }
 body.light-mode .customer-admin-edit-note { color: #8a6d12; }
 .report-card-note { margin: 4px 0 0; color: #a0a0a0; font-size: .8rem; }
 body.light-mode #adminPage .report-card-note { color: #5f6b73; }
+.price-recompute-hint { margin: 4px 0 12px; color: #a0a0a0; font-size: .85rem; }
+.price-recompute-result { margin-top: 14px; }
+.price-recompute-warning { color: #f0b429; font-size: .85rem; }
+.price-recompute-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.price-recompute-done { color: #7bd88f; font-weight: 600; }
+body.light-mode .price-recompute-hint { color: #5f6b73; }
+body.light-mode .price-recompute-warning { color: #8a5a00; }
+body.light-mode .price-recompute-done { color: #1f7a33; }

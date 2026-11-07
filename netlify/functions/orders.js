@@ -190,6 +190,62 @@ async function readAllOrders(legacyStore, indexStore) {
     return Array.from(byId.values());
 }
 
+// Recomputes order totals with the current catalog prices. Items are matched
+// to products by product id; custom and uploaded designs have no catalog
+// price and keep theirs. The total changes by the price difference only, so
+// anything else in the original total is kept. Team orders multiply by players.
+function recomputeOrderPrices(orders, catalog) {
+    const productsById = new Map((Array.isArray(catalog) ? catalog : [])
+        .filter(product => product && product.id !== undefined && Number.isFinite(Number(product.price)) && Number(product.price) >= 0)
+        .map(product => [String(product.id), Number(product.price)]));
+    const changes = [];
+    let totalBefore = 0;
+    let totalAfter = 0;
+    for (const order of orders) {
+        const before = Number(order.totalAmount) || 0;
+        totalBefore += before;
+        const multiplier = order.teamOrder?.isTeamOrder ? (Number(order.teamOrder.totalPlayers) || 0) : 1;
+        const itemChanges = [];
+        let delta = 0;
+        (order.items || []).forEach((item, index) => {
+            if (!item || item.designType) return;
+            const currentPrice = productsById.get(String(item.id));
+            const oldPrice = Number(item.price);
+            if (currentPrice === undefined || !Number.isFinite(oldPrice) || currentPrice === oldPrice) return;
+            const quantity = Number(item.quantity) || 1;
+            delta += (currentPrice - oldPrice) * quantity * multiplier;
+            itemChanges.push({ index, name: item.name, oldPrice, newPrice: currentPrice, quantity });
+        });
+        const after = Math.max(0, Math.round((before + delta) * 100) / 100);
+        totalAfter += itemChanges.length ? after : before;
+        if (itemChanges.length) {
+            changes.push({ orderId: order.id, customerName: order.customerName || '', status: order.status || 'pending', totalBefore: before, totalAfter: after, items: itemChanges });
+        }
+    }
+    return {
+        ordersChecked: orders.length,
+        ordersChanged: changes.length,
+        totalBefore: Math.round(totalBefore * 100) / 100,
+        totalAfter: Math.round(totalAfter * 100) / 100,
+        changes
+    };
+}
+
+function applyPriceChange(order, change, appliedAt) {
+    const updated = JSON.parse(JSON.stringify(order));
+    change.items.forEach(itemChange => {
+        if (updated.items?.[itemChange.index]) updated.items[itemChange.index].price = itemChange.newPrice;
+    });
+    updated.totalAmount = change.totalAfter;
+    updated.priceAdjustments = [...(Array.isArray(updated.priceAdjustments) ? updated.priceAdjustments : []), {
+        at: appliedAt,
+        totalBefore: change.totalBefore,
+        totalAfter: change.totalAfter,
+        items: change.items.map(item => ({ name: item.name, oldPrice: item.oldPrice, newPrice: item.newPrice }))
+    }];
+    return updated;
+}
+
 async function persistOrder(indexStore, designStore, order) {
     const normalized = (await removeInlineDesignFiles(order, designStore)).order;
     await writeOrderRecord(indexStore, normalized);
@@ -408,8 +464,23 @@ exports.handler = async function handler(event) {
             return jsonResponse(200, { ok: true, order: decorateOrderMedia(savedOrder, claims) });
         }
 
-        if (action !== 'admin-update' && action !== 'admin-migrate') return jsonResponse(400, { error: 'Unknown order action.' });
+        if (action !== 'admin-update' && action !== 'admin-migrate' && action !== 'recompute-prices') return jsonResponse(400, { error: 'Unknown order action.' });
         if (claims.role !== 'admin') return jsonResponse(403, { error: 'Admin access required.' });
+
+        if (action === 'recompute-prices') {
+            const catalog = (await getStore('kingpin-products').get('catalog', { type: 'json' })) || [];
+            const orders = await readAllOrders(store, orderIndexStore);
+            const result = recomputeOrderPrices(orders, catalog);
+            if (payload.apply === true) {
+                const appliedAt = new Date().toISOString();
+                for (const change of result.changes) {
+                    const order = orders.find(item => String(item.id) === String(change.orderId));
+                    const updated = applyPriceChange(order, change, appliedAt);
+                    await persistOrder(orderIndexStore, designStore, updated);
+                }
+            }
+            return jsonResponse(200, { ok: true, applied: payload.apply === true, ...result });
+        }
 
         if (action === 'admin-migrate') {
             const legacyOrder = payload.order;

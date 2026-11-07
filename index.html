@@ -1248,6 +1248,13 @@
                 <div class="report-section">
                     <button class="btn btn-primary" onclick="generateFullReport()">Generate Full Report (Excel)</button>
                 </div>
+
+                <div class="report-section price-recompute">
+                    <h3>Update Order Prices</h3>
+                    <p class="price-recompute-hint">If you changed product prices, recompute existing orders with the current prices so Sales &amp; Reports match. You will see the changes before anything is saved.</p>
+                    <button type="button" id="priceRecomputePreviewBtn" class="btn btn-secondary" onclick="previewOrderPriceRecompute()">Recompute Order Prices</button>
+                    <div id="priceRecomputeResult" class="price-recompute-result" hidden></div>
+                </div>
             </div>
 
             <!-- Settings Management -->
@@ -1507,7 +1514,7 @@
     <script src="js/team-order.js?v=20261104-player-details-1"></script>
     <script src="js/production-tracking.js?v=20261015-production-1"></script>
     <script src="js/order-media.js?v=20261019-multi-design-1"></script>
-    <script src="js/app.js?v=20261107-sales-count-1"></script>
+    <script src="js/app.js?v=20261107-recompute-prices-1"></script>
     <script src="js/storefront.js"></script>
     <script src="js/design-interface.js?v=20261020-hide-upload-filenames-1"></script>
     <script>
