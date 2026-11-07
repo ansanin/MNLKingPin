@@ -6704,18 +6704,6 @@ function renderCustomersTable() {
         [customer.name, customer.email, customer.phone || 'Not provided', customer.totalOrders].forEach(value => {
             row.insertCell().textContent = String(value ?? '');
         });
-        if (customer.adminEdited && customer.original) {
-            // Admin-only label: show what the customer's real account says.
-            const note = document.createElement('div');
-            note.className = 'customer-admin-edit-note';
-            const changes = [];
-            if (customer.original.name !== customer.name) changes.push(`name: ${customer.original.name}`);
-            if (customer.original.email !== customer.email) changes.push(`Gmail: ${customer.original.email}`);
-            if (customer.original.phone !== customer.phone) changes.push(`phone: ${customer.original.phone || 'none'}`);
-            if (customer.original.address !== customer.address) changes.push('address');
-            note.textContent = `Edited by admin · account ${changes.join(', ')}`;
-            row.cells[0].appendChild(note);
-        }
         if (customer.status === 'old-email') {
             // Old email kept after the customer changed email: read-only.
             const note = document.createElement('div');
@@ -6735,7 +6723,7 @@ function renderCustomersTable() {
             makeCustomerRowButton('More', 'btn-secondary customer-more-btn', `More options for ${customer.name}`, () => openCustomerEditModal(customer.accountEmail))
         );
         if (customer.adminEdited) {
-            actions.append(makeCustomerRowButton('Reset', 'btn-secondary customer-more-btn', `Reset ${customer.name} to the account details`, () => resetCustomerAdminEdit(customer)));
+            actions.append(makeCustomerRowButton('Reset', 'btn-secondary customer-more-btn', `Reset ${customer.name} to the original name and Gmail`, () => resetCustomerAdminEdit(customer)));
         }
     });
 }
