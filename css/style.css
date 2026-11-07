@@ -7538,3 +7538,26 @@ body.light-mode #adminPage .sales-calendar-details-header h4 { color: #8a6d12; }
 .settings-email-code-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .settings-email-code-row input { flex: 0 1 160px; letter-spacing: .2em; }
 body.light-mode .settings-email-hint { color: #5f6b73; }
+
+/* ===== Admin customer edit / delete ===== */
+.customer-edit-note { margin: -6px 0 12px; color: #a0a0a0; font-size: .82rem; }
+.customer-delete-zone { margin-top: 18px; padding-top: 14px; border-top: 1px solid #5a2a2a; }
+.customer-delete-confirm { padding: 12px; border: 1px solid #c0392b; border-radius: 8px; background: rgba(192, 57, 43, .12); }
+.customer-delete-confirm p { margin: 0 0 10px; }
+.customer-delete-confirm .btn { margin: 0 8px 6px 0; }
+body.light-mode .customer-edit-note { color: #5f6b73; }
+body.light-mode .customer-delete-confirm { background: #fdecea; }
+.customer-delete-zone [hidden] { display: none !important; }
+.customer-old-email-note { margin-top: 2px; color: #a0a0a0; font-size: .75rem; }
+.customer-row-old td { opacity: .75; }
+.customer-old-email-label { color: #a0a0a0; font-size: .8rem; font-style: italic; }
+body.light-mode .customer-old-email-note,
+body.light-mode .customer-old-email-label { color: #5f6b73; }
+.customer-row-actions { white-space: nowrap; }
+.customer-row-actions .btn-edit,
+.customer-row-actions .customer-more-btn { margin: 0 6px 4px 0; padding: 6px 12px; font-size: .8rem; }
+.customer-inline-input { width: 100%; min-width: 160px; padding: 6px 8px; }
+.customer-inline-note { margin-top: 4px; color: #a0a0a0; font-size: .72rem; white-space: normal; }
+.customer-inline-status { color: #ff8a80; font-size: .75rem; white-space: normal; max-width: 220px; }
+body.light-mode .customer-inline-note { color: #5f6b73; }
+body.light-mode .customer-inline-status { color: #c0392b; }

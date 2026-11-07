@@ -10,6 +10,7 @@ const {
     signAccessToken,
     verifyPassword
 } = require('./lib/auth');
+const { emailChangeKey, isActiveAccount, isValidEmail, moveAccount } = require('./lib/customer-data');
 
 function jsonResponse(statusCode, body) {
     return {
@@ -105,7 +106,7 @@ async function handleRegistration(store, data) {
     }
     await store.setJSON(rateLimitKey, { timestamp: Date.now() });
     const existing = await store.get(key, { type: 'json' });
-    if (existing?.verified) return jsonResponse(409, { error: 'An account already exists for this email. Sign in instead.' });
+    if (isActiveAccount(existing)) return jsonResponse(409, { error: 'An account already exists for this email. Sign in instead.' });
 
     const code = String(cryptoRandomCode());
     const passwordHash = await hashPassword(password);
@@ -128,19 +129,11 @@ function cryptoRandomCode() {
     return require('crypto').randomInt(100000, 1000000);
 }
 
-function isValidEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
-}
-
 function requireCustomer(event) {
     const authentication = authenticateEvent(event);
     if (!authentication.ok) return { response: jsonResponse(authentication.statusCode, { error: authentication.error }) };
     if (authentication.claims.role !== 'customer') return { response: jsonResponse(403, { error: 'Customer access required.' }) };
     return { email: normalizeEmail(authentication.claims.sub) };
-}
-
-function emailChangeKey(email) {
-    return `email-change-${accountKey(email)}`;
 }
 
 // Step 1 of an email change: send a code to the new address so a typo
@@ -154,9 +147,22 @@ async function handleEmailChangeRequest(store, event, data) {
     if (newEmail === currentEmail) return jsonResponse(400, { error: 'The new email is the same as your current email.' });
 
     const account = await store.get(accountKey(currentEmail), { type: 'json' });
-    if (!account?.verified) return jsonResponse(404, { error: 'Customer account was not found.' });
+    if (!isActiveAccount(account)) return jsonResponse(404, { error: 'Customer account was not found.' });
     const existing = await store.get(accountKey(newEmail), { type: 'json' });
-    if (existing?.verified) return jsonResponse(409, { error: 'Another account already uses this email.' });
+    if (isActiveAccount(existing)) return jsonResponse(409, { error: 'Another account already uses this email.' });
+
+    // Name and details for the new email's customer entry. The old email's
+    // entry keeps the current details, so they are not saved until confirmed.
+    const profile = {
+        username: String(data.username ?? account.username ?? '').trim(),
+        fullName: String(data.fullName ?? account.fullName ?? '').trim(),
+        phone: String(data.phone ?? account.phone ?? '').trim(),
+        address: String(data.address ?? account.address ?? '').trim()
+    };
+    if (profile.username.length < 3 || profile.username.length > 60 || !profile.fullName || profile.fullName.length > 120
+        || profile.phone.length > 40 || profile.address.length > 500) {
+        return jsonResponse(400, { error: 'Enter a username (3–60 characters), name, phone, and address within the allowed lengths.' });
+    }
 
     const key = emailChangeKey(currentEmail);
     const previous = await store.get(key, { type: 'json' });
@@ -166,6 +172,7 @@ async function handleEmailChangeRequest(store, event, data) {
     const code = String(cryptoRandomCode());
     await store.setJSON(key, {
         newEmail,
+        profile,
         codeHash: hashVerificationCode(code),
         requestedAt: Date.now(),
         expiresAt: Date.now() + 10 * 60 * 1000,
@@ -176,66 +183,6 @@ async function handleEmailChangeRequest(store, event, data) {
         intro: 'Use this code to confirm your new account email:'
     });
     return jsonResponse(200, { ok: true, verificationRequired: true, newEmail });
-}
-
-async function readAllOrderRecords(orderIndexStore, orderStore) {
-    const ids = (await orderIndexStore.get('all-order-ids', { type: 'json' })) || [];
-    const indexed = await Promise.all(ids.map(id => orderIndexStore.get(`order-${String(id)}`, { type: 'json' })));
-    const legacy = [
-        ...((await orderStore.get('orders', { type: 'json' })) || []),
-        ...((await orderStore.get('orders-v2', { type: 'json' })) || []),
-        ...((await orderIndexStore.get('orders', { type: 'json' })) || [])
-    ];
-    const byId = new Map();
-    [...legacy, ...indexed].forEach(order => { if (order?.id) byId.set(String(order.id), order); });
-    return { ids, orders: Array.from(byId.values()) };
-}
-
-// Orders, the cart and support messages are linked to the login email,
-// so they move with the account when the email changes.
-async function moveCustomerData(oldEmail, newEmail) {
-    const orderIndexStore = getStore('kingpin-order-index');
-    const { ids, orders } = await readAllOrderRecords(orderIndexStore, getStore('kingpin-orders'));
-    const nextIds = [...ids];
-    let movedOrders = 0;
-    for (const order of orders) {
-        if (normalizeEmail(order.customerEmail) !== oldEmail) continue;
-        const updated = { ...order, customerEmail: newEmail };
-        if (normalizeEmail(order.customerUsername) === oldEmail) updated.customerUsername = newEmail;
-        await orderIndexStore.setJSON(`order-${String(order.id)}`, updated);
-        if (!nextIds.some(id => String(id) === String(order.id))) nextIds.push(order.id);
-        movedOrders += 1;
-    }
-    if (nextIds.length !== ids.length) await orderIndexStore.setJSON('all-order-ids', nextIds);
-    if (movedOrders) {
-        const activeIds = (await orderIndexStore.get('active-order-ids', { type: 'json' })) || [];
-        const legacyOnlyActive = orders
-            .filter(order => normalizeEmail(order.customerEmail) === oldEmail)
-            .filter(order => !['completed', 'delivered', 'cancelled'].includes(String(order.status || '').toLowerCase()))
-            .map(order => order.id)
-            .filter(id => !activeIds.some(activeId => String(activeId) === String(id)));
-        if (legacyOnlyActive.length) await orderIndexStore.setJSON('active-order-ids', [...activeIds, ...legacyOnlyActive]);
-    }
-
-    const cartStore = getStore('kingpin-carts');
-    const cart = await cartStore.get(accountKey(oldEmail), { type: 'json' });
-    if (Array.isArray(cart)) {
-        await cartStore.setJSON(accountKey(newEmail), cart);
-        if (typeof cartStore.delete === 'function') await cartStore.delete(accountKey(oldEmail));
-    }
-
-    const messageStore = getStore('kingpin-customer-service');
-    let cursor;
-    do {
-        const page = await messageStore.list({ prefix: 'message-', ...(cursor ? { cursor } : {}) });
-        for (const blob of page.blobs || []) {
-            const message = await messageStore.get(blob.key, { type: 'json' });
-            if (!message || normalizeEmail(message.ownerSub) !== oldEmail) continue;
-            await messageStore.setJSON(blob.key, { ...message, ownerSub: newEmail, customerEmail: newEmail });
-        }
-        cursor = page.cursor;
-    } while (cursor);
-    return { movedOrders };
 }
 
 // Step 2: check the code, move the account to the new email, and issue a
@@ -256,26 +203,11 @@ async function handleEmailChangeConfirm(store, event, data) {
 
     const newEmail = pending.newEmail;
     const account = await store.get(accountKey(oldEmail), { type: 'json' });
-    if (!account?.verified) return jsonResponse(404, { error: 'Customer account was not found.' });
+    if (!isActiveAccount(account)) return jsonResponse(404, { error: 'Customer account was not found.' });
     const existing = await store.get(accountKey(newEmail), { type: 'json' });
-    if (existing?.verified) return jsonResponse(409, { error: 'Another account already uses this email.' });
+    if (isActiveAccount(existing)) return jsonResponse(409, { error: 'Another account already uses this email.' });
 
-    const movedAccount = {
-        ...account,
-        email: newEmail,
-        previousEmails: [...(account.previousEmails || []), oldEmail],
-        emailChangedAt: new Date().toISOString()
-    };
-    if (normalizeEmail(account.username) === oldEmail) movedAccount.username = newEmail;
-    await store.setJSON(accountKey(newEmail), movedAccount);
-    await moveCustomerData(oldEmail, newEmail);
-    if (typeof store.delete === 'function') {
-        await store.delete(accountKey(oldEmail));
-        await store.delete(key);
-    } else {
-        await store.setJSON(accountKey(oldEmail), { movedTo: newEmail, verified: false });
-        await store.setJSON(key, null);
-    }
+    const movedAccount = await moveAccount(store, account, newEmail, pending.profile || {});
     return jsonResponse(200, { ok: true, previousEmail: oldEmail, ...issueCustomerSession(movedAccount) });
 }
 
@@ -318,7 +250,7 @@ exports.handler = async function handler(event) {
         }
         try {
             const account = await getStore('kingpin-auth').get(accountKey(claims.sub), { type: 'json' });
-            if (!account?.verified) return jsonResponse(401, { error: 'Customer account is unavailable.' });
+            if (!isActiveAccount(account)) return jsonResponse(401, { error: 'Customer account is unavailable.' });
             return jsonResponse(200, {
                 ok: true,
                 user: claims.sub,
@@ -369,7 +301,7 @@ exports.handler = async function handler(event) {
 
             const key = accountKey(authentication.claims.sub);
             const account = await store.get(key, { type: 'json' });
-            if (!account?.verified) return jsonResponse(404, { error: 'Customer account was not found.' });
+            if (!isActiveAccount(account)) return jsonResponse(404, { error: 'Customer account was not found.' });
             const updatedAccount = { ...account, username, fullName, phone, address };
             await store.setJSON(key, updatedAccount);
             return jsonResponse(200, { ok: true, user: publicAccount(updatedAccount) });
@@ -378,7 +310,7 @@ exports.handler = async function handler(event) {
         if (data.action === 'login') {
             const email = normalizeEmail(data.email);
             const account = await store.get(accountKey(email), { type: 'json' });
-            if (!account?.verified || !await verifyPassword(data.password || '', account.passwordHash)) {
+            if (!isActiveAccount(account) || !await verifyPassword(data.password || '', account.passwordHash)) {
                 return jsonResponse(401, { error: 'Email or password is incorrect.' });
             }
             return jsonResponse(200, { ok: true, ...issueCustomerSession(account) });
@@ -469,7 +401,7 @@ exports.handler = async function handler(event) {
             const email = normalizeEmail(googleAccount.email);
             const key = accountKey(email);
             let account = await store.get(key, { type: 'json' });
-            if (!account) {
+            if (!isActiveAccount(account)) {
                 account = {
                     email,
                     username: email,

@@ -2625,8 +2625,21 @@ async function saveCustomerSettings(e) {
     message.className = 'status-message';
     message.textContent = 'Saving account information...';
     try {
-        // The profile is saved under the current email first; the email itself
-        // only changes after the customer confirms the code sent to the new address.
+        if (emailChanged) {
+            // A new email becomes a new customer entry with these details. The
+            // current email keeps its old details in the admin customer list,
+            // so nothing is saved until the code is confirmed.
+            await callAuthApi({ action: 'request-email-change', newEmail: requestedEmail, ...updatedAccount });
+            document.getElementById('customerSettingsForm').dataset.profileDirty = 'true';
+            document.getElementById('settingsPendingEmail').textContent = requestedEmail;
+            document.getElementById('settingsEmailCode').value = '';
+            document.getElementById('settingsEmailCodeGroup').hidden = false;
+            document.getElementById('settingsEmailCode').focus();
+            message.className = 'status-message success';
+            message.textContent = `We sent a 6-digit code to ${requestedEmail}. Enter it below to finish changing your email. Your changes are saved when the code is confirmed.`;
+            return;
+        }
+
         const result = await callAuthApi({ action: 'update-customer-profile', ...updatedAccount, email });
         const savedProfile = result.user;
         const accounts = loadCustomerAccounts();
@@ -2643,23 +2656,6 @@ async function saveCustomerSettings(e) {
 
         message.className = 'status-message success';
         message.textContent = 'Account information updated and synced successfully.';
-
-        if (emailChanged) {
-            document.getElementById('settingsEmail').value = requestedEmail;
-            document.getElementById('customerSettingsForm').dataset.profileDirty = 'true';
-            try {
-                await callAuthApi({ action: 'request-email-change', newEmail: requestedEmail });
-            } catch (emailError) {
-                message.className = 'status-message error';
-                message.textContent = `Account information saved, but the email was not changed: ${emailError.message}`;
-                return;
-            }
-            document.getElementById('settingsPendingEmail').textContent = requestedEmail;
-            document.getElementById('settingsEmailCode').value = '';
-            document.getElementById('settingsEmailCodeGroup').hidden = false;
-            document.getElementById('settingsEmailCode').focus();
-            message.textContent = `Account information saved. We sent a 6-digit code to ${requestedEmail}. Enter it below to finish changing your email.`;
-        }
     } catch (error) {
         console.error('Unable to save customer account information:', error);
         message.className = 'status-message error';
@@ -6670,7 +6666,7 @@ function updateShowAdminTab() {
 // Load the registered customer list from the server.
 async function loadCustomersTable() {
     const list = document.getElementById('customersList');
-    list.innerHTML = '<tr><td colspan="4">Loading customers...</td></tr>';
+    list.innerHTML = '<tr><td colspan="5">Loading customers...</td></tr>';
     appData.customers = [];
     try {
         const response = await fetch('/.netlify/functions/customers', { headers: getAuthenticatedHeaders(), cache: 'no-store' });
@@ -6682,7 +6678,7 @@ async function loadCustomersTable() {
         list.replaceChildren();
         const row = list.insertRow();
         const cell = row.insertCell();
-        cell.colSpan = 4;
+        cell.colSpan = 5;
         cell.textContent = error.message || 'Unable to load customers.';
     }
 }
@@ -6695,7 +6691,7 @@ function renderCustomersTable() {
     if (!customers.length) {
         const row = list.insertRow();
         const cell = row.insertCell();
-        cell.colSpan = 4;
+        cell.colSpan = 5;
         cell.textContent = query ? 'No matching customers.' : 'No registered customers yet.';
         return;
     }
@@ -6704,7 +6700,191 @@ function renderCustomersTable() {
         [customer.name, customer.email, customer.phone || 'Not provided', customer.totalOrders].forEach(value => {
             row.insertCell().textContent = String(value ?? '');
         });
+        if (customer.status === 'old-email') {
+            // Old email kept after an email change: shown with its old details, read-only.
+            const note = document.createElement('div');
+            note.className = 'customer-old-email-note';
+            note.textContent = customer.movedTo ? `Old email · now ${customer.movedTo}` : 'Old email';
+            row.cells[1].appendChild(note);
+            row.classList.add('customer-row-old');
+            const label = row.insertCell();
+            label.className = 'customer-old-email-label';
+            label.textContent = 'Old record';
+            return;
+        }
+        const actions = row.insertCell();
+        actions.className = 'customer-row-actions';
+        actions.append(
+            makeCustomerRowButton('Edit', 'btn-edit', `Edit name and Gmail of ${customer.name}`, () => startInlineCustomerEdit(row, customer)),
+            makeCustomerRowButton('More', 'btn-secondary customer-more-btn', `More options for ${customer.name}`, () => openCustomerEditModal(customer.email))
+        );
     });
+}
+
+function makeCustomerRowButton(text, className, label, onClick) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    button.textContent = text;
+    button.setAttribute('aria-label', label);
+    button.addEventListener('click', onClick);
+    return button;
+}
+
+// Edit name and Gmail directly in the customer list row.
+function startInlineCustomerEdit(row, customer) {
+    const [nameCell, emailCell, , , actionsCell] = row.cells;
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'search-input customer-inline-input';
+    nameInput.value = customer.name || '';
+    nameInput.maxLength = 120;
+    nameInput.setAttribute('aria-label', 'Customer name');
+    const emailInput = document.createElement('input');
+    emailInput.type = 'email';
+    emailInput.className = 'search-input customer-inline-input';
+    emailInput.value = customer.email || '';
+    emailInput.setAttribute('aria-label', 'Customer Gmail');
+    const note = document.createElement('div');
+    note.className = 'customer-inline-note';
+    note.textContent = 'A new Gmail adds a new customer; the old Gmail stays as an old record.';
+    nameCell.replaceChildren(nameInput);
+    emailCell.replaceChildren(emailInput, note);
+
+    const status = document.createElement('div');
+    status.className = 'customer-inline-status';
+    status.setAttribute('role', 'status');
+    const save = async () => {
+        const fullName = nameInput.value.trim();
+        const newEmail = emailInput.value.trim().toLowerCase();
+        if (!fullName) { status.textContent = 'Enter a name.'; nameInput.focus(); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) { status.textContent = 'Enter a valid Gmail.'; emailInput.focus(); return; }
+        if (fullName === customer.name && newEmail === customer.email) { renderCustomersTable(); return; }
+        actionsCell.querySelectorAll('button').forEach(button => { button.disabled = true; });
+        status.textContent = 'Saving...';
+        try {
+            await sendCustomerAdminRequest({ action: 'update', email: customer.email, newEmail, fullName });
+            showStatusUpdateToast(newEmail !== customer.email
+                ? `Saved. ${newEmail} was added as a new customer; ${customer.email} is kept as an old record.`
+                : 'Customer name saved.');
+            await loadCustomersTable();
+        } catch (error) {
+            status.textContent = `Not saved: ${error.message}`;
+            actionsCell.querySelectorAll('button').forEach(button => { button.disabled = false; });
+        }
+    };
+    const onKey = event => {
+        if (event.key === 'Enter') { event.preventDefault(); save(); }
+        if (event.key === 'Escape') renderCustomersTable();
+    };
+    nameInput.addEventListener('keydown', onKey);
+    emailInput.addEventListener('keydown', onKey);
+    actionsCell.replaceChildren(
+        makeCustomerRowButton('Save', 'btn-edit', `Save ${customer.name}`, save),
+        makeCustomerRowButton('Cancel', 'btn-secondary customer-more-btn', 'Cancel editing', () => renderCustomersTable()),
+        status
+    );
+    nameInput.focus();
+    nameInput.select();
+}
+
+let editingCustomerEmail = null;
+
+function setCustomerEditMessage(text, type = '') {
+    const message = document.getElementById('editCustomerMessage');
+    message.className = `status-message${type ? ` ${type}` : ''}`;
+    message.textContent = text;
+}
+
+function openCustomerEditModal(email) {
+    const customer = (appData.customers || []).find(item => item.email === email);
+    if (!customer) return;
+    editingCustomerEmail = customer.email;
+    document.getElementById('editCustomerTitle').textContent = `Edit Customer: ${customer.name}`;
+    document.getElementById('editCustomerName').value = customer.name || '';
+    document.getElementById('editCustomerUsername').value = customer.username || '';
+    document.getElementById('editCustomerEmail').value = customer.email || '';
+    document.getElementById('editCustomerPhone').value = customer.phone || '';
+    document.getElementById('editCustomerAddress').value = customer.address || '';
+    document.getElementById('customerDeleteName').textContent = `${customer.name} (${customer.email})`;
+    cancelCustomerDelete();
+    setCustomerEditMessage('');
+    document.getElementById('editCustomerModal').style.display = 'block';
+    document.getElementById('editCustomerName').focus();
+}
+
+function closeCustomerEditModal() {
+    document.getElementById('editCustomerModal').style.display = 'none';
+    editingCustomerEmail = null;
+}
+
+async function sendCustomerAdminRequest(body) {
+    const response = await fetch('/.netlify/functions/customers', {
+        method: 'POST',
+        headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'The customer request failed.');
+    return result;
+}
+
+function setCustomerEditBusy(busy) {
+    document.querySelectorAll('#editCustomerModal button').forEach(button => { button.disabled = busy; });
+}
+
+async function saveCustomerEdit(event) {
+    event.preventDefault();
+    if (!editingCustomerEmail) return;
+    const newEmail = document.getElementById('editCustomerEmail').value.trim().toLowerCase();
+    setCustomerEditBusy(true);
+    setCustomerEditMessage('Saving changes...');
+    try {
+        await sendCustomerAdminRequest({
+            action: 'update',
+            email: editingCustomerEmail,
+            newEmail,
+            fullName: document.getElementById('editCustomerName').value.trim(),
+            username: document.getElementById('editCustomerUsername').value.trim(),
+            phone: document.getElementById('editCustomerPhone').value.trim(),
+            address: document.getElementById('editCustomerAddress').value.trim()
+        });
+        const emailChanged = newEmail !== editingCustomerEmail;
+        closeCustomerEditModal();
+        showStatusUpdateToast(emailChanged ? `Customer updated. Their login email is now ${newEmail}.` : 'Customer updated.');
+        await loadCustomersTable();
+    } catch (error) {
+        setCustomerEditMessage(`Changes were not saved: ${error.message}`, 'error');
+    } finally {
+        setCustomerEditBusy(false);
+    }
+}
+
+function startCustomerDelete() {
+    document.getElementById('customerDeleteStart').hidden = true;
+    document.getElementById('customerDeleteConfirm').hidden = false;
+}
+
+function cancelCustomerDelete() {
+    document.getElementById('customerDeleteStart').hidden = false;
+    document.getElementById('customerDeleteConfirm').hidden = true;
+}
+
+async function confirmCustomerDelete() {
+    if (!editingCustomerEmail) return;
+    const email = editingCustomerEmail;
+    setCustomerEditBusy(true);
+    setCustomerEditMessage('Deleting customer...');
+    try {
+        await sendCustomerAdminRequest({ action: 'delete', email });
+        closeCustomerEditModal();
+        showStatusUpdateToast(`Customer ${email} was deleted.`);
+        await loadCustomersTable();
+    } catch (error) {
+        setCustomerEditMessage(`Customer was not deleted: ${error.message}`, 'error');
+    } finally {
+        setCustomerEditBusy(false);
+    }
 }
 
 // Export Customers to CSV

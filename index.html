@@ -413,7 +413,7 @@
                         <div class="form-group"><label for="settingsEmail">Email:</label><input type="email" id="settingsEmail" required></div>
                         <div class="form-group"><label for="settingsPhone">Phone:</label><input type="tel" id="settingsPhone" required></div>
                     </div>
-                    <p class="settings-email-hint">To change your email (Gmail), type the new address and save. We will send a 6-digit code to the new email to confirm it. Your orders and messages move to the new email.</p>
+                    <p class="settings-email-hint">To change your email (Gmail), type the new address and save. We will send a 6-digit code to the new email to confirm it. After that you sign in with the new email, and you can still see your past orders.</p>
                     <div id="settingsEmailCodeGroup" class="settings-email-code" hidden>
                         <label for="settingsEmailCode">Code sent to <strong id="settingsPendingEmail"></strong>:</label>
                         <div class="settings-email-code-row">
@@ -1062,12 +1062,47 @@
                                 <th>Email</th>
                                 <th>Phone</th>
                                 <th>Total Orders</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="customersList">
                             <!-- Customers will be displayed here -->
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Edit Customer Modal -->
+            <div id="editCustomerModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="editCustomerTitle">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 id="editCustomerTitle">Edit Customer</h3>
+                        <span class="modal-close" onclick="closeCustomerEditModal()" aria-label="Close">&times;</span>
+                    </div>
+                    <form id="editCustomerForm" onsubmit="saveCustomerEdit(event)">
+                        <div class="modal-body">
+                            <div class="form-group"><label for="editCustomerName">Full Name:</label><input type="text" id="editCustomerName" required maxlength="120"></div>
+                            <div class="form-group"><label for="editCustomerUsername">Username:</label><input type="text" id="editCustomerUsername" required minlength="3" maxlength="60"></div>
+                            <div class="form-group"><label for="editCustomerEmail">Email:</label><input type="email" id="editCustomerEmail" required></div>
+                            <p class="customer-edit-note">Changing the email adds a new customer entry for the new email with the details above. The old email stays in the list with its old name and past orders, and can no longer sign in.</p>
+                            <div class="form-group"><label for="editCustomerPhone">Phone:</label><input type="tel" id="editCustomerPhone" maxlength="40"></div>
+                            <div class="form-group"><label for="editCustomerAddress">Address:</label><textarea id="editCustomerAddress" rows="2" maxlength="500"></textarea></div>
+                            <div id="editCustomerMessage" class="status-message" role="status"></div>
+
+                            <div class="customer-delete-zone">
+                                <button type="button" id="customerDeleteStart" class="btn btn-danger" onclick="startCustomerDelete()">Delete Customer</button>
+                                <div id="customerDeleteConfirm" class="customer-delete-confirm" hidden>
+                                    <p>Delete <strong id="customerDeleteName"></strong>? Their account and saved cart are removed and they can no longer sign in. Their past orders stay in Orders, History and Reports.</p>
+                                    <button type="button" class="btn btn-danger" onclick="confirmCustomerDelete()">Yes, Delete Customer</button>
+                                    <button type="button" class="btn btn-secondary" onclick="cancelCustomerDelete()">Keep Customer</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                            <button type="button" class="btn btn-secondary" onclick="closeCustomerEditModal()">Cancel</button>
+                        </div>
+                    </form>
                 </div>
             </div>
 
@@ -1472,7 +1507,7 @@
     <script src="js/team-order.js?v=20261104-player-details-1"></script>
     <script src="js/production-tracking.js?v=20261015-production-1"></script>
     <script src="js/order-media.js?v=20261019-multi-design-1"></script>
-    <script src="js/app.js?v=20261107-calendar-email-1"></script>
+    <script src="js/app.js?v=20261107-customer-inline-1"></script>
     <script src="js/storefront.js"></script>
     <script src="js/design-interface.js?v=20261020-hide-upload-filenames-1"></script>
     <script>

@@ -271,7 +271,7 @@ async function run() {
   assert.strictEqual((await authHandler(postEvent(movingToken, { action: 'request-email-change', newEmail: 'customer@example.com' }))).statusCode, 409);
   assert.strictEqual((await authHandler(postEvent(adminToken, { action: 'request-email-change', newEmail: 'x@example.com' }))).statusCode, 403);
   sentVerificationHtml = '';
-  assert.strictEqual((await authHandler(postEvent(movingToken, { action: 'request-email-change', newEmail: 'Moved.Customer@Gmail.com' }))).statusCode, 200);
+  assert.strictEqual((await authHandler(postEvent(movingToken, { action: 'request-email-change', newEmail: 'Moved.Customer@Gmail.com', fullName: 'Moved Customer' }))).statusCode, 200);
   const emailChangeCode = /<strong>(\d{6})<\/strong>/.exec(sentVerificationHtml)?.[1];
   assert.ok(emailChangeCode);
   assert.strictEqual((await authHandler(postEvent(movingToken, { action: 'confirm-email-change', code: emailChangeCode === '000000' ? '111111' : '000000' }))).statusCode, 400);
@@ -292,7 +292,18 @@ async function run() {
   assert.strictEqual((await authHandler(postEvent(movedToken, { action: 'confirm-email-change', code: emailChangeCode }))).statusCode, 400);
   const listedEmails = JSON.parse((await customersHandler(getEvent(adminToken))).body).customers.map(customer => customer.email);
   assert.ok(listedEmails.includes('moved.customer@gmail.com'));
-  assert.ok(!listedEmails.includes('new-customer@example.com'));
+  // The old email stays in the customer list with its old name and its orders.
+  const listedCustomers = JSON.parse((await customersHandler(getEvent(adminToken))).body).customers;
+  const oldEntry = listedCustomers.find(customer => customer.email === 'new-customer@example.com');
+  const newEntry = listedCustomers.find(customer => customer.email === 'moved.customer@gmail.com');
+  assert.strictEqual(oldEntry.status, 'old-email');
+  assert.strictEqual(oldEntry.name, 'New Customer');
+  assert.strictEqual(oldEntry.movedTo, 'moved.customer@gmail.com');
+  assert.strictEqual(oldEntry.totalOrders, 1);
+  assert.strictEqual(newEntry.status, 'active');
+  assert.strictEqual(newEntry.name, 'Moved Customer');
+  assert.strictEqual(newEntry.totalOrders, 0);
+  assert.strictEqual(emailChangedBody.user.fullName, 'Moved Customer');
 
   delete process.env.SMTP_USER;
   delete process.env.SMTP_PASS;
