@@ -413,6 +413,15 @@
                         <div class="form-group"><label for="settingsEmail">Email:</label><input type="email" id="settingsEmail" required></div>
                         <div class="form-group"><label for="settingsPhone">Phone:</label><input type="tel" id="settingsPhone" required></div>
                     </div>
+                    <p class="settings-email-hint">To change your email (Gmail), type the new address and save. We will send a 6-digit code to the new email to confirm it. Your orders and messages move to the new email.</p>
+                    <div id="settingsEmailCodeGroup" class="settings-email-code" hidden>
+                        <label for="settingsEmailCode">Code sent to <strong id="settingsPendingEmail"></strong>:</label>
+                        <div class="settings-email-code-row">
+                            <input type="text" id="settingsEmailCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6-digit code">
+                            <button type="button" class="btn btn-primary" onclick="confirmCustomerEmailChange()">Confirm New Email</button>
+                            <button type="button" class="btn btn-secondary" onclick="cancelCustomerEmailChange()">Cancel</button>
+                        </div>
+                    </div>
                     <div class="form-group"><label for="settingsAddress">Delivery Address:</label><textarea id="settingsAddress" rows="3" required></textarea></div>
                     <button type="submit" class="btn btn-primary">Save Account Information</button>
                     <button type="button" class="btn btn-secondary" onclick="goBackToShop()">Back to Shop</button>
@@ -1133,6 +1142,23 @@
                     </div>
                     <span id="reportPeriodLabel" class="report-period-label"></span>
                 </div>
+
+                <div class="report-section sales-calendar" aria-label="Sales calendar">
+                    <div class="sales-calendar-header">
+                        <button type="button" class="btn btn-secondary sales-calendar-nav" onclick="changeSalesCalendarMonth(-1)" aria-label="Previous month">&lsaquo; Prev</button>
+                        <div class="sales-calendar-heading">
+                            <h3 id="salesCalendarTitle">Sales Calendar</h3>
+                            <span id="salesCalendarSummary" class="sales-calendar-summary"></span>
+                        </div>
+                        <button type="button" class="btn btn-secondary sales-calendar-nav" onclick="changeSalesCalendarMonth(1)" aria-label="Next month">Next &rsaquo;</button>
+                    </div>
+                    <p class="sales-calendar-hint">Each day shows how many orders were placed and the completed sales for that day. Click a day to see its orders.</p>
+                    <div class="sales-calendar-scroll">
+                        <div id="salesCalendarGrid" class="sales-calendar-grid" role="grid"></div>
+                    </div>
+                    <div id="salesCalendarDayDetails" class="sales-calendar-details" hidden></div>
+                </div>
+
                 <div class="reports-container">
                     <div class="report-card">
                         <h3>Total Sales</h3>
@@ -1446,7 +1472,7 @@
     <script src="js/team-order.js?v=20261104-player-details-1"></script>
     <script src="js/production-tracking.js?v=20261015-production-1"></script>
     <script src="js/order-media.js?v=20261019-multi-design-1"></script>
-    <script src="js/app.js?v=20261104-payment-rejection-1"></script>
+    <script src="js/app.js?v=20261107-calendar-email-1"></script>
     <script src="js/storefront.js"></script>
     <script src="js/design-interface.js?v=20261020-hide-upload-filenames-1"></script>
     <script>

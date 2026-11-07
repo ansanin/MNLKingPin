@@ -50,6 +50,7 @@ const { handler: footerHandler } = require('../netlify/functions/shop-footer.js'
 const { handler: cartHandler } = require('../netlify/functions/cart.js');
 const { handler: customerServiceHandler } = require('../netlify/functions/customer-service.js');
 const { handler: shopBrandingHandler } = require('../netlify/functions/shop-branding.js');
+const { handler: customersHandler } = require('../netlify/functions/customers.js');
 const { handler: authHandler } = require('../netlify/functions/auth.js');
 
 async function run() {
@@ -258,6 +259,40 @@ async function run() {
   assert.strictEqual(verified.statusCode, 200);
   assert.strictEqual(JSON.parse(verified.body).user.password, undefined);
   assert.strictEqual((await authHandler(postEvent('', { action: 'login', email: 'new-customer@example.com', password: 'customer-password-123' }))).statusCode, 200);
+
+  // Customer changes their login email; orders, cart and messages follow, and admin sees the new email.
+  const movingToken = JSON.parse(verified.body).token;
+  const movingIndex = blobModule.getStore('kingpin-order-index');
+  await movingIndex.setJSON('all-order-ids', [901]);
+  await movingIndex.setJSON('order-901', { id: 901, customerEmail: 'new-customer@example.com', customerUsername: 'new-customer@example.com', status: 'completed', productionStatus: 'completed', totalAmount: 500, items: [] });
+  assert.strictEqual((await cartHandler(postEvent(movingToken, { cart: customerCart }))).statusCode, 200);
+  assert.strictEqual((await customerServiceHandler(postEvent(movingToken, { action: 'create', subject: 'Order status', message: 'Before email change' }))).statusCode, 201);
+  assert.strictEqual((await authHandler(postEvent(movingToken, { action: 'request-email-change', newEmail: 'not-an-email' }))).statusCode, 400);
+  assert.strictEqual((await authHandler(postEvent(movingToken, { action: 'request-email-change', newEmail: 'customer@example.com' }))).statusCode, 409);
+  assert.strictEqual((await authHandler(postEvent(adminToken, { action: 'request-email-change', newEmail: 'x@example.com' }))).statusCode, 403);
+  sentVerificationHtml = '';
+  assert.strictEqual((await authHandler(postEvent(movingToken, { action: 'request-email-change', newEmail: 'Moved.Customer@Gmail.com' }))).statusCode, 200);
+  const emailChangeCode = /<strong>(\d{6})<\/strong>/.exec(sentVerificationHtml)?.[1];
+  assert.ok(emailChangeCode);
+  assert.strictEqual((await authHandler(postEvent(movingToken, { action: 'confirm-email-change', code: emailChangeCode === '000000' ? '111111' : '000000' }))).statusCode, 400);
+  const emailChanged = await authHandler(postEvent(movingToken, { action: 'confirm-email-change', code: emailChangeCode }));
+  assert.strictEqual(emailChanged.statusCode, 200);
+  const emailChangedBody = JSON.parse(emailChanged.body);
+  assert.strictEqual(emailChangedBody.user.email, 'moved.customer@gmail.com');
+  assert.strictEqual(emailChangedBody.previousEmail, 'new-customer@example.com');
+  const movedToken = emailChangedBody.token;
+  assert.strictEqual(verifyAccessToken(movedToken).sub, 'moved.customer@gmail.com');
+  assert.strictEqual((await authHandler(getEvent(movingToken))).statusCode, 401);
+  assert.strictEqual(JSON.parse((await authHandler(getEvent(movedToken))).body).profile.email, 'moved.customer@gmail.com');
+  assert.strictEqual((await authHandler(postEvent('', { action: 'login', email: 'new-customer@example.com', password: 'customer-password-123' }))).statusCode, 401);
+  assert.strictEqual((await authHandler(postEvent('', { action: 'login', email: 'moved.customer@gmail.com', password: 'customer-password-123' }))).statusCode, 200);
+  assert.deepStrictEqual(JSON.parse((await ordersHandler(getEvent(movedToken))).body).orders.map(order => order.id), [901]);
+  assert.deepStrictEqual(JSON.parse((await cartHandler(getEvent(movedToken))).body).cart, customerCart);
+  assert.strictEqual(JSON.parse((await customerServiceHandler(getEvent(movedToken))).body).messages.length, 1);
+  assert.strictEqual((await authHandler(postEvent(movedToken, { action: 'confirm-email-change', code: emailChangeCode }))).statusCode, 400);
+  const listedEmails = JSON.parse((await customersHandler(getEvent(adminToken))).body).customers.map(customer => customer.email);
+  assert.ok(listedEmails.includes('moved.customer@gmail.com'));
+  assert.ok(!listedEmails.includes('new-customer@example.com'));
 
   delete process.env.SMTP_USER;
   delete process.env.SMTP_PASS;

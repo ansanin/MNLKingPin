@@ -27,7 +27,11 @@ function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 }
 
-async function sendVerificationEmail(email, code) {
+async function sendVerificationEmail(email, code, {
+    subject = 'Verify your MNL KingPin account',
+    intro = 'Your account verification code is'
+} = {}) {
+    const html = `<p>${escapeHtml(intro)} <strong>${code}</strong>.</p><p>This code expires in 10 minutes.</p>`;
     const smtpUser = process.env.SMTP_USER;
     const smtpPass = process.env.SMTP_PASS;
     if (smtpUser && smtpPass) {
@@ -38,8 +42,8 @@ async function sendVerificationEmail(email, code) {
         await transporter.sendMail({
             from: process.env.SMTP_FROM || smtpUser,
             to: email,
-            subject: 'Verify your MNL KingPin account',
-            html: `<p>Your account verification code is <strong>${code}</strong>.</p><p>This code expires in 10 minutes.</p>`
+            subject,
+            html
         });
         return;
     }
@@ -54,8 +58,8 @@ async function sendVerificationEmail(email, code) {
             body: JSON.stringify({
                 from: process.env.RESEND_FROM_EMAIL,
                 to: [email],
-                subject: 'Verify your MNL KingPin account',
-                html: `<p>Your account verification code is <strong>${code}</strong>.</p><p>This code expires in 10 minutes.</p>`
+                subject,
+                html
             })
         });
         if (response.ok) return;
@@ -124,6 +128,157 @@ function cryptoRandomCode() {
     return require('crypto').randomInt(100000, 1000000);
 }
 
+function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+}
+
+function requireCustomer(event) {
+    const authentication = authenticateEvent(event);
+    if (!authentication.ok) return { response: jsonResponse(authentication.statusCode, { error: authentication.error }) };
+    if (authentication.claims.role !== 'customer') return { response: jsonResponse(403, { error: 'Customer access required.' }) };
+    return { email: normalizeEmail(authentication.claims.sub) };
+}
+
+function emailChangeKey(email) {
+    return `email-change-${accountKey(email)}`;
+}
+
+// Step 1 of an email change: send a code to the new address so a typo
+// cannot lock the customer out of their account.
+async function handleEmailChangeRequest(store, event, data) {
+    const customer = requireCustomer(event);
+    if (customer.response) return customer.response;
+    const currentEmail = customer.email;
+    const newEmail = normalizeEmail(data.newEmail);
+    if (!isValidEmail(newEmail)) return jsonResponse(400, { error: 'Enter a valid new email address.' });
+    if (newEmail === currentEmail) return jsonResponse(400, { error: 'The new email is the same as your current email.' });
+
+    const account = await store.get(accountKey(currentEmail), { type: 'json' });
+    if (!account?.verified) return jsonResponse(404, { error: 'Customer account was not found.' });
+    const existing = await store.get(accountKey(newEmail), { type: 'json' });
+    if (existing?.verified) return jsonResponse(409, { error: 'Another account already uses this email.' });
+
+    const key = emailChangeKey(currentEmail);
+    const previous = await store.get(key, { type: 'json' });
+    if (previous?.requestedAt && Date.now() - previous.requestedAt < 60 * 1000) {
+        return jsonResponse(429, { error: 'Wait one minute before requesting another code.' });
+    }
+    const code = String(cryptoRandomCode());
+    await store.setJSON(key, {
+        newEmail,
+        codeHash: hashVerificationCode(code),
+        requestedAt: Date.now(),
+        expiresAt: Date.now() + 10 * 60 * 1000,
+        attempts: 0
+    });
+    await sendVerificationEmail(newEmail, code, {
+        subject: 'Confirm your new MNL KingPin email',
+        intro: 'Use this code to confirm your new account email:'
+    });
+    return jsonResponse(200, { ok: true, verificationRequired: true, newEmail });
+}
+
+async function readAllOrderRecords(orderIndexStore, orderStore) {
+    const ids = (await orderIndexStore.get('all-order-ids', { type: 'json' })) || [];
+    const indexed = await Promise.all(ids.map(id => orderIndexStore.get(`order-${String(id)}`, { type: 'json' })));
+    const legacy = [
+        ...((await orderStore.get('orders', { type: 'json' })) || []),
+        ...((await orderStore.get('orders-v2', { type: 'json' })) || []),
+        ...((await orderIndexStore.get('orders', { type: 'json' })) || [])
+    ];
+    const byId = new Map();
+    [...legacy, ...indexed].forEach(order => { if (order?.id) byId.set(String(order.id), order); });
+    return { ids, orders: Array.from(byId.values()) };
+}
+
+// Orders, the cart and support messages are linked to the login email,
+// so they move with the account when the email changes.
+async function moveCustomerData(oldEmail, newEmail) {
+    const orderIndexStore = getStore('kingpin-order-index');
+    const { ids, orders } = await readAllOrderRecords(orderIndexStore, getStore('kingpin-orders'));
+    const nextIds = [...ids];
+    let movedOrders = 0;
+    for (const order of orders) {
+        if (normalizeEmail(order.customerEmail) !== oldEmail) continue;
+        const updated = { ...order, customerEmail: newEmail };
+        if (normalizeEmail(order.customerUsername) === oldEmail) updated.customerUsername = newEmail;
+        await orderIndexStore.setJSON(`order-${String(order.id)}`, updated);
+        if (!nextIds.some(id => String(id) === String(order.id))) nextIds.push(order.id);
+        movedOrders += 1;
+    }
+    if (nextIds.length !== ids.length) await orderIndexStore.setJSON('all-order-ids', nextIds);
+    if (movedOrders) {
+        const activeIds = (await orderIndexStore.get('active-order-ids', { type: 'json' })) || [];
+        const legacyOnlyActive = orders
+            .filter(order => normalizeEmail(order.customerEmail) === oldEmail)
+            .filter(order => !['completed', 'delivered', 'cancelled'].includes(String(order.status || '').toLowerCase()))
+            .map(order => order.id)
+            .filter(id => !activeIds.some(activeId => String(activeId) === String(id)));
+        if (legacyOnlyActive.length) await orderIndexStore.setJSON('active-order-ids', [...activeIds, ...legacyOnlyActive]);
+    }
+
+    const cartStore = getStore('kingpin-carts');
+    const cart = await cartStore.get(accountKey(oldEmail), { type: 'json' });
+    if (Array.isArray(cart)) {
+        await cartStore.setJSON(accountKey(newEmail), cart);
+        if (typeof cartStore.delete === 'function') await cartStore.delete(accountKey(oldEmail));
+    }
+
+    const messageStore = getStore('kingpin-customer-service');
+    let cursor;
+    do {
+        const page = await messageStore.list({ prefix: 'message-', ...(cursor ? { cursor } : {}) });
+        for (const blob of page.blobs || []) {
+            const message = await messageStore.get(blob.key, { type: 'json' });
+            if (!message || normalizeEmail(message.ownerSub) !== oldEmail) continue;
+            await messageStore.setJSON(blob.key, { ...message, ownerSub: newEmail, customerEmail: newEmail });
+        }
+        cursor = page.cursor;
+    } while (cursor);
+    return { movedOrders };
+}
+
+// Step 2: check the code, move the account to the new email, and issue a
+// new session because the old token is tied to the old email.
+async function handleEmailChangeConfirm(store, event, data) {
+    const customer = requireCustomer(event);
+    if (customer.response) return customer.response;
+    const oldEmail = customer.email;
+    const key = emailChangeKey(oldEmail);
+    const pending = await store.get(key, { type: 'json' });
+    if (!pending || pending.expiresAt < Date.now()) return jsonResponse(400, { error: 'The code expired. Request a new code.' });
+    if (pending.attempts >= 5) return jsonResponse(429, { error: 'Too many attempts. Request a new code.' });
+    if (!safeEqual(hashVerificationCode(data.code || ''), pending.codeHash)) {
+        pending.attempts += 1;
+        await store.setJSON(key, pending);
+        return jsonResponse(400, { error: 'The code is incorrect.' });
+    }
+
+    const newEmail = pending.newEmail;
+    const account = await store.get(accountKey(oldEmail), { type: 'json' });
+    if (!account?.verified) return jsonResponse(404, { error: 'Customer account was not found.' });
+    const existing = await store.get(accountKey(newEmail), { type: 'json' });
+    if (existing?.verified) return jsonResponse(409, { error: 'Another account already uses this email.' });
+
+    const movedAccount = {
+        ...account,
+        email: newEmail,
+        previousEmails: [...(account.previousEmails || []), oldEmail],
+        emailChangedAt: new Date().toISOString()
+    };
+    if (normalizeEmail(account.username) === oldEmail) movedAccount.username = newEmail;
+    await store.setJSON(accountKey(newEmail), movedAccount);
+    await moveCustomerData(oldEmail, newEmail);
+    if (typeof store.delete === 'function') {
+        await store.delete(accountKey(oldEmail));
+        await store.delete(key);
+    } else {
+        await store.setJSON(accountKey(oldEmail), { movedTo: newEmail, verified: false });
+        await store.setJSON(key, null);
+    }
+    return jsonResponse(200, { ok: true, previousEmail: oldEmail, ...issueCustomerSession(movedAccount) });
+}
+
 async function handleVerification(store, data) {
     const email = normalizeEmail(data.email);
     const key = accountKey(email);
@@ -187,6 +342,8 @@ exports.handler = async function handler(event) {
         const store = getStore('kingpin-auth');
         if (data.action === 'register') return await handleRegistration(store, data);
         if (data.action === 'verify') return await handleVerification(store, data);
+        if (data.action === 'request-email-change') return await handleEmailChangeRequest(store, event, data);
+        if (data.action === 'confirm-email-change') return await handleEmailChangeConfirm(store, event, data);
 
         if (data.action === 'update-customer-profile') {
             const authentication = authenticateEvent(event);
@@ -261,6 +418,22 @@ exports.handler = async function handler(event) {
             });
         }
 
+        if (data.action === 'staff-login') {
+            const staff = await store.get('staff-credentials', { type: 'json' });
+            if (!staff || !safeEqual(data.username || '', staff.username) || !await verifyPassword(data.password || '', staff.passwordHash)) return jsonResponse(401, { error: 'Staff username or password is incorrect.' });
+            return jsonResponse(200, { ok: true, token: signAccessToken({ sub: staff.username, role: 'staff' }), user: { username: staff.username }, role: 'staff' });
+        }
+        if (data.action === 'set-staff-credentials') {
+            const auth = authenticateEvent(event);
+            if (!auth.ok) return jsonResponse(auth.statusCode, { error: auth.error });
+            if (auth.claims.role !== 'admin') return jsonResponse(403, { error: 'Admin access required.' });
+            const username = String(data.username || '').trim();
+            const password = String(data.password || '');
+            if (username.length < 3 || username.length > 60 || password.length < 8 || password.length > 128) return jsonResponse(400, { error: 'Username must be 3?60 characters and password 8?128 characters.' });
+            await store.setJSON('staff-credentials', { username, passwordHash: await hashPassword(password), updatedAt: new Date().toISOString() });
+            return jsonResponse(200, { ok: true });
+        }
+
         if (data.action === 'change-admin-credentials') {
             const authentication = authenticateEvent(event);
             if (!authentication.ok || authentication.claims.role !== 'admin') {
@@ -316,6 +489,9 @@ exports.handler = async function handler(event) {
         console.error('KingPin authentication error:', error);
         if (action === 'register') {
             return jsonResponse(503, { error: 'We could not send the verification email. Check the Netlify SMTP or Resend settings, then try registration again in one minute.' });
+        }
+        if (action === 'request-email-change') {
+            return jsonResponse(503, { error: 'We could not send the code to the new email. Check the Netlify SMTP or Resend settings, then try again in one minute.' });
         }
         return jsonResponse(500, { error: 'Unable to complete authentication.' });
     }

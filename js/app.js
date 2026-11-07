@@ -2585,8 +2585,8 @@ function populateCustomerSettingsForm(profile) {
     document.getElementById('settingsFullName').value = profile.fullName || '';
     const emailInput = document.getElementById('settingsEmail');
     emailInput.value = appData.currentUser || profile.email || '';
-    emailInput.readOnly = true;
-    emailInput.title = 'The login email cannot be changed here.';
+    emailInput.readOnly = false;
+    emailInput.title = 'Change this to use a new login email. A code will be sent to confirm it.';
     document.getElementById('settingsPhone').value = profile.phone || '';
     document.getElementById('settingsAddress').value = profile.address || '';
 }
@@ -2597,10 +2597,11 @@ async function saveCustomerSettings(e) {
     if (appData.currentRole !== 'customer' || !appData.currentUser) return;
 
     const email = appData.currentUser;
+    const requestedEmail = document.getElementById('settingsEmail').value.trim().toLowerCase();
     const updatedAccount = {
         username: document.getElementById('settingsUsername').value.trim(),
         fullName: document.getElementById('settingsFullName').value.trim(),
-        email,
+        email: requestedEmail,
         phone: document.getElementById('settingsPhone').value.trim(),
         address: document.getElementById('settingsAddress').value.trim()
     };
@@ -2612,18 +2613,21 @@ async function saveCustomerSettings(e) {
         return;
     }
 
-    if (!updatedAccount.email.includes('@')) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updatedAccount.email)) {
         message.className = 'status-message error';
         message.textContent = 'Please enter a valid email address.';
         return;
     }
 
+    const emailChanged = requestedEmail !== String(email).toLowerCase();
     const submitButton = document.querySelector('#customerSettingsForm button[type="submit"]');
     if (submitButton) submitButton.disabled = true;
     message.className = 'status-message';
     message.textContent = 'Saving account information...';
     try {
-        const result = await callAuthApi({ action: 'update-customer-profile', ...updatedAccount });
+        // The profile is saved under the current email first; the email itself
+        // only changes after the customer confirms the code sent to the new address.
+        const result = await callAuthApi({ action: 'update-customer-profile', ...updatedAccount, email });
         const savedProfile = result.user;
         const accounts = loadCustomerAccounts();
         accounts[email] = savedProfile;
@@ -2639,6 +2643,23 @@ async function saveCustomerSettings(e) {
 
         message.className = 'status-message success';
         message.textContent = 'Account information updated and synced successfully.';
+
+        if (emailChanged) {
+            document.getElementById('settingsEmail').value = requestedEmail;
+            document.getElementById('customerSettingsForm').dataset.profileDirty = 'true';
+            try {
+                await callAuthApi({ action: 'request-email-change', newEmail: requestedEmail });
+            } catch (emailError) {
+                message.className = 'status-message error';
+                message.textContent = `Account information saved, but the email was not changed: ${emailError.message}`;
+                return;
+            }
+            document.getElementById('settingsPendingEmail').textContent = requestedEmail;
+            document.getElementById('settingsEmailCode').value = '';
+            document.getElementById('settingsEmailCodeGroup').hidden = false;
+            document.getElementById('settingsEmailCode').focus();
+            message.textContent = `Account information saved. We sent a 6-digit code to ${requestedEmail}. Enter it below to finish changing your email.`;
+        }
     } catch (error) {
         console.error('Unable to save customer account information:', error);
         message.className = 'status-message error';
@@ -2646,6 +2667,50 @@ async function saveCustomerSettings(e) {
     } finally {
         if (submitButton) submitButton.disabled = false;
     }
+}
+
+async function confirmCustomerEmailChange() {
+    const message = document.getElementById('customerSettingsMessage');
+    const code = document.getElementById('settingsEmailCode').value.trim();
+    if (!/^\d{6}$/.test(code)) {
+        message.className = 'status-message error';
+        message.textContent = 'Enter the 6-digit code sent to your new email.';
+        return;
+    }
+    message.className = 'status-message';
+    message.textContent = 'Confirming new email...';
+    try {
+        const result = await callAuthApi({ action: 'confirm-email-change', code });
+        const accounts = loadCustomerAccounts();
+        delete accounts[result.previousEmail];
+        accounts[result.user.email] = result.user;
+        saveCustomerAccounts(accounts);
+
+        appData.authToken = result.token;
+        appData.currentUser = result.user.email;
+        appData.currentUserProfile = result.user;
+        saveCurrentSession();
+        const displayName = document.getElementById('customerDisplayName');
+        if (displayName) displayName.textContent = `Welcome, ${result.user.username}!`;
+
+        document.getElementById('settingsEmailCodeGroup').hidden = true;
+        document.getElementById('customerSettingsForm').dataset.profileDirty = 'false';
+        populateCustomerSettingsForm(result.user);
+        message.className = 'status-message success';
+        message.textContent = `Your email is now ${result.user.email}. Use it the next time you sign in.`;
+    } catch (error) {
+        message.className = 'status-message error';
+        message.textContent = `Email was not changed: ${error.message}`;
+    }
+}
+
+function cancelCustomerEmailChange() {
+    document.getElementById('settingsEmailCodeGroup').hidden = true;
+    document.getElementById('settingsEmail').value = appData.currentUser || '';
+    document.getElementById('customerSettingsForm').dataset.profileDirty = 'false';
+    const message = document.getElementById('customerSettingsMessage');
+    message.className = 'status-message';
+    message.textContent = 'Email change cancelled. Your email was not changed.';
 }
 
 function loadCustomerNotifications() {
@@ -6808,8 +6873,30 @@ function exportHistoryToCSV() {
 
 // ===== ADMIN: REPORTS & ANALYTICS =====
 
+// Admin order screens load only active orders. Reports and the sales calendar
+// need completed orders too, so they keep their own full copy.
+let reportOrdersRequest = null;
+
 function getReportOrders() {
+    if (Array.isArray(appData.reportOrders)) return appData.reportOrders;
     return Array.isArray(appData.orders) ? appData.orders : [];
+}
+
+function refreshReportOrders() {
+    if (reportOrdersRequest) return reportOrdersRequest;
+    reportOrdersRequest = fetchSharedOrders({ activeOnly: false })
+        .then(orders => {
+            appData.reportOrders = orders;
+            return orders;
+        })
+        .catch(error => {
+            console.warn('Unable to load all orders for reports:', error);
+            return null;
+        })
+        .finally(() => {
+            reportOrdersRequest = null;
+        });
+    return reportOrdersRequest;
 }
 
 function getSoldOrders() {
@@ -6850,7 +6937,7 @@ function filterReportOrders(orders) {
     const { start, end } = getReportDateRange();
     if (!start && !end) return orders;
     return orders.filter(order => {
-        const date = parseReportDate(order.date);
+        const date = getOrderPlacedDate(order);
         return date && (!start || date >= start) && (!end || date < end);
     });
 }
@@ -6871,9 +6958,190 @@ function toggleCustomReportDates() {
     if (label) label.textContent = getReportPeriodLabel();
 }
 
+// ===== ADMIN: SALES CALENDAR =====
+
+let salesCalendarMonth = null;
+let salesCalendarSelectedDay = null;
+
+function escapeReportText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+}
+
+function formatPeso(value) {
+    return `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Order ids are Date.now() timestamps, which are more reliable than the
+// locale-formatted "date" string, so prefer them when they look valid.
+function getOrderPlacedDate(order) {
+    const idTime = Number(order?.id);
+    if (Number.isFinite(idTime) && idTime > 946684800000 && idTime < 4102444800000) return new Date(idTime);
+    return parseReportDate(order?.date);
+}
+
+function getCalendarDayKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function isSoldOrder(order) {
+    return ['completed', 'delivered'].includes(order?.status);
+}
+
+function syncSalesCalendarMonthToPeriod() {
+    const today = new Date();
+    const { start, period } = getReportDateRange();
+    if (period === 'all-time') {
+        if (!salesCalendarMonth) salesCalendarMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        return;
+    }
+    const anchor = start || today;
+    salesCalendarMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+}
+
+function changeSalesCalendarMonth(step) {
+    const today = new Date();
+    const base = salesCalendarMonth || new Date(today.getFullYear(), today.getMonth(), 1);
+    const target = new Date(base.getFullYear(), base.getMonth() + step, 1);
+    const monthsFromNow = (target.getFullYear() - today.getFullYear()) * 12 + (target.getMonth() - today.getMonth());
+    const periodSelect = document.getElementById('reportPeriod');
+    if (periodSelect) {
+        if (monthsFromNow === 0) {
+            periodSelect.value = 'this-month';
+        } else if (monthsFromNow === -1) {
+            periodSelect.value = 'last-month';
+        } else {
+            const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0);
+            periodSelect.value = 'custom';
+            document.getElementById('reportStartDate').value = getCalendarDayKey(target);
+            document.getElementById('reportEndDate').value = getCalendarDayKey(lastDay);
+        }
+    }
+    salesCalendarMonth = target;
+    salesCalendarSelectedDay = null;
+    toggleCustomReportDates();
+    generateReports({ refresh: false });
+}
+
+function renderSalesCalendar() {
+    const grid = document.getElementById('salesCalendarGrid');
+    if (!grid) return;
+    if (!salesCalendarMonth) syncSalesCalendarMonthToPeriod();
+
+    const year = salesCalendarMonth.getFullYear();
+    const month = salesCalendarMonth.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const leadingBlanks = new Date(year, month, 1).getDay();
+    const todayKey = getCalendarDayKey(new Date());
+
+    const days = {};
+    getReportOrders().forEach(order => {
+        const placed = getOrderPlacedDate(order);
+        if (!placed || placed.getFullYear() !== year || placed.getMonth() !== month) return;
+        const key = getCalendarDayKey(placed);
+        if (!days[key]) days[key] = { orders: [], sales: 0, sold: 0 };
+        days[key].orders.push(order);
+        if (isSoldOrder(order)) {
+            days[key].sales += Number(order.totalAmount || 0);
+            days[key].sold += 1;
+        }
+    });
+
+    const busiestCount = Math.max(0, ...Object.values(days).map(day => day.orders.length));
+    const monthOrders = Object.values(days).reduce((sum, day) => sum + day.orders.length, 0);
+    const monthSales = Object.values(days).reduce((sum, day) => sum + day.sales, 0);
+    const busiestKey = Object.keys(days).find(key => days[key].orders.length === busiestCount && busiestCount > 0);
+
+    document.getElementById('salesCalendarTitle').textContent = salesCalendarMonth.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+    const summary = document.getElementById('salesCalendarSummary');
+    if (summary) {
+        let text = `${monthOrders} order${monthOrders === 1 ? '' : 's'} placed · ${formatPeso(monthSales)} completed sales`;
+        if (busiestKey) {
+            const busiestDate = new Date(`${busiestKey}T00:00:00`);
+            text += ` · Busiest: ${busiestDate.toLocaleDateString('en-PH', { weekday: 'long', month: 'short', day: 'numeric' })} (${busiestCount})`;
+        }
+        summary.textContent = text;
+    }
+
+    const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    let html = weekdays.map(day => `<div class="sales-calendar-weekday" role="columnheader">${day}</div>`).join('');
+    for (let blank = 0; blank < leadingBlanks; blank += 1) html += '<div class="sales-calendar-day is-empty" aria-hidden="true"></div>';
+
+    for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber += 1) {
+        const key = getCalendarDayKey(new Date(year, month, dayNumber));
+        const data = days[key];
+        const count = data ? data.orders.length : 0;
+        const level = count === 0 ? 0 : Math.min(4, Math.ceil((count / busiestCount) * 4));
+        const classes = ['sales-calendar-day', `level-${level}`];
+        if (key === todayKey) classes.push('is-today');
+        if (key === salesCalendarSelectedDay) classes.push('is-selected');
+        const label = `${new Date(year, month, dayNumber).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })}: ${count} order${count === 1 ? '' : 's'}`;
+        html += `<button type="button" class="${classes.join(' ')}" role="gridcell" aria-label="${escapeReportText(label)}" onclick="showSalesCalendarDay('${key}')">
+            <span class="sales-calendar-date">${dayNumber}</span>
+            ${count ? `<span class="sales-calendar-count">${count} order${count === 1 ? '' : 's'}</span>` : ''}
+            ${data && data.sales ? `<span class="sales-calendar-sales">${formatPeso(data.sales)}</span>` : ''}
+        </button>`;
+    }
+    grid.innerHTML = html;
+
+    if (salesCalendarSelectedDay && salesCalendarSelectedDay.startsWith(`${year}-${String(month + 1).padStart(2, '0')}`)) {
+        showSalesCalendarDay(salesCalendarSelectedDay, { rerender: false });
+    } else {
+        const details = document.getElementById('salesCalendarDayDetails');
+        if (details) details.hidden = true;
+    }
+}
+
+function showSalesCalendarDay(key, { rerender = true } = {}) {
+    salesCalendarSelectedDay = key;
+    if (rerender) {
+        renderSalesCalendar();
+        return;
+    }
+    const details = document.getElementById('salesCalendarDayDetails');
+    if (!details) return;
+    const orders = getReportOrders()
+        .filter(order => {
+            const placed = getOrderPlacedDate(order);
+            return placed && getCalendarDayKey(placed) === key;
+        })
+        .sort((first, second) => getOrderPlacedDate(first) - getOrderPlacedDate(second));
+    const dayLabel = new Date(`${key}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const daySales = orders.filter(isSoldOrder).reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+
+    const rows = orders.map(order => {
+        const placed = getOrderPlacedDate(order);
+        const status = order.status || 'pending';
+        return `<tr>
+            <td>${placed ? placed.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }) : '—'}</td>
+            <td>#${escapeReportText(order.id)}</td>
+            <td>${escapeReportText(order.customerName || 'N/A')}</td>
+            <td>${escapeReportText((order.items || []).map(item => `${item.name} (x${item.quantity})`).join(', ') || 'N/A')}</td>
+            <td>${formatPeso(order.totalAmount)}</td>
+            <td><span class="order-status ${escapeReportText(status)}">${escapeReportText(status.toUpperCase())}</span></td>
+        </tr>`;
+    }).join('');
+
+    details.innerHTML = `
+        <div class="sales-calendar-details-header">
+            <h4>${escapeReportText(dayLabel)}</h4>
+            <span>${orders.length} order${orders.length === 1 ? '' : 's'} · ${formatPeso(daySales)} completed sales</span>
+        </div>
+        ${orders.length ? `<div class="sales-calendar-table-wrap"><table>
+            <thead><tr><th>Time</th><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table></div>` : '<p class="sales-calendar-empty">No orders were placed on this day.</p>'}`;
+    details.hidden = false;
+}
+
 // Generate Reports
-function generateReports() {
-    loadOrders();
+function generateReports({ refresh = true } = {}) {
+    if (refresh) {
+        syncSalesCalendarMonthToPeriod();
+        refreshReportOrders().then(orders => {
+            if (orders && document.getElementById('reportsTab')?.style.display === 'block') generateReports({ refresh: false });
+        });
+    }
+    renderSalesCalendar();
     const allOrders = filterReportOrders(getReportOrders());
     const soldOrders = allOrders.filter(order => ['completed', 'delivered'].includes(order.status));
 
@@ -7000,7 +7268,6 @@ function excelEscape(value) {
 
 // Generate Full Report as an Excel-compatible workbook
 function generateFullReport() {
-    loadOrders();
     const allOrders = filterReportOrders(getReportOrders());
     const soldOrders = allOrders.filter(order => ['completed', 'delivered'].includes(order.status));
 
