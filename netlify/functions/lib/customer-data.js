@@ -49,9 +49,7 @@ async function moveCustomerData(oldEmail, newEmail) {
     let movedOrders = 0;
     for (const order of orders) {
         if (normalizeEmail(order.customerEmail) !== oldEmail) continue;
-        // The customer keeps access through the new email, but placedByEmail
-        // records which customer-list entry the order belongs to.
-        const updated = { ...order, customerEmail: newEmail, placedByEmail: normalizeEmail(order.placedByEmail) || oldEmail };
+        const updated = { ...order, customerEmail: newEmail };
         if (normalizeEmail(order.customerUsername) === oldEmail) updated.customerUsername = newEmail;
         await orderIndexStore.setJSON(`order-${String(order.id)}`, updated);
         if (!nextIds.some(id => String(id) === String(order.id))) nextIds.push(order.id);
@@ -83,39 +81,32 @@ async function moveCustomerData(oldEmail, newEmail) {
     return { movedOrders };
 }
 
-// Moves sign-in to a new email. The new email becomes a new customer entry
-// with `profile` applied; the old email stays in the customer list as an
-// archived record with its old name and details, and cannot sign in.
-// The caller checks that the new email is free.
+// Moves an account to a new email. It stays one customer: the account,
+// orders, cart, messages and any admin label move to the new email, and the
+// old email is removed. The caller checks that the new email is free.
 async function moveAccount(authStore, account, newEmail, profile = {}) {
     const oldEmail = normalizeEmail(account.email);
-    const changedAt = new Date().toISOString();
     const newAccount = {
         ...account,
         ...profile,
         email: newEmail,
         previousEmails: [...(account.previousEmails || []), oldEmail],
-        emailChangedAt: changedAt,
-        createdAt: changedAt
+        emailChangedAt: new Date().toISOString()
     };
     if (normalizeEmail(newAccount.username) === oldEmail) newAccount.username = newEmail;
     delete newAccount.archived;
     delete newAccount.movedTo;
-    const archivedAccount = {
-        email: oldEmail,
-        username: account.username || '',
-        fullName: account.fullName || '',
-        phone: account.phone || '',
-        address: account.address || '',
-        createdAt: account.createdAt || '',
-        verified: true,
-        archived: true,
-        movedTo: newEmail,
-        archivedAt: changedAt
-    };
     await authStore.setJSON(accountKey(newEmail), newAccount);
     await moveCustomerData(oldEmail, newEmail);
-    await authStore.setJSON(accountKey(oldEmail), archivedAccount);
+
+    const adminEdits = getStore('kingpin-customer-admin-edits');
+    const label = await adminEdits.get(accountKey(oldEmail), { type: 'json' });
+    if (label) {
+        await adminEdits.setJSON(accountKey(newEmail), label);
+        await deleteKey(adminEdits, accountKey(oldEmail));
+    }
+
+    await deleteKey(authStore, accountKey(oldEmail));
     await deleteKey(authStore, emailChangeKey(oldEmail));
     return newAccount;
 }

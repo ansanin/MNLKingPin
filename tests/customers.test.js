@@ -42,9 +42,10 @@ const { handler } = require('../netlify/functions/customers');
   assert.strictEqual(result.statusCode, 200);
   assert.deepStrictEqual(JSON.parse(result.body).customers, [
     { name: 'Alice', email: 'a@example.com', phone: '09123456789', username: 'alice', address: 'Naga', accountEmail: 'a@example.com', totalOrders: 2, status: 'active', movedTo: '', adminEdited: false },
-    { name: 'Bob', email: 'b@example.com', phone: '', username: '', address: '', accountEmail: 'b@example.com', totalOrders: 0, status: 'active', movedTo: '', adminEdited: false },
-    { name: 'Old Name', email: 'old@example.com', phone: '', username: '', address: '', accountEmail: 'old@example.com', totalOrders: 1, status: 'old-email', movedTo: 'b@example.com', adminEdited: false }
+    { name: 'Bob', email: 'b@example.com', phone: '', username: '', address: '', accountEmail: 'b@example.com', totalOrders: 1, status: 'active', movedTo: '', adminEdited: false }
   ]);
+  // Records left by an earlier email change are not listed as a separate customer.
+  assert.strictEqual((await list()).some(customer => customer.accountEmail === 'old@example.com'), false);
 
   // Only an admin can edit, reset or delete.
   for (const action of ['update', 'reset', 'delete']) {
@@ -99,7 +100,7 @@ const { handler } = require('../netlify/functions/customers');
   assert.strictEqual(stores['kingpin-carts'][accountKey('a@example.com')], undefined);
   assert.strictEqual(stores['kingpin-customer-admin-edits'][accountKey('a@example.com')], undefined);
   assert.strictEqual(stores['kingpin-order-index']['order-2'].customerEmail, 'a@example.com');
-  assert.deepStrictEqual((await list()).map(customer => customer.accountEmail), ['b@example.com', 'old@example.com']);
+  assert.deepStrictEqual((await list()).map(customer => customer.accountEmail), ['b@example.com']);
   assert.strictEqual((await handler(post(adminToken, { action: 'delete', email: 'a@example.com' }))).statusCode, 404);
   assert.strictEqual((await handler(post(adminToken, { action: 'unknown' }))).statusCode, 400);
   console.log('Customer list tests passed');

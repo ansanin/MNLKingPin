@@ -41,13 +41,12 @@ async function listCustomers() {
     for (const order of orders) if (order && order.id) uniqueOrders.set(String(order.id), order);
     const counts = new Map();
     for (const order of uniqueOrders.values()) {
-        // Orders count toward the email they were placed with, so an old
-        // email's entry keeps its orders after the customer changes email.
-        const email = normalizeEmail(order.placedByEmail || order.customerEmail);
+        const email = normalizeEmail(order.customerEmail);
         if (email) counts.set(email, (counts.get(email) || 0) + 1);
     }
     const edits = getStore(ADMIN_EDITS_STORE);
-    const visible = records.filter(account => account && account.verified && account.email);
+    // One entry per customer: records left by an earlier email change are not listed.
+    const visible = records.filter(account => account && account.verified && !account.archived && account.email);
     const overrides = await Promise.all(visible.map(account => edits.get(accountKey(account.email), { type: 'json' })));
     return visible.map((account, index) => {
         const real = realDetails(account);

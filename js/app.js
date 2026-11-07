@@ -2625,21 +2625,8 @@ async function saveCustomerSettings(e) {
     message.className = 'status-message';
     message.textContent = 'Saving account information...';
     try {
-        if (emailChanged) {
-            // A new email becomes a new customer entry with these details. The
-            // current email keeps its old details in the admin customer list,
-            // so nothing is saved until the code is confirmed.
-            await callAuthApi({ action: 'request-email-change', newEmail: requestedEmail, ...updatedAccount });
-            document.getElementById('customerSettingsForm').dataset.profileDirty = 'true';
-            document.getElementById('settingsPendingEmail').textContent = requestedEmail;
-            document.getElementById('settingsEmailCode').value = '';
-            document.getElementById('settingsEmailCodeGroup').hidden = false;
-            document.getElementById('settingsEmailCode').focus();
-            message.className = 'status-message success';
-            message.textContent = `We sent a 6-digit code to ${requestedEmail}. Enter it below to finish changing your email. Your changes are saved when the code is confirmed.`;
-            return;
-        }
-
+        // The profile is saved under the current email first; the email itself
+        // only changes after the customer confirms the code sent to the new address.
         const result = await callAuthApi({ action: 'update-customer-profile', ...updatedAccount, email });
         const savedProfile = result.user;
         const accounts = loadCustomerAccounts();
@@ -2656,6 +2643,23 @@ async function saveCustomerSettings(e) {
 
         message.className = 'status-message success';
         message.textContent = 'Account information updated and synced successfully.';
+
+        if (emailChanged) {
+            document.getElementById('settingsEmail').value = requestedEmail;
+            document.getElementById('customerSettingsForm').dataset.profileDirty = 'true';
+            try {
+                await callAuthApi({ action: 'request-email-change', newEmail: requestedEmail });
+            } catch (emailError) {
+                message.className = 'status-message error';
+                message.textContent = `Account information saved, but the email was not changed: ${emailError.message}`;
+                return;
+            }
+            document.getElementById('settingsPendingEmail').textContent = requestedEmail;
+            document.getElementById('settingsEmailCode').value = '';
+            document.getElementById('settingsEmailCodeGroup').hidden = false;
+            document.getElementById('settingsEmailCode').focus();
+            message.textContent = `Account information saved. We sent a 6-digit code to ${requestedEmail}. Enter it below to finish changing your email.`;
+        }
     } catch (error) {
         console.error('Unable to save customer account information:', error);
         message.className = 'status-message error';
