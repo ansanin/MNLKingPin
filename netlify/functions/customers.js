@@ -1,6 +1,21 @@
 const { connectLambda, getStore } = require('@netlify/blobs');
 const { accountKey, authenticateEvent } = require('./lib/auth');
-const { deleteAccount, isActiveAccount, isValidEmail, moveAccount, normalizeEmail } = require('./lib/customer-data');
+const { deleteAccount, isValidEmail, normalizeEmail } = require('./lib/customer-data');
+
+// Admin edits in the customer list are labels for the admin only. They are
+// kept apart from the customer's account, so the customer's login, profile
+// and orders never change, and Reset brings back the real details.
+const ADMIN_EDITS_STORE = 'kingpin-customer-admin-edits';
+const EDITABLE_FIELDS = ['fullName', 'email', 'phone', 'address'];
+
+function realDetails(account) {
+    return {
+        fullName: account.fullName || account.username || account.email,
+        email: account.email,
+        phone: account.phone || '',
+        address: account.address || ''
+    };
+}
 
 const response = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) });
 
@@ -31,51 +46,66 @@ async function listCustomers() {
         const email = normalizeEmail(order.placedByEmail || order.customerEmail);
         if (email) counts.set(email, (counts.get(email) || 0) + 1);
     }
-    return records.filter(account => account && account.verified && account.email).map(account => ({
-        name: account.fullName || account.username || account.email,
-        email: account.email,
-        phone: account.phone || '',
-        username: account.username || '',
-        address: account.address || '',
-        totalOrders: counts.get(normalizeEmail(account.email)) || 0,
-        status: account.archived ? 'old-email' : 'active',
-        movedTo: account.movedTo || ''
-    })).sort((a, b) => a.name.localeCompare(b.name) || (a.status === b.status ? 0 : a.status === 'active' ? -1 : 1));
+    const edits = getStore(ADMIN_EDITS_STORE);
+    const visible = records.filter(account => account && account.verified && account.email);
+    const overrides = await Promise.all(visible.map(account => edits.get(accountKey(account.email), { type: 'json' })));
+    return visible.map((account, index) => {
+        const real = realDetails(account);
+        const override = overrides[index] || {};
+        const shown = { ...real };
+        EDITABLE_FIELDS.forEach(field => { if (typeof override[field] === 'string') shown[field] = override[field]; });
+        const adminEdited = EDITABLE_FIELDS.some(field => shown[field] !== real[field]);
+        return {
+            name: shown.fullName,
+            email: shown.email,
+            phone: shown.phone,
+            username: account.username || '',
+            address: shown.address,
+            accountEmail: account.email,
+            totalOrders: counts.get(normalizeEmail(account.email)) || 0,
+            status: account.archived ? 'old-email' : 'active',
+            movedTo: account.movedTo || '',
+            adminEdited,
+            ...(adminEdited ? { original: { name: real.fullName, email: real.email, phone: real.phone, address: real.address } } : {})
+        };
+    }).sort((a, b) => a.name.localeCompare(b.name) || (a.status === b.status ? 0 : a.status === 'active' ? -1 : 1));
 }
 
-// Admin edits a customer's profile. A new email moves the account and its
-// orders, cart and messages, the same as a customer-confirmed email change.
+// Saves the admin's edited name, Gmail, phone or address for the list only.
 async function updateCustomer(data) {
-    const store = getStore('kingpin-auth');
     const email = normalizeEmail(data.email);
-    const account = await store.get(accountKey(email), { type: 'json' });
-    if (account?.archived) return response(409, { error: 'This is an old email record and cannot be edited.' });
-    if (!isActiveAccount(account)) return response(404, { error: 'Customer account was not found.' });
+    const account = await getStore('kingpin-auth').get(accountKey(email), { type: 'json' });
+    if (!account?.verified) return response(404, { error: 'Customer account was not found.' });
+    const edits = getStore(ADMIN_EDITS_STORE);
+    const current = (await edits.get(accountKey(email), { type: 'json' })) || {};
+    const real = realDetails(account);
+    const next = { ...real, ...current };
+    if (data.fullName !== undefined) next.fullName = String(data.fullName).trim();
+    if (data.newEmail !== undefined) next.email = normalizeEmail(data.newEmail);
+    if (data.phone !== undefined) next.phone = String(data.phone).trim();
+    if (data.address !== undefined) next.address = String(data.address).trim();
+    if (!next.fullName || next.fullName.length > 120) return response(400, { error: 'Enter a name of up to 120 characters.' });
+    if (!isValidEmail(next.email)) return response(400, { error: 'Enter a valid email address.' });
+    if (next.phone.length > 40 || next.address.length > 500) return response(400, { error: 'Phone or address is too long.' });
 
-    // Fields that are not sent keep their current value, so the list can
-    // update just the name or Gmail.
-    const field = (name, fallback = '') => String(data[name] ?? account[name] ?? fallback).trim();
-    const newEmail = normalizeEmail(data.newEmail || data.email);
-    const fullName = field('fullName');
-    const username = field('username') || account.username || email;
-    const phone = field('phone');
-    const address = field('address');
-    if (!isValidEmail(newEmail)) return response(400, { error: 'Enter a valid email address.' });
-    if (!fullName || fullName.length > 120 || username.length < 3 || username.length > 60
-        || phone.length > 40 || address.length > 500) {
-        return response(400, { error: 'Enter a name, a username of 3–60 characters, and a phone and address within the allowed lengths.' });
-    }
-
-    if (newEmail !== email) {
-        const existing = await store.get(accountKey(newEmail), { type: 'json' });
-        if (isActiveAccount(existing)) return response(409, { error: 'Another account already uses this email.' });
-        // The old email stays in the list with its old details; the edits
-        // apply to the new email's entry.
-        await moveAccount(store, account, newEmail, { fullName, username, phone, address });
+    const override = {};
+    EDITABLE_FIELDS.forEach(field => { if (next[field] !== real[field]) override[field] = next[field]; });
+    if (Object.keys(override).length) {
+        await edits.setJSON(accountKey(email), { ...override, updatedAt: new Date().toISOString() });
     } else {
-        await store.setJSON(accountKey(email), { ...account, fullName, username, phone, address });
+        await removeKey(edits, accountKey(email));
     }
-    return response(200, { ok: true, customer: { name: fullName, email: newEmail, phone, username, address } });
+    return response(200, { ok: true, customer: { name: next.fullName, email: next.email, phone: next.phone, address: next.address, accountEmail: account.email } });
+}
+
+async function resetCustomer(data) {
+    await removeKey(getStore(ADMIN_EDITS_STORE), accountKey(normalizeEmail(data.email)));
+    return response(200, { ok: true });
+}
+
+async function removeKey(store, key) {
+    if (typeof store.delete === 'function') await store.delete(key);
+    else await store.setJSON(key, null);
 }
 
 async function removeCustomer(data) {
@@ -84,6 +114,7 @@ async function removeCustomer(data) {
     const account = await store.get(accountKey(email), { type: 'json' });
     if (!account?.verified) return response(404, { error: 'Customer account was not found.' });
     await deleteAccount(store, email);
+    await removeKey(getStore(ADMIN_EDITS_STORE), accountKey(email));
     return response(200, { ok: true, deletedEmail: email });
 }
 
@@ -102,6 +133,7 @@ exports.handler = async event => {
             return response(400, { error: 'Request must be valid JSON.' });
         }
         if (data.action === 'update') return await updateCustomer(data);
+        if (data.action === 'reset') return await resetCustomer(data);
         if (data.action === 'delete') return await removeCustomer(data);
         return response(400, { error: 'Unknown customer action.' });
     } catch (error) {

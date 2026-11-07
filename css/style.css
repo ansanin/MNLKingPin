@@ -7561,3 +7561,5 @@ body.light-mode .customer-old-email-label { color: #5f6b73; }
 .customer-inline-status { color: #ff8a80; font-size: .75rem; white-space: normal; max-width: 220px; }
 body.light-mode .customer-inline-note { color: #5f6b73; }
 body.light-mode .customer-inline-status { color: #c0392b; }
+.customer-admin-edit-note { margin-top: 2px; color: #d4af37; font-size: .72rem; }
+body.light-mode .customer-admin-edit-note { color: #8a6d12; }

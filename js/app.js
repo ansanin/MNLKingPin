@@ -6700,8 +6700,20 @@ function renderCustomersTable() {
         [customer.name, customer.email, customer.phone || 'Not provided', customer.totalOrders].forEach(value => {
             row.insertCell().textContent = String(value ?? '');
         });
+        if (customer.adminEdited && customer.original) {
+            // Admin-only label: show what the customer's real account says.
+            const note = document.createElement('div');
+            note.className = 'customer-admin-edit-note';
+            const changes = [];
+            if (customer.original.name !== customer.name) changes.push(`name: ${customer.original.name}`);
+            if (customer.original.email !== customer.email) changes.push(`Gmail: ${customer.original.email}`);
+            if (customer.original.phone !== customer.phone) changes.push(`phone: ${customer.original.phone || 'none'}`);
+            if (customer.original.address !== customer.address) changes.push('address');
+            note.textContent = `Edited by admin · account ${changes.join(', ')}`;
+            row.cells[0].appendChild(note);
+        }
         if (customer.status === 'old-email') {
-            // Old email kept after an email change: shown with its old details, read-only.
+            // Old email kept after the customer changed email: read-only.
             const note = document.createElement('div');
             note.className = 'customer-old-email-note';
             note.textContent = customer.movedTo ? `Old email · now ${customer.movedTo}` : 'Old email';
@@ -6716,8 +6728,11 @@ function renderCustomersTable() {
         actions.className = 'customer-row-actions';
         actions.append(
             makeCustomerRowButton('Edit', 'btn-edit', `Edit name and Gmail of ${customer.name}`, () => startInlineCustomerEdit(row, customer)),
-            makeCustomerRowButton('More', 'btn-secondary customer-more-btn', `More options for ${customer.name}`, () => openCustomerEditModal(customer.email))
+            makeCustomerRowButton('More', 'btn-secondary customer-more-btn', `More options for ${customer.name}`, () => openCustomerEditModal(customer.accountEmail))
         );
+        if (customer.adminEdited) {
+            actions.append(makeCustomerRowButton('Reset', 'btn-secondary customer-more-btn', `Reset ${customer.name} to the account details`, () => resetCustomerAdminEdit(customer)));
+        }
     });
 }
 
@@ -6731,7 +6746,8 @@ function makeCustomerRowButton(text, className, label, onClick) {
     return button;
 }
 
-// Edit name and Gmail directly in the customer list row.
+// Edit name and Gmail directly in the customer list row. These are labels for
+// the admin only; the customer's account, login and orders are not changed.
 function startInlineCustomerEdit(row, customer) {
     const [nameCell, emailCell, , , actionsCell] = row.cells;
     const nameInput = document.createElement('input');
@@ -6747,7 +6763,7 @@ function startInlineCustomerEdit(row, customer) {
     emailInput.setAttribute('aria-label', 'Customer Gmail');
     const note = document.createElement('div');
     note.className = 'customer-inline-note';
-    note.textContent = 'A new Gmail adds a new customer; the old Gmail stays as an old record.';
+    note.textContent = "Only changes what admin sees here. The customer's account and login stay the same.";
     nameCell.replaceChildren(nameInput);
     emailCell.replaceChildren(emailInput, note);
 
@@ -6763,10 +6779,8 @@ function startInlineCustomerEdit(row, customer) {
         actionsCell.querySelectorAll('button').forEach(button => { button.disabled = true; });
         status.textContent = 'Saving...';
         try {
-            await sendCustomerAdminRequest({ action: 'update', email: customer.email, newEmail, fullName });
-            showStatusUpdateToast(newEmail !== customer.email
-                ? `Saved. ${newEmail} was added as a new customer; ${customer.email} is kept as an old record.`
-                : 'Customer name saved.');
+            await sendCustomerAdminRequest({ action: 'update', email: customer.accountEmail, newEmail, fullName });
+            showStatusUpdateToast("Saved in the admin list. The customer's account was not changed.");
             await loadCustomersTable();
         } catch (error) {
             status.textContent = `Not saved: ${error.message}`;
@@ -6788,6 +6802,16 @@ function startInlineCustomerEdit(row, customer) {
     nameInput.select();
 }
 
+async function resetCustomerAdminEdit(customer) {
+    try {
+        await sendCustomerAdminRequest({ action: 'reset', email: customer.accountEmail });
+        showStatusUpdateToast(`Showing the account details of ${customer.accountEmail} again.`);
+        await loadCustomersTable();
+    } catch (error) {
+        showStatusUpdateToast(`Reset failed: ${error.message}`);
+    }
+}
+
 let editingCustomerEmail = null;
 
 function setCustomerEditMessage(text, type = '') {
@@ -6796,17 +6820,16 @@ function setCustomerEditMessage(text, type = '') {
     message.textContent = text;
 }
 
-function openCustomerEditModal(email) {
-    const customer = (appData.customers || []).find(item => item.email === email);
+function openCustomerEditModal(accountEmail) {
+    const customer = (appData.customers || []).find(item => item.accountEmail === accountEmail);
     if (!customer) return;
-    editingCustomerEmail = customer.email;
+    editingCustomerEmail = customer.accountEmail;
     document.getElementById('editCustomerTitle').textContent = `Edit Customer: ${customer.name}`;
     document.getElementById('editCustomerName').value = customer.name || '';
-    document.getElementById('editCustomerUsername').value = customer.username || '';
     document.getElementById('editCustomerEmail').value = customer.email || '';
     document.getElementById('editCustomerPhone').value = customer.phone || '';
     document.getElementById('editCustomerAddress').value = customer.address || '';
-    document.getElementById('customerDeleteName').textContent = `${customer.name} (${customer.email})`;
+    document.getElementById('customerDeleteName').textContent = `${customer.name} (${customer.accountEmail})`;
     cancelCustomerDelete();
     setCustomerEditMessage('');
     document.getElementById('editCustomerModal').style.display = 'block';
@@ -6836,22 +6859,19 @@ function setCustomerEditBusy(busy) {
 async function saveCustomerEdit(event) {
     event.preventDefault();
     if (!editingCustomerEmail) return;
-    const newEmail = document.getElementById('editCustomerEmail').value.trim().toLowerCase();
     setCustomerEditBusy(true);
     setCustomerEditMessage('Saving changes...');
     try {
         await sendCustomerAdminRequest({
             action: 'update',
             email: editingCustomerEmail,
-            newEmail,
+            newEmail: document.getElementById('editCustomerEmail').value.trim().toLowerCase(),
             fullName: document.getElementById('editCustomerName').value.trim(),
-            username: document.getElementById('editCustomerUsername').value.trim(),
             phone: document.getElementById('editCustomerPhone').value.trim(),
             address: document.getElementById('editCustomerAddress').value.trim()
         });
-        const emailChanged = newEmail !== editingCustomerEmail;
         closeCustomerEditModal();
-        showStatusUpdateToast(emailChanged ? `Customer updated. Their login email is now ${newEmail}.` : 'Customer updated.');
+        showStatusUpdateToast("Saved in the admin list. The customer's account was not changed.");
         await loadCustomersTable();
     } catch (error) {
         setCustomerEditMessage(`Changes were not saved: ${error.message}`, 'error');
