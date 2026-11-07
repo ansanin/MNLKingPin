@@ -6667,6 +6667,52 @@ function updateShowAdminTab() {
     // This function is deprecated - using main showAdminTab instead
 }
 
+// Netlify Blobs reads can return cached data for up to about a minute after a
+// write, so a list reloaded right after Save can show the old name. The admin
+// page remembers its own recent edits for two minutes and shows those instead.
+const RECENT_CUSTOMER_EDITS_KEY = 'kingpinRecentCustomerEdits';
+const RECENT_CUSTOMER_EDIT_MS = 2 * 60 * 1000;
+
+function readRecentCustomerEdits() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(RECENT_CUSTOMER_EDITS_KEY) || '{}');
+        const now = Date.now();
+        return Object.fromEntries(Object.entries(saved).filter(([, edit]) => edit && now - edit.savedAt < RECENT_CUSTOMER_EDIT_MS));
+    } catch (error) {
+        return {};
+    }
+}
+
+function rememberCustomerEdit(accountEmail, edit) {
+    const edits = readRecentCustomerEdits();
+    edits[accountEmail] = { ...edit, savedAt: Date.now() };
+    try {
+        localStorage.setItem(RECENT_CUSTOMER_EDITS_KEY, JSON.stringify(edits));
+    } catch (error) {
+        // Without storage the list still works; it may briefly show older data.
+    }
+}
+
+function applyRecentCustomerEdits(customers) {
+    const edits = readRecentCustomerEdits();
+    return customers.map(customer => {
+        const edit = edits[customer.accountEmail];
+        if (!edit) return customer;
+        if (edit.reset) {
+            const original = customer.original || {};
+            return {
+                ...customer,
+                name: edit.name ?? original.name ?? customer.name,
+                email: edit.email ?? original.email ?? customer.accountEmail,
+                phone: edit.phone ?? original.phone ?? customer.phone,
+                address: edit.address ?? original.address ?? customer.address,
+                adminEdited: false
+            };
+        }
+        return { ...customer, name: edit.name, email: edit.email, phone: edit.phone, address: edit.address, adminEdited: true };
+    });
+}
+
 // Load the registered customer list from the server.
 async function loadCustomersTable() {
     const list = document.getElementById('customersList');
@@ -6676,7 +6722,7 @@ async function loadCustomersTable() {
         const response = await fetch('/.netlify/functions/customers', { headers: getAuthenticatedHeaders(), cache: 'no-store' });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Unable to load customers.');
-        appData.customers = Array.isArray(result.customers) ? result.customers : [];
+        appData.customers = applyRecentCustomerEdits(Array.isArray(result.customers) ? result.customers : []);
         renderCustomersTable();
     } catch (error) {
         list.replaceChildren();
@@ -6771,7 +6817,10 @@ function startInlineCustomerEdit(row, customer) {
         actionsCell.querySelectorAll('button').forEach(button => { button.disabled = true; });
         status.textContent = 'Saving...';
         try {
-            await sendCustomerAdminRequest({ action: 'update', email: customer.accountEmail, newEmail, fullName });
+            // Phone and address are sent as shown so a cached older label
+            // on the server cannot overwrite them.
+            const result = await sendCustomerAdminRequest({ action: 'update', email: customer.accountEmail, newEmail, fullName, phone: customer.phone || '', address: customer.address || '' });
+            rememberCustomerEdit(customer.accountEmail, result.customer);
             showStatusUpdateToast("Saved in the admin list. The customer's account was not changed.");
             await loadCustomersTable();
         } catch (error) {
@@ -6797,6 +6846,8 @@ function startInlineCustomerEdit(row, customer) {
 async function resetCustomerAdminEdit(customer) {
     try {
         await sendCustomerAdminRequest({ action: 'reset', email: customer.accountEmail });
+        const original = customer.original || {};
+        rememberCustomerEdit(customer.accountEmail, { reset: true, name: original.name, email: original.email, phone: original.phone, address: original.address });
         showStatusUpdateToast(`Showing the account details of ${customer.accountEmail} again.`);
         await loadCustomersTable();
     } catch (error) {
@@ -6854,14 +6905,16 @@ async function saveCustomerEdit(event) {
     setCustomerEditBusy(true);
     setCustomerEditMessage('Saving changes...');
     try {
-        await sendCustomerAdminRequest({
+        const accountEmail = editingCustomerEmail;
+        const result = await sendCustomerAdminRequest({
             action: 'update',
-            email: editingCustomerEmail,
+            email: accountEmail,
             newEmail: document.getElementById('editCustomerEmail').value.trim().toLowerCase(),
             fullName: document.getElementById('editCustomerName').value.trim(),
             phone: document.getElementById('editCustomerPhone').value.trim(),
             address: document.getElementById('editCustomerAddress').value.trim()
         });
+        rememberCustomerEdit(accountEmail, result.customer);
         closeCustomerEditModal();
         showStatusUpdateToast("Saved in the admin list. The customer's account was not changed.");
         await loadCustomersTable();
