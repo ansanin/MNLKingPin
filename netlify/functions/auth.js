@@ -11,6 +11,7 @@ const {
     verifyPassword
 } = require('./lib/auth');
 const { emailChangeKey, isActiveAccount, isValidEmail, moveAccount } = require('./lib/customer-data');
+const { getLocalSmtpSettings, sendLocalEmail } = require('./lib/local-mail');
 
 function jsonResponse(statusCode, body) {
     return {
@@ -33,6 +34,12 @@ async function sendVerificationEmail(email, code, {
     intro = 'Your account verification code is'
 } = {}) {
     const html = `<p>${escapeHtml(intro)} <strong>${code}</strong>.</p><p>This code expires in 10 minutes.</p>`;
+    const localSmtp = getLocalSmtpSettings();
+    if (localSmtp) {
+        // Local `netlify dev` only (see lib/local-mail.js): deliver to the local test inbox.
+        await sendLocalEmail(localSmtp, { to: email, subject, html });
+        return;
+    }
     const smtpUser = process.env.SMTP_USER;
     const smtpPass = process.env.SMTP_PASS;
     if (smtpUser && smtpPass) {
@@ -108,13 +115,20 @@ async function handleRegistration(store, data) {
     const existing = await store.get(key, { type: 'json' });
     if (isActiveAccount(existing)) return jsonResponse(409, { error: 'An account already exists for this email. Sign in instead.' });
 
-    const code = String(cryptoRandomCode());
     const passwordHash = await hashPassword(password);
+    const phone = String(data.phone || '').trim();
+    if (isLocalEmailVerificationSkipped()) {
+        // Local `netlify dev` only: no email service, so the account is verified right away.
+        const account = await saveVerifiedAccount(store, { email, username, fullName, phone, passwordHash });
+        return jsonResponse(200, { ok: true, verificationRequired: false, ...issueCustomerSession(account) });
+    }
+
+    const code = String(cryptoRandomCode());
     const pending = {
         email,
         username,
         fullName,
-        phone: String(data.phone || '').trim(),
+        phone,
         passwordHash,
         codeHash: hashVerificationCode(code),
         expiresAt: Date.now() + 10 * 60 * 1000,
@@ -127,6 +141,29 @@ async function handleRegistration(store, data) {
 
 function cryptoRandomCode() {
     return require('crypto').randomInt(100000, 1000000);
+}
+
+// True only under `netlify dev` (the Netlify CLI sets NETLIFY_DEV=true) when the local
+// .env also sets LOCAL_SKIP_EMAIL_VERIFICATION=true. The deployed site never sets
+// NETLIFY_DEV, so sign up there always needs the emailed code.
+function isLocalEmailVerificationSkipped() {
+    return process.env.NETLIFY_DEV === 'true' && process.env.LOCAL_SKIP_EMAIL_VERIFICATION === 'true';
+}
+
+// Saves a verified customer account. Used after the emailed code is confirmed, and
+// directly by local sign up when email verification is skipped.
+async function saveVerifiedAccount(store, { email, username, fullName, phone, passwordHash }) {
+    const account = {
+        email,
+        username,
+        fullName,
+        phone,
+        passwordHash,
+        verified: true,
+        createdAt: new Date().toISOString()
+    };
+    await store.setJSON(accountKey(email), account);
+    return account;
 }
 
 function requireCustomer(event) {
@@ -224,16 +261,7 @@ async function handleVerification(store, data) {
         return jsonResponse(400, { error: 'The verification code is incorrect.' });
     }
 
-    const account = {
-        email: pending.email,
-        username: pending.username,
-        fullName: pending.fullName,
-        phone: pending.phone,
-        passwordHash: pending.passwordHash,
-        verified: true,
-        createdAt: new Date().toISOString()
-    };
-    await store.setJSON(key, account);
+    const account = await saveVerifiedAccount(store, pending);
     if (typeof store.delete === 'function') await store.delete(pendingKey);
     return jsonResponse(200, { ok: true, ...issueCustomerSession(account) });
 }

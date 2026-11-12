@@ -228,6 +228,45 @@ function updateStorefrontNavigation(activeDestination) {
     const menuToggle = document.querySelector('#customerPage .nav-menu-toggle');
     const menuOpen = document.getElementById('customerNavMenu')?.classList.contains('visible') || false;
     if (menuToggle) menuToggle.setAttribute('aria-expanded', String(menuOpen));
+
+    updateCustomerAccountNav();
+}
+
+// The "My account" sidebar: which page each button opens, and which section it marks as current.
+const CUSTOMER_ACCOUNT_VIEWS = {
+    shop: { sections: ['productsSection'], open: () => navigateStorefront('shop') },
+    orders: { sections: ['ordersSection'], open: () => navigateStorefront('orders') },
+    history: { sections: ['purchaseHistorySection'], open: () => viewPurchaseHistory() },
+    notifications: { sections: ['notificationsSection'], open: () => viewCustomerNotifications() },
+    cart: {
+        sections: ['cartSection', 'checkoutSection'],
+        open: () => { if (document.getElementById('cartSection')?.style.display !== 'block') toggleCart(); }
+    },
+    design: {
+        sections: ['designSection'],
+        open: () => { if (document.getElementById('designSection')?.style.display !== 'block') toggleDesignInterface(); }
+    },
+    support: { sections: ['customerServiceSection'], open: () => navigateStorefront('support') },
+    settings: { sections: ['customerSettingsSection'], open: () => navigateStorefront('account') }
+};
+
+function updateCustomerAccountNav() {
+    const current = Object.keys(CUSTOMER_ACCOUNT_VIEWS).find(view =>
+        CUSTOMER_ACCOUNT_VIEWS[view].sections.some(id => document.getElementById(id)?.style.display === 'block'));
+    document.querySelectorAll('#customerAccountNav [data-account-view]').forEach(button => {
+        const isActive = button.dataset.accountView === current;
+        button.classList.toggle('is-active', isActive);
+        if (isActive) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+    });
+    if (typeof updateCustomerAccountCounts === 'function') updateCustomerAccountCounts();
+
+    // On tablets and phones the sidebar is a scrolling row of tabs: keep the current tab in view.
+    const activeButton = document.querySelector('#customerAccountNav .is-active');
+    const nav = document.getElementById('customerAccountNav');
+    if (activeButton && nav && nav.scrollWidth > nav.clientWidth) {
+        nav.scrollLeft = Math.max(0, activeButton.offsetLeft - (nav.clientWidth - activeButton.offsetWidth) / 2);
+    }
 }
 
 function navigateStorefront(destination) {
@@ -288,4 +327,12 @@ document.addEventListener('DOMContentLoaded', () => {
             menuToggle.setAttribute('aria-expanded', String(menu.classList.contains('visible')));
         }).observe(menu, { attributes: true, attributeFilter: ['class'] });
     }
+
+    document.getElementById('customerAccountNav')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-account-view]');
+        const view = button && CUSTOMER_ACCOUNT_VIEWS[button.dataset.accountView];
+        if (!view) return;
+        view.open();
+        updateStorefrontNavigation();
+    });
 });

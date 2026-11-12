@@ -3824,6 +3824,9 @@ body.light-mode .checkout-payment-options .checkout-payment-option[aria-pressed=
 #loginPage .role-icon-admin svg { display: block; width: 100%; height: 100%; overflow: visible; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.4; }
 #loginPage .role-icon-admin svg path:last-child { stroke-width: 2; }
 #loginPage .login-divider { margin: 24px 0 18px; letter-spacing: 1px; }
+/* Google sign-in: centered over the email box, as wide as Google allows (400px). */
+#loginPage #googleSignInButton { display: flex; justify-content: center; width: 100%; min-height: 44px; margin: 0 0 16px; }
+#loginPage #googleSignInButton > div { margin: 0 auto; }
 #loginPage .login-auth-section { margin-top: 0; }
 #loginPage .btn-gmail { height: 46px; margin-bottom: 18px; border-radius: 5px; }
 #loginPage .form-group { margin-bottom: 17px; }
@@ -7573,3 +7576,60 @@ body.light-mode #adminPage .report-card-note { color: #5f6b73; }
 body.light-mode .price-recompute-hint { color: #5f6b73; }
 body.light-mode .price-recompute-warning { color: #8a5a00; }
 body.light-mode .price-recompute-done { color: #1f7a33; }
+
+/* ===== Light mode: readable text (contrast of at least 4.5:1) =====
+   Only for light mode; dark mode is unchanged. */
+
+/* Login: the brand panel stays black in light mode, so its text stays light. */
+body.light-mode #loginPage .login-brand-subtitle { color: #ffffff !important; }
+body.light-mode #loginPage .brand-description { color: #b6b6b6 !important; }
+body.light-mode #loginPage .form-group input::placeholder { color: #66717a; opacity: 1; }
+
+/* Gold text on a light background: use the darker gold of the light-mode headings. */
+body.light-mode #customerPage .upload-design-drop-zone { border-color: #a8892e; color: #765500; }
+body.light-mode .checkout-info-toggle { color: #765500; }
+body.light-mode #customerPage [style*="color: #d4af37"],
+body.light-mode #customerPage [style*="color:#d4af37"] { color: #765500 !important; }
+body.light-mode #customerPage p.half-payment-notice,
+body.light-mode #customerPage #ordersSection p.half-payment-notice,
+body.light-mode #customerPage #cartSection p.half-payment-notice,
+body.light-mode #customerPage #checkoutSection p.half-payment-notice { color: #1a1a1a !important; }
+
+/* Customer's My Orders: production updates were near-white on a light card. */
+body.light-mode #customerPage .customer-production-tracking .production-history li {
+    background: #e7ecef;
+    color: #263238;
+}
+body.light-mode #customerPage .customer-production-tracking .production-history time { color: #58656d; }
+
+/* Status badges: white text on gold, orange or green is hard to read. */
+body.light-mode .order-status.pending,
+body.light-mode .order-status.processing,
+body.light-mode .order-status.completed,
+body.light-mode .order-status.design-approval,
+body.light-mode .order-status.printing { color: #1a1a1a; }
+
+body.light-mode .modal-close { color: #4a555c; }
+
+/* Admin order details: numbers of the upcoming production stages (dark circles). */
+body.light-mode #orderDetailsModal .production-timeline-step.upcoming .production-timeline-marker { color: #f4f4f4 !important; }
+
+/* Admin header on a white bar. */
+body.light-mode #adminPage #adminDisplayName { color: #765500 !important; text-shadow: none; }
+body.light-mode #adminPage .navbar-division { color: #58656d; }
+
+/* Reports: light filter bar, light secondary buttons, darker green sales in the calendar. */
+body.light-mode #adminPage .report-filters { border-color: #d0d7dc; background: #f1f4f6; }
+body.light-mode #adminPage .report-period-label { color: #35434c; }
+body.light-mode #adminPage .btn-secondary {
+    border: 1px solid #aebac3;
+    background: #f1f4f6;
+    color: #263238;
+}
+body.light-mode #adminPage .btn-secondary:hover,
+body.light-mode #adminPage .btn-secondary:focus-visible {
+    border-color: #b78300;
+    background: #ffffff;
+    color: #172027;
+}
+body.light-mode #adminPage .sales-calendar-sales { color: #14532d; }

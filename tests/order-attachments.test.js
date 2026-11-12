@@ -87,7 +87,9 @@ async function testOrderDesignAttachments() {
                 }
                 }],
                 paymentMethod: 'gcash',
-                gcashDownpaymentAmount: 500,
+                totalAmount: 1000,
+                // The server sets the downpayment to 50% of the total; this value is ignored.
+                gcashDownpaymentAmount: 1,
                 gcashQRCode: imageData,
                 gcashPaymentProof: imageData
         } })

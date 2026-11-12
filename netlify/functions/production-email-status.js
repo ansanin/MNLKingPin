@@ -1,5 +1,6 @@
 ﻿const { connectLambda, getStore } = require('@netlify/blobs');
 const { authenticateEvent } = require('./lib/auth');
+const { getLocalSmtpSettings } = require('./lib/local-mail');
 function reply(statusCode, body) { return { statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) }; }
 exports.handler = async event => {
     connectLambda(event);
@@ -20,6 +21,6 @@ exports.handler = async event => {
             const failed = await statuses.get(`failed-${orderId}-${id}`, { type: 'json' });
             return { eventId: id, stage: item.statusLabel || item.status, timestamp: item.timestamp, state: sent ? 'provider_accepted' : failed ? 'failed' : 'unknown', reason: sent ? undefined : failed?.reason };
         }));
-        return reply(200, { configured: Boolean((process.env.SMTP_USER && process.env.SMTP_PASS) || (process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL)), deliveries });
+        return reply(200, { configured: Boolean(getLocalSmtpSettings() || (process.env.SMTP_USER && process.env.SMTP_PASS) || (process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL)), deliveries });
     } catch (error) { console.error('Unable to check production email status:', error); return reply(500, { error: 'Unable to check email status.' }); }
 };

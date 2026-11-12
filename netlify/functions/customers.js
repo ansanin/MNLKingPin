@@ -1,6 +1,7 @@
 const { connectLambda, getStore } = require('@netlify/blobs');
 const { accountKey, authenticateEvent } = require('./lib/auth');
 const { deleteAccount, isValidEmail, normalizeEmail } = require('./lib/customer-data');
+const { summarizeCustomerPayments } = require('../../js/payment-summary');
 
 // Admin edits in the customer list are labels for the admin only. They are
 // kept apart from the customer's account, so the customer's login, profile
@@ -39,10 +40,12 @@ async function listCustomers() {
     ];
     const uniqueOrders = new Map();
     for (const order of orders) if (order && order.id) uniqueOrders.set(String(order.id), order);
-    const counts = new Map();
+    const ordersByEmail = new Map();
     for (const order of uniqueOrders.values()) {
         const email = normalizeEmail(order.customerEmail);
-        if (email) counts.set(email, (counts.get(email) || 0) + 1);
+        if (!email) continue;
+        if (!ordersByEmail.has(email)) ordersByEmail.set(email, []);
+        ordersByEmail.get(email).push(order);
     }
     const edits = getStore(ADMIN_EDITS_STORE);
     // One entry per customer: records left by an earlier email change are not listed.
@@ -61,7 +64,10 @@ async function listCustomers() {
             username: account.username || '',
             address: shown.address,
             accountEmail: account.email,
-            totalOrders: counts.get(normalizeEmail(account.email)) || 0,
+            totalOrders: (ordersByEmail.get(normalizeEmail(account.email)) || []).length,
+            payment: summarizeCustomerPayments((ordersByEmail.get(normalizeEmail(account.email)) || [])
+                .slice()
+                .sort((first, second) => (Number(second.id) || 0) - (Number(first.id) || 0))),
             status: account.archived ? 'old-email' : 'active',
             movedTo: account.movedTo || '',
             adminEdited,
@@ -116,6 +122,8 @@ async function removeCustomer(data) {
     await removeKey(getStore(ADMIN_EDITS_STORE), accountKey(email));
     return response(200, { ok: true, deletedEmail: email });
 }
+
+exports.listCustomers = listCustomers;
 
 exports.handler = async event => {
     if (!['GET', 'POST'].includes(event.httpMethod)) return response(405, { error: 'Method not allowed.' });

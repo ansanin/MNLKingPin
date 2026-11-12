@@ -2,6 +2,14 @@ const { connectLambda, getStore } = require('@netlify/blobs');
 const { authenticateEvent, signAccessToken } = require('./lib/auth');
 const { PRODUCTION_STAGES, normalizeProductionStatus, validateProductionTransition } = require('../../js/production-tracking');
 const { MIN_TEAM_PLAYERS, isValidTeamPlayerCount, areTeamPlayerDetailsComplete, normalizeTeamOrderInput } = require('../../js/team-order');
+const { getPaymentSummary, round2 } = require('../../js/payment-summary');
+
+const PROOF_DATA_URL = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i;
+const PAYMENT_METHODS = ['cash', 'gcash', 'bank-transfer'];
+
+function formatPeso(value) {
+    return `PHP ${round2(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 function jsonResponse(statusCode, body) {
     return {
@@ -23,25 +31,135 @@ function orderMediaKey(orderId, mediaType) {
     return `order-media-${orderId}-${mediaType}`;
 }
 
+// Saves a new payment proof. It replaces the proof shown on the order, and
+// every version stays saved under its own key so the admin can still see
+// proofs that were rejected or replaced. The version in the link makes
+// browsers load the new image instead of a cached older one.
+async function storePaymentProof(order, dataUrl, designStore) {
+    const orderId = String(order.id);
+    const currentKey = orderMediaKey(orderId, 'gcash-proof');
+    const proofs = Array.isArray(order.paymentProofs) ? order.paymentProofs : [];
+    const previousVersion = Number(order.paymentProofVersion) || (order.gcashPaymentProofUrl ? 1 : 0);
+    if (previousVersion) {
+        // Orders from before versioning only have the current key: keep that image too.
+        const previousKey = `${currentKey}-v${previousVersion}`;
+        if (!await designStore.get(previousKey, { type: 'text' })) {
+            const previous = await designStore.get(currentKey, { type: 'text' });
+            if (previous) await designStore.set(previousKey, previous);
+        }
+        if (!proofs.some(proof => proof.version === previousVersion)) {
+            proofs.push({
+                version: previousVersion,
+                uploadedAt: '',
+                status: order.paymentStatus === 'rejected' ? 'rejected' : 'replaced',
+                reason: order.paymentStatus === 'rejected' ? String(order.paymentRejectionReason || '') : ''
+            });
+        }
+    }
+    const version = previousVersion + 1;
+    await designStore.set(`${currentKey}-v${version}`, dataUrl);
+    await designStore.set(currentKey, dataUrl);
+    proofs.forEach(proof => { if (proof.status === 'pending') proof.status = 'replaced'; });
+    proofs.push({ version, uploadedAt: new Date().toISOString(), status: 'pending', reason: '' });
+    order.paymentProofs = proofs;
+    order.paymentProofVersion = version;
+    order.gcashPaymentProofUrl = `/.netlify/functions/order-design?orderId=${encodeURIComponent(orderId)}&media=gcash-proof&v=${version}`;
+}
+
+function markLatestProof(order, status, reason = '') {
+    const proofs = Array.isArray(order.paymentProofs) ? order.paymentProofs : [];
+    const latest = proofs.find(proof => proof.version === Number(order.paymentProofVersion)) || proofs[proofs.length - 1];
+    if (!latest) return;
+    latest.status = status;
+    latest.reason = reason;
+    latest.reviewedAt = new Date().toISOString();
+}
+
+// A GCash proof for the rest of the payment, sent after the downpayment was
+// verified. Kept apart from the downpayment proof, with every version saved.
+async function storeBalanceProof(order, dataUrl, designStore, amountDue) {
+    const orderId = String(order.id);
+    const baseKey = orderMediaKey(orderId, 'balance-proof');
+    const proofs = Array.isArray(order.balanceProofs) ? order.balanceProofs : [];
+    const version = (Number(order.balanceProofVersion) || 0) + 1;
+    await designStore.set(`${baseKey}-v${version}`, dataUrl);
+    await designStore.set(baseKey, dataUrl);
+    proofs.forEach(proof => { if (proof.status === 'pending') proof.status = 'replaced'; });
+    proofs.push({ version, uploadedAt: new Date().toISOString(), status: 'pending', reason: '', amountDue: round2(amountDue) });
+    order.balanceProofs = proofs;
+    order.balanceProofVersion = version;
+    order.balanceProofStatus = 'pending';
+    order.balanceProofUrl = `/.netlify/functions/order-design?orderId=${encodeURIComponent(orderId)}&media=balance-proof&v=${version}`;
+}
+
+function markLatestBalanceProof(order, status, reason = '') {
+    const proofs = Array.isArray(order.balanceProofs) ? order.balanceProofs : [];
+    const latest = proofs.find(proof => proof.version === Number(order.balanceProofVersion)) || proofs[proofs.length - 1];
+    if (latest) {
+        latest.status = status;
+        latest.reason = reason;
+        latest.reviewedAt = new Date().toISOString();
+    }
+    order.balanceProofStatus = status;
+}
+
 async function removeInlineOrderMedia(order, designStore) {
     const normalized = JSON.parse(JSON.stringify(order));
     let changed = false;
 
     for (const [field, mediaType] of [['gcashQRCode', 'gcash-qr'], ['gcashPaymentProof', 'gcash-proof']]) {
         const dataUrl = String(normalized[field] || '');
-        const match = dataUrl.match(/^data:(image\/(?:png|jpeg|gif|webp));base64,([a-z0-9+/=]+)$/i);
-        if (!match) continue;
+        if (!PROOF_DATA_URL.test(dataUrl)) continue;
 
         const orderId = String(normalized.id);
-        const key = orderMediaKey(orderId, mediaType);
-        const savedMedia = await designStore.get(key, { type: 'text' });
-        if (!savedMedia) await designStore.set(key, dataUrl);
-        normalized[`${field}Url`] = `/.netlify/functions/order-design?orderId=${encodeURIComponent(orderId)}&media=${mediaType}`;
+        if (mediaType === 'gcash-proof') {
+            // A proof still inside the order record is the newest one the
+            // customer sent, so it always replaces the saved proof.
+            await storePaymentProof(normalized, dataUrl, designStore);
+        } else {
+            const key = orderMediaKey(orderId, mediaType);
+            const savedMedia = await designStore.get(key, { type: 'text' });
+            if (!savedMedia) await designStore.set(key, dataUrl);
+            normalized[`${field}Url`] = `/.netlify/functions/order-design?orderId=${encodeURIComponent(orderId)}&media=${mediaType}`;
+        }
         delete normalized[field];
         changed = true;
     }
 
     return { order: normalized, changed };
+}
+
+// Orders saved before payment amounts were recorded get their payment list
+// here. A downpayment the admin already verified is carried over as one entry.
+function ensurePaymentLedger(order) {
+    if (Array.isArray(order.payments)) return;
+    const before = getPaymentSummary(order);
+    order.payments = [];
+    if (before.amountPaid > 0) {
+        order.payments.push({
+            id: require('crypto').randomUUID(),
+            type: before.amountPaid >= before.total ? 'full' : 'downpayment',
+            method: String(order.paymentMethod || '').toLowerCase() === 'gcash' ? 'gcash' : 'cash',
+            amount: before.amountPaid,
+            reference: '',
+            receivedAt: '',
+            recordedAt: new Date().toISOString(),
+            recordedBy: 'system',
+            note: 'Verified before payment amounts were recorded.'
+        });
+    }
+}
+
+function parsePaymentAmount(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const amount = Number(value);
+    return Number.isFinite(amount) ? round2(amount) : NaN;
+}
+
+function validPaymentDate(value) {
+    if (!value) return '';
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) || date.getTime() > Date.now() + 24 * 60 * 60 * 1000 ? null : date.toISOString();
 }
 
 async function removeInlineDesignFiles(order, designStore) {
@@ -289,7 +407,16 @@ function decorateOrderMedia(order, claims) {
     const decorated = JSON.parse(JSON.stringify(order));
     decorated.gcashQRCodeUrl = addMediaTicket(decorated.gcashQRCodeUrl, claims, decorated.id, 'gcash-qr');
     decorated.gcashPaymentProofUrl = addMediaTicket(decorated.gcashPaymentProofUrl, claims, decorated.id, 'gcash-proof');
+    decorated.balanceProofUrl = addMediaTicket(decorated.balanceProofUrl, claims, decorated.id, 'balance-proof');
     decorated.finalDesignUrl = addMediaTicket(decorated.finalDesignUrl, claims, decorated.id, 'final-design');
+    [['paymentProofs', 'gcash-proof'], ['balanceProofs', 'balance-proof']].forEach(([field, media]) => {
+        (decorated[field] || []).forEach(proof => {
+            const version = Number(proof?.version);
+            if (!Number.isInteger(version) || version < 1) return;
+            proof.url = addMediaTicket(`/.netlify/functions/order-design?orderId=${encodeURIComponent(decorated.id)}&media=${media}&v=${version}`, claims, decorated.id, media);
+        });
+    });
+    decorated.paymentSummary = getPaymentSummary(decorated);
     (decorated.items || []).forEach((item, itemIndex) => {
         if (item.details?.uploadedFileUrl) {
             const firstFileIndex = item.details.uploadedFiles?.length ? 0 : '';
@@ -320,9 +447,19 @@ exports.handler = async function handler(event) {
             const normalizedOrders = await Promise.all(allOrders.map(order => removeInlineDesignFiles(normalizeStoredOrder(order), designStore)));
             const allResponseOrders = normalizedOrders.map(result => result.order);
             if (claims.role === 'admin') {
-                await Promise.all(allResponseOrders.map(order => orderIndexStore.setJSON(orderRecordKey(order.id), order)));
-                await orderIndexStore.setJSON('all-order-ids', allResponseOrders.map(order => order.id));
-                await orderIndexStore.setJSON('active-order-ids', allResponseOrders.filter(isActiveOrder).map(order => order.id));
+                // Save only orders whose attachments were just moved out of the
+                // record. Rewriting every order on each page load could overwrite
+                // a payment or proof saved at the same moment by someone else.
+                const savedIds = (await orderIndexStore.get('all-order-ids', { type: 'json' })) || [];
+                const savedIdSet = new Set(savedIds.map(String));
+                await Promise.all(normalizedOrders
+                    .filter(result => result.changed || !savedIdSet.has(String(result.order.id)))
+                    .map(result => orderIndexStore.setJSON(orderRecordKey(result.order.id), result.order)));
+                const allIds = allResponseOrders.map(order => order.id);
+                if (allIds.length !== savedIds.length || allIds.some(id => !savedIdSet.has(String(id)))) {
+                    await orderIndexStore.setJSON('all-order-ids', allIds);
+                    await orderIndexStore.setJSON('active-order-ids', allResponseOrders.filter(isActiveOrder).map(order => order.id));
+                }
             }
             let responseOrders = claims.role === 'admin'
                 ? allResponseOrders
@@ -371,9 +508,27 @@ exports.handler = async function handler(event) {
                 return jsonResponse(400, { error: 'A valid, compressed payment proof is required.' });
             }
             order.paymentStatus = isGcash ? (checkoutProof ? 'downpayment-received' : 'awaiting-proof') : 'pending';
+            // Payments are recorded by the admin only; the browser cannot set them.
+            order.totalAmount = round2(order.totalAmount);
+            order.downpaymentAmount = round2(order.totalAmount / 2);
+            order.gcashDownpaymentAmount = isGcash ? order.downpaymentAmount : 0;
+            order.payments = [];
+            delete order.paymentProofs;
+            delete order.paymentProofVersion;
+            delete order.gcashPaymentProofUrl;
+            ['balanceProofs', 'balanceProofVersion', 'balanceProofStatus', 'balanceProofUrl', 'balanceProofRejectionReason'].forEach(field => delete order[field]);
             order.productionStatus = 'order-placed';
             order.productionHistory = [];
-            order.productionNotifications = [];
+            // Tells the admin a new order arrived (the admin screen turns this into its Orders badge and a pop-up).
+            const pieces = (Array.isArray(order.items) ? order.items : []).reduce((sum, item) => sum + (Number(item?.quantity) || 1), 0);
+            const paymentNote = isGcash ? (checkoutProof ? 'GCash proof attached' : 'GCash, no proof yet') : 'pay at the shop';
+            order.productionNotifications = [{
+                id: require('crypto').randomUUID(),
+                type: 'new-order',
+                message: `New order from ${String(order.customerName || claims.sub).slice(0, 80)}: ${pieces} pc${pieces === 1 ? '' : 's'}, ${formatPeso(order.totalAmount)}, ${paymentNote}.`,
+                timestamp: new Date().toISOString(),
+                read: false
+            }];
             order.designApproval = { status: 'not-requested' };
             order.estimatedCompletionDate = '';
             order.productionRemarks = '';
@@ -412,15 +567,46 @@ exports.handler = async function handler(event) {
             let changed = false;
             const proof = String(incoming.gcashPaymentProof || '');
             if (proof) {
-                if (proof.length > 1500000 || !/^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(proof)) {
+                if (proof.length > 1500000 || !PROOF_DATA_URL.test(proof)) {
                     return jsonResponse(400, { error: 'A valid, compressed payment proof is required.' });
                 }
+                if (order.paymentStatus === 'verified') return jsonResponse(409, { error: 'Your payment was already verified. A new proof is not needed.' });
+                if (order.status === 'cancelled' || order.productionStatus === 'cancelled') return jsonResponse(409, { error: 'This order was cancelled.' });
                 order.gcashPaymentProof = proof;
+                const wasRejected = order.paymentStatus === 'rejected';
                 order.paymentStatus = 'downpayment-received';
                 delete order.paymentRejectionReason;
-                addProductionHistory(order, 'payment-proof-uploaded', order.productionStatus, 'customer');
+                addProductionHistory(order, 'payment-proof-uploaded', order.productionStatus, 'customer', wasRejected ? 'New proof uploaded after the previous one was rejected.' : '');
                 order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
-                order.productionNotifications.push({ id: require('crypto').randomUUID(), type: 'payment-proof', message: 'Customer uploaded GCash payment proof.', timestamp: new Date().toISOString(), read: false });
+                order.productionNotifications.push({ id: require('crypto').randomUUID(), type: 'payment-proof', message: wasRejected ? 'Customer uploaded a new GCash payment proof after the previous one was rejected.' : 'Customer uploaded GCash payment proof.', timestamp: new Date().toISOString(), read: false });
+                changed = true;
+            }
+            // GCash proof for the remaining balance, after the downpayment was verified.
+            const balanceProof = String(incoming.balancePaymentProof || '');
+            if (balanceProof) {
+                if (balanceProof.length > 1500000 || !PROOF_DATA_URL.test(balanceProof)) {
+                    return jsonResponse(400, { error: 'A valid, compressed payment proof is required.' });
+                }
+                if (order.status === 'cancelled' || order.productionStatus === 'cancelled') return jsonResponse(409, { error: 'This order was cancelled.' });
+                if (String(order.paymentMethod).toLowerCase() !== 'gcash') return jsonResponse(409, { error: 'Pay the balance of this order at the shop.' });
+                if (order.paymentStatus !== 'verified') return jsonResponse(409, { error: 'Your downpayment must be verified before you send a proof for the balance.' });
+                ensurePaymentLedger(order);
+                const balanceDue = getPaymentSummary(order).balance;
+                if (balanceDue <= 0) return jsonResponse(409, { error: 'This order is already fully paid.' });
+                const wasRejected = order.balanceProofStatus === 'rejected';
+                await storeBalanceProof(order, balanceProof, designStore, balanceDue);
+                delete order.balanceProofRejectionReason;
+                addProductionHistory(order, 'balance-proof-uploaded', order.productionStatus, 'customer', `GCash proof for the remaining balance of ${formatPeso(balanceDue)}.`);
+                order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
+                order.productionNotifications.push({
+                    id: require('crypto').randomUUID(),
+                    type: 'payment-proof',
+                    message: wasRejected
+                        ? `Customer uploaded a new GCash proof for the remaining balance of ${formatPeso(balanceDue)} after the previous one was rejected.`
+                        : `Customer uploaded GCash proof for the remaining balance of ${formatPeso(balanceDue)}.`,
+                    timestamp: new Date().toISOString(),
+                    read: false
+                });
                 changed = true;
             }
             if (incoming.requestType === 'refund' && incoming.requestStatus === 'pending') {
@@ -506,13 +692,40 @@ exports.handler = async function handler(event) {
                 return jsonResponse(409, { error: 'Review the uploaded GCash downpayment proof first.' });
             }
             if (order.paymentStatus === 'verified') return jsonResponse(409, { error: 'Payment was already verified.' });
+            ensurePaymentLedger(order);
+            const before = getPaymentSummary(order);
+            // The amount the admin actually received. Without one, the
+            // downpayment still owed is recorded (the usual 50%).
+            const requestedAmount = parsePaymentAmount(payload.amount);
+            const amount = requestedAmount === null ? (before.downpaymentDue > 0 ? before.downpaymentDue : before.balance) : requestedAmount;
+            if (Number.isNaN(amount) || (requestedAmount !== null && amount <= 0)) return jsonResponse(400, { error: 'Enter the amount received, greater than zero.' });
+            if (amount > before.balance + 0.001) return jsonResponse(400, { error: `The amount received cannot be more than the unpaid balance of ${formatPeso(before.balance)}.` });
+            const receivedAt = validPaymentDate(payload.receivedAt);
+            if (receivedAt === null) return jsonResponse(400, { error: 'Enter a valid payment date.' });
+            const isGcashPayment = String(order.paymentMethod).toLowerCase() === 'gcash';
+            if (amount > 0) {
+                order.payments.push({
+                    id: require('crypto').randomUUID(),
+                    type: amount >= before.balance ? 'full' : 'downpayment',
+                    method: isGcashPayment ? 'gcash' : 'cash',
+                    amount,
+                    reference: String(payload.reference || '').trim().slice(0, 80),
+                    proofVersion: isGcashPayment ? Number(order.paymentProofVersion) || null : null,
+                    receivedAt: receivedAt || new Date().toISOString(),
+                    recordedAt: new Date().toISOString(),
+                    recordedBy: claims.sub,
+                    note: String(payload.remarks || '').trim().slice(0, 500)
+                });
+            }
+            if (isGcashPayment) markLatestProof(order, 'verified');
             order.paymentStatus = 'verified';
             if (order.productionStatus === 'order-placed') {
                 order.productionStatus = 'payment-verification';
                 order.status = mapProductionStatusToLegacy(order.productionStatus);
                 addProductionHistory(order, 'stage-change', order.productionStatus, 'admin', String(payload.remarks || ''));
             }
-            addProductionHistory(order, 'payment-verified', order.productionStatus, 'admin', String(payload.remarks || 'Payment verified.'));
+            const after = getPaymentSummary(order);
+            addProductionHistory(order, 'payment-verified', order.productionStatus, 'admin', `${String(payload.remarks || 'Payment verified.')} Amount received: ${formatPeso(amount)}. Remaining balance: ${formatPeso(after.balance)}.`);
             order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
             notifyRemarks = String(payload.remarks || 'Payment verified.');
             emailEventId = require('crypto').randomUUID();
@@ -541,6 +754,7 @@ exports.handler = async function handler(event) {
 
             order.paymentStatus = 'rejected';
             order.paymentRejectionReason = reason;
+            markLatestProof(order, 'rejected', reason);
             addProductionHistory(order, 'payment-rejected', order.productionStatus, 'admin', reason);
             order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
             emailEventId = require('crypto').randomUUID();
@@ -551,6 +765,121 @@ exports.handler = async function handler(event) {
                 statusLabel: stageLabel(order.productionStatus),
                 remarks: `Payment proof rejected: ${reason}`,
                 message: `Your GCash payment proof was rejected. Reason: ${reason} Please upload a new proof.`,
+                timestamp: new Date().toISOString(),
+                read: false
+            });
+        } else if (operation === 'record-payment') {
+            // The rest of the payment, usually paid in cash at pickup or on delivery.
+            if (order.status === 'cancelled' || order.productionStatus === 'cancelled') return jsonResponse(409, { error: 'Payments cannot be recorded on a cancelled order.' });
+            if (order.paymentStatus !== 'verified') return jsonResponse(409, { error: 'Verify the downpayment first.' });
+            ensurePaymentLedger(order);
+            const before = getPaymentSummary(order);
+            if (before.balance <= 0) return jsonResponse(409, { error: 'This order is already fully paid.' });
+            const requestedAmount = parsePaymentAmount(payload.amount);
+            const amount = requestedAmount === null ? before.balance : requestedAmount;
+            if (Number.isNaN(amount) || amount <= 0) return jsonResponse(400, { error: 'Enter the amount received, greater than zero.' });
+            if (amount > before.balance + 0.001) return jsonResponse(400, { error: `The amount received cannot be more than the unpaid balance of ${formatPeso(before.balance)}.` });
+            const method = String(payload.method || 'cash').toLowerCase();
+            if (!PAYMENT_METHODS.includes(method)) return jsonResponse(400, { error: 'Choose Cash, GCash or Bank transfer.' });
+            const reference = String(payload.reference || '').trim().slice(0, 80);
+            if (method !== 'cash' && !reference) return jsonResponse(400, { error: 'Enter the reference number of the GCash or bank payment.' });
+            const receivedAt = validPaymentDate(payload.receivedAt);
+            if (receivedAt === null) return jsonResponse(400, { error: 'Enter a valid payment date.' });
+            const note = String(payload.note || '').trim().slice(0, 500);
+            order.payments.push({
+                id: require('crypto').randomUUID(),
+                type: 'balance',
+                method,
+                amount,
+                reference,
+                receivedAt: receivedAt || new Date().toISOString(),
+                recordedAt: new Date().toISOString(),
+                recordedBy: claims.sub,
+                note
+            });
+            const after = getPaymentSummary(order);
+            // Paid in full some other way: a balance proof still waiting is no longer needed.
+            if (after.balance <= 0 && order.balanceProofStatus === 'pending') markLatestBalanceProof(order, 'not-needed');
+            const methodLabel = { cash: 'cash', gcash: 'GCash', 'bank-transfer': 'bank transfer' }[method];
+            const summaryText = after.balance > 0
+                ? `Payment of ${formatPeso(amount)} received by ${methodLabel}. Remaining balance: ${formatPeso(after.balance)}.`
+                : `Payment of ${formatPeso(amount)} received by ${methodLabel}. Your order is now fully paid.`;
+            addProductionHistory(order, 'payment-recorded', order.productionStatus, 'admin', `${summaryText}${note ? ` ${note}` : ''}`);
+            order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
+            emailEventId = require('crypto').randomUUID();
+            order.productionNotifications.push({
+                id: emailEventId,
+                type: 'stage-update',
+                status: order.productionStatus,
+                statusLabel: stageLabel(order.productionStatus),
+                remarks: summaryText,
+                message: summaryText,
+                timestamp: new Date().toISOString(),
+                read: false
+            });
+        } else if (operation === 'verify-balance-proof') {
+            // The customer's GCash proof for the rest of the payment: records it as a balance payment.
+            if (order.status === 'cancelled' || order.productionStatus === 'cancelled') return jsonResponse(409, { error: 'Payments cannot be recorded on a cancelled order.' });
+            if (order.balanceProofStatus !== 'pending') return jsonResponse(409, { error: 'There is no balance proof waiting for review.' });
+            ensurePaymentLedger(order);
+            const before = getPaymentSummary(order);
+            if (before.balance <= 0) return jsonResponse(409, { error: 'This order is already fully paid.' });
+            const requestedAmount = parsePaymentAmount(payload.amount);
+            const amount = requestedAmount === null ? before.balance : requestedAmount;
+            if (Number.isNaN(amount) || amount <= 0) return jsonResponse(400, { error: 'Enter the amount received, greater than zero.' });
+            if (amount > before.balance + 0.001) return jsonResponse(400, { error: `The amount received cannot be more than the unpaid balance of ${formatPeso(before.balance)}.` });
+            const receivedAt = validPaymentDate(payload.receivedAt);
+            if (receivedAt === null) return jsonResponse(400, { error: 'Enter a valid payment date.' });
+            const note = String(payload.remarks || '').trim().slice(0, 500);
+            order.payments.push({
+                id: require('crypto').randomUUID(),
+                type: 'balance',
+                method: 'gcash',
+                amount,
+                reference: String(payload.reference || '').trim().slice(0, 80),
+                proofKind: 'balance',
+                proofVersion: Number(order.balanceProofVersion) || null,
+                receivedAt: receivedAt || new Date().toISOString(),
+                recordedAt: new Date().toISOString(),
+                recordedBy: claims.sub,
+                note
+            });
+            markLatestBalanceProof(order, 'verified');
+            delete order.balanceProofRejectionReason;
+            const after = getPaymentSummary(order);
+            const summaryText = after.balance > 0
+                ? `Your GCash payment of ${formatPeso(amount)} for the balance was verified. Remaining balance: ${formatPeso(after.balance)}.`
+                : `Your GCash payment of ${formatPeso(amount)} for the balance was verified. Your order is now fully paid.`;
+            addProductionHistory(order, 'payment-recorded', order.productionStatus, 'admin', `${summaryText}${note ? ` ${note}` : ''}`);
+            order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
+            emailEventId = require('crypto').randomUUID();
+            order.productionNotifications.push({
+                id: emailEventId,
+                type: 'stage-update',
+                status: order.productionStatus,
+                statusLabel: stageLabel(order.productionStatus),
+                remarks: summaryText,
+                message: summaryText,
+                timestamp: new Date().toISOString(),
+                read: false
+            });
+        } else if (operation === 'reject-balance-proof') {
+            if (order.balanceProofStatus !== 'pending') return jsonResponse(409, { error: 'There is no balance proof waiting for review.' });
+            const reason = String(payload.reason || '').trim();
+            if (!reason) return jsonResponse(400, { error: 'A reason is required to reject the payment proof.' });
+            if (reason.length > 1000) return jsonResponse(400, { error: 'The rejection reason must be 1000 characters or fewer.' });
+            markLatestBalanceProof(order, 'rejected', reason);
+            order.balanceProofRejectionReason = reason;
+            addProductionHistory(order, 'balance-proof-rejected', order.productionStatus, 'admin', reason);
+            order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
+            emailEventId = require('crypto').randomUUID();
+            order.productionNotifications.push({
+                id: emailEventId,
+                type: 'stage-update',
+                status: order.productionStatus,
+                statusLabel: stageLabel(order.productionStatus),
+                remarks: `Balance payment proof rejected: ${reason}`,
+                message: `Your GCash proof for the balance was rejected. Reason: ${reason} Please upload a new proof.`,
                 timestamp: new Date().toISOString(),
                 read: false
             });

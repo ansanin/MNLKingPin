@@ -16,7 +16,7 @@ exports.handler = async function handler(event) {
     const fileIndex = String(event.queryStringParameters?.fileIndex ?? '');
     const mediaType = String(event.queryStringParameters?.media || '');
     const accessTicket = String(event.queryStringParameters?.access || '');
-    const isOrderMedia = ['gcash-qr', 'gcash-proof', 'final-design'].includes(mediaType);
+    const isOrderMedia = ['gcash-qr', 'gcash-proof', 'balance-proof', 'final-design'].includes(mediaType);
     if (!/^\d+$/.test(orderId) || (!isOrderMedia && !/^\d+$/.test(itemIndex))) {
         return jsonResponse(400, { error: 'A valid order design is required' });
     }
@@ -57,7 +57,12 @@ exports.handler = async function handler(event) {
             : isOrderMedia ? `order-media-${orderId}-${mediaType}` : fileIndex !== ''
                 ? `order-design-${orderId}-${itemIndex}-${fileIndex}`
                 : `order-design-${orderId}-${itemIndex}`;
-        const dataUrl = await store.get(key, { type: 'text' });
+        // Payment proofs are saved per version, so earlier (rejected) proofs stay viewable.
+        const proofVersion = String(event.queryStringParameters?.v || '');
+        let dataUrl = ['gcash-proof', 'balance-proof'].includes(mediaType) && /^\d{1,4}$/.test(proofVersion)
+            ? await store.get(`${key}-v${proofVersion}`, { type: 'text' })
+            : null;
+        if (!dataUrl) dataUrl = await store.get(key, { type: 'text' });
         const match = String(dataUrl || '').match(/^data:(image\/(?:png|jpeg|gif|webp)|application\/pdf);base64,([a-z0-9+/=]+)$/i);
         if (!match) return jsonResponse(404, { error: 'Order design not found' });
 

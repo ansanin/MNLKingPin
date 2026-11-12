@@ -10,14 +10,17 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>KingPin Custom Ph® CamSur - Jersey Management System</title>
-    <link rel="stylesheet" href="css/style.css?v=20261020-customer-order-item-photo-1">
+    <link rel="stylesheet" href="css/style.css?v=20261112-google-button-1">
     <link rel="stylesheet" href="css/storefront.css">
+    <link rel="stylesheet" href="css/admin-layout.css?v=20261112-admin-layout-1">
+    <link rel="stylesheet" href="css/customer-layout.css?v=20261113-balance-proof-1">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div id="sessionRestoreNotice" class="session-restore-notice" role="status" hidden><span class="session-restore-spinner" aria-hidden="true"></span>Opening your page...</div>
     <!-- Login/Authentication Page -->
    <div id="loginPage" class="page" style="display: none;">
     <div class="login-container">
@@ -129,6 +132,20 @@
             </div>
         </nav>
 
+        <!-- Account pages: a sidebar on wide screens, a row of tabs on tablets and phones. Hidden on the shop catalog. -->
+        <nav id="customerAccountNav" class="customer-sidebar" aria-label="My account">
+            <p class="customer-sidebar-label">My account</p>
+            <button type="button" data-account-view="shop"><span class="customer-nav-icon" aria-hidden="true">⌂</span><span class="customer-nav-text">Shop</span></button>
+            <button type="button" data-account-view="orders"><span class="customer-nav-icon" aria-hidden="true">◧</span><span class="customer-nav-text">My Orders</span><span class="customer-nav-count" data-account-count="orders" hidden></span></button>
+            <button type="button" data-account-view="history"><span class="customer-nav-icon" aria-hidden="true">↺</span><span class="customer-nav-text">Purchase History</span></button>
+            <button type="button" data-account-view="notifications"><span class="customer-nav-icon" aria-hidden="true">✦</span><span class="customer-nav-text">Notifications</span><span class="notification-badge customer-nav-count" data-notification-badge="customer-notifications" style="display:none;">0</span></button>
+            <button type="button" data-account-view="cart"><span class="customer-nav-icon" aria-hidden="true">▣</span><span class="customer-nav-text">Cart</span><span class="customer-nav-count" data-account-count="cart" hidden></span></button>
+            <button type="button" data-account-view="design"><span class="customer-nav-icon" aria-hidden="true">✎</span><span class="customer-nav-text">Design Studio</span></button>
+            <p class="customer-sidebar-label customer-sidebar-label-gap">Help &amp; account</p>
+            <button type="button" data-account-view="support"><span class="customer-nav-icon" aria-hidden="true">✉</span><span class="customer-nav-text">Support</span></button>
+            <button type="button" data-account-view="settings"><span class="customer-nav-icon" aria-hidden="true">⚙</span><span class="customer-nav-text">Settings</span></button>
+        </nav>
+
         <div class="customer-container">
             <!-- Products Section -->
             <div id="productsSection" class="products-section">
@@ -169,7 +186,12 @@
 
             <!-- Design Interface Section -->
             <div id="designSection" class="design-section" style="display: none;">
-                <h2>🎨 Create Your Custom Design</h2>
+                <div class="customer-page-head">
+                    <div>
+                        <h2>Design Studio</h2>
+                        <p class="customer-page-subtitle">Describe a custom top or bottom, or upload your own design files.</p>
+                    </div>
+                </div>
                 
                 <!-- Design Mode Selector -->
                 <div class="design-mode-selector">
@@ -360,51 +382,81 @@
 
             <!-- Shopping Cart Section -->
             <div id="cartSection" class="cart-section" style="display: none;">
-                <h2>Shopping Cart</h2>
-                <div id="cartItems" class="cart-items">
-                    <!-- Cart items will be displayed here -->
+                <div class="customer-page-head">
+                    <div>
+                        <h2>Shopping Cart</h2>
+                        <p id="cartSubtitle" class="customer-page-subtitle">Check sizes and quantities before you check out.</p>
+                    </div>
                 </div>
-                <div class="cart-summary">
-                    <p>Total: <strong>₱<span id="cartTotal">0.00</span></strong></p>
-                    <button class="btn btn-primary" onclick="checkout()">Proceed to Checkout</button>
-                    <button class="btn btn-secondary" onclick="toggleCart()">Continue Shopping</button>
+                <div class="customer-cart-layout">
+                    <div id="cartItems" class="cart-items">
+                        <!-- Cart items will be displayed here -->
+                    </div>
+                    <aside class="cart-summary" aria-label="Cart total">
+                        <h3>Order summary</h3>
+                        <p>Total: <strong>₱<span id="cartTotal">0.00</span></strong></p>
+                        <small class="cart-summary-note">Pay a 50% downpayment when you place the order. The balance is paid on pickup or delivery.</small>
+                        <button class="btn btn-primary" onclick="checkout()">Proceed to Checkout</button>
+                        <button class="btn btn-secondary" onclick="toggleCart()">Continue Shopping</button>
+                    </aside>
                 </div>
             </div>
 
             <!-- Orders Section -->
             <div id="ordersSection" class="orders-section" style="display: none;">
-                <h2>My Orders</h2>
-                <p style="color: #a0a0a0; margin-bottom: 20px;">Active and pending orders</p>
-                <div id="ordersList" class="orders-list">
+                <div class="customer-page-head">
+                    <div>
+                        <h2>My Orders</h2>
+                        <p class="customer-page-subtitle">Follow each order, pay the downpayment and approve your design.</p>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="navigateStorefront('shop')">+ Shop more</button>
+                </div>
+                <div id="customerOrderSummary" class="customer-metrics" aria-label="Order summary"></div>
+                <div id="customerOrderFilters" class="filter-chips customer-list-filters" role="group" aria-label="Filter orders"></div>
+                <div id="ordersList" class="orders-list customer-order-list">
                     <!-- Orders will be displayed here -->
                 </div>
-                <button class="btn btn-secondary" onclick="goBackToShop()">Back to Shop</button>
+                <div id="customerOrdersPager" class="table-pager" hidden></div>
             </div>
 
             <!-- Purchase History Section -->
             <div id="purchaseHistorySection" class="purchase-history-section" style="display: none;">
-                <h2>Purchase History</h2>
-                <p style="color: #a0a0a0; margin-bottom: 20px;">Completed, delivered, and cancelled orders</p>
-                <div id="purchaseHistoryList" class="purchase-history-list">
+                <div class="customer-page-head">
+                    <div>
+                        <h2>Purchase History</h2>
+                        <p class="customer-page-subtitle">Completed and cancelled orders. Open one to see its receipt or leave a review.</p>
+                    </div>
+                </div>
+                <div id="customerHistorySummary" class="customer-metrics" aria-label="Purchase history summary"></div>
+                <div id="purchaseHistoryList" class="purchase-history-list customer-order-list">
                     <!-- Purchase history will be displayed here -->
                 </div>
-                <button class="btn btn-secondary" onclick="goBackToShop()">Back to Shop</button>
+                <div id="customerHistoryPager" class="table-pager" hidden></div>
             </div>
 
             <!-- Notifications Section -->
             <div id="notificationsSection" class="notifications-section" style="display: none;">
-                <h2>My Notifications</h2>
+                <div class="customer-page-head">
+                    <div>
+                        <h2>Notifications</h2>
+                        <p class="customer-page-subtitle">Updates from the shop about your orders, newest first.</p>
+                    </div>
+                </div>
                 <div id="notificationsList" class="notifications-list">
                     <!-- Notifications will be displayed here -->
                 </div>
-                <button class="btn btn-secondary" onclick="goBackToShop()">Back to Shop</button>
             </div>
 
             <!-- Customer Settings Section -->
             <div id="customerSettingsSection" class="customer-settings-section" style="display: none;">
-                <h2>Customer Settings</h2>
-                <p>Update your account and delivery information.</p>
-                <form id="customerSettingsForm" onsubmit="saveCustomerSettings(event)">
+                <div class="customer-page-head">
+                    <div>
+                        <h2>Account Settings</h2>
+                        <p class="customer-page-subtitle">Update your account and delivery information.</p>
+                    </div>
+                </div>
+                <form id="customerSettingsForm" class="customer-panel" onsubmit="saveCustomerSettings(event)">
+                    <h3 class="customer-panel-title">Account</h3>
                     <div class="form-row">
                         <div class="form-group"><label for="settingsUsername">Username:</label><input type="text" id="settingsUsername" required minlength="3"></div>
                         <div class="form-group"><label for="settingsFullName">Full Name:</label><input type="text" id="settingsFullName" required></div>
@@ -422,18 +474,24 @@
                             <button type="button" class="btn btn-secondary" onclick="cancelCustomerEmailChange()">Cancel</button>
                         </div>
                     </div>
+                    <h3 class="customer-panel-title">Delivery</h3>
                     <div class="form-group"><label for="settingsAddress">Delivery Address:</label><textarea id="settingsAddress" rows="3" required></textarea></div>
-                    <button type="submit" class="btn btn-primary">Save Account Information</button>
-                    <button type="button" class="btn btn-secondary" onclick="goBackToShop()">Back to Shop</button>
+                    <div class="customer-form-actions">
+                        <button type="submit" class="btn btn-primary">Save Account Information</button>
+                    </div>
                     <div id="customerSettingsMessage" class="status-message"></div>
                 </form>
             </div>
 
             <!-- Customer Service Section -->
             <div id="customerServiceSection" class="customer-service-section" style="display: none;">
-                <h2>Customer Service</h2>
-                <p>Send a message to the seller about your order or any concern.</p>
-                <form id="customerServiceForm" onsubmit="sendCustomerServiceMessage(event)">
+                <div class="customer-page-head">
+                    <div>
+                        <h2>Customer Service</h2>
+                        <p class="customer-page-subtitle">Send a message to the seller about your order or any concern.</p>
+                    </div>
+                </div>
+                <form id="customerServiceForm" class="customer-panel" onsubmit="sendCustomerServiceMessage(event)">
                     <div class="form-group">
                         <label for="serviceOrderId">Order (optional):</label>
                         <select id="serviceOrderId">
@@ -454,15 +512,21 @@
                         <label for="serviceMessage">Message:</label>
                         <textarea id="serviceMessage" rows="6" required placeholder="Write your message to the seller..."></textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary">Send Message to Seller</button>
-                    <button type="button" class="btn btn-secondary" onclick="goBackToShop()">Back to Shop</button>
+                    <div class="customer-form-actions">
+                        <button type="submit" class="btn btn-primary">Send Message to Seller</button>
+                    </div>
                     <div id="customerServiceStatus" class="status-message"></div>
                 </form>
             </div>
 
             <!-- Checkout Section -->
             <div id="checkoutSection" class="checkout-section" style="display: none;">
-                <h2>Checkout</h2>
+                <div class="customer-page-head">
+                    <div>
+                        <h2>Checkout</h2>
+                        <p class="customer-page-subtitle">Confirm your details, choose how to pay, then place your order.</p>
+                    </div>
+                </div>
                 <div class="checkout-layout"><form id="checkoutForm" novalidate>
                     <!-- Order Items Review -->
                     <div style="background: #1f1f1f; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #3a3a3a;">
@@ -667,32 +731,40 @@
                 <span id="adminDisplayName">Welcome, Admin!</span>
                 <span class="navbar-division">MNL KINGPIN / CAMSUR</span>
             </div>
-            <div class="navbar-right">
-                <div class="nav-menu-scroll-wrapper">
-                    <button class="btn btn-secondary nav-menu-toggle admin-nav-menu-toggle" type="button" onclick="toggleAdminNavMenu()">Menu</button>
-                    <div id="adminNavMenu" class="nav-menu-items" aria-label="Admin navigation menu">
-                        <button class="btn btn-secondary" onclick="showAdminTab('products')">Products</button>
-                        <button class="btn btn-secondary notification-btn" onclick="showAdminTab('orders')">Orders <span class="notification-badge" data-notification-badge="admin-orders" style="display:none;">0</span></button>
-                        <button class="btn btn-secondary notification-btn" onclick="showAdminTab('messages')">Messages <span class="notification-badge" data-notification-badge="admin-messages" style="display:none;">0</span></button>
-                        <button class="btn btn-secondary" onclick="showAdminTab('customers')">Customers</button>
-                        <button class="btn btn-secondary" onclick="showAdminTab('history')">History</button>
-                        <button class="btn btn-secondary" onclick="showAdminTab('reports')">Reports</button>
-                        <button class="btn btn-secondary" onclick="showAdminTab('settings')">Settings</button>
-                        <button class="btn btn-secondary theme-toggle" type="button" onclick="toggleTheme()" aria-label="Switch to light mode"><span class="theme-toggle-icon">☀️</span> <span class="theme-toggle-label">Light Mode</span></button>
-                        <button class="btn btn-danger" onclick="logout()">Logout</button>
-                    </div>
-                </div>
+            <div class="navbar-right admin-topbar-actions">
+                <button class="btn btn-secondary theme-toggle" type="button" onclick="toggleTheme()" aria-label="Switch to light mode"><span class="theme-toggle-icon">☀️</span> <span class="theme-toggle-label">Light Mode</span></button>
+                <button class="btn btn-danger" type="button" onclick="logout()">Logout</button>
+                <button class="btn btn-secondary nav-menu-toggle admin-nav-menu-toggle" type="button" onclick="toggleAdminNavMenu()" aria-controls="adminNavMenu" aria-expanded="false">Menu</button>
             </div>
         </nav>
+
+        <!-- Admin sections: a sidebar on wide screens, a slide-in menu on phones. -->
+        <div id="adminNavMenu" class="admin-sidebar" role="navigation" aria-label="Admin navigation menu">
+            <p class="admin-sidebar-label">Manage shop</p>
+            <button class="btn btn-secondary" type="button" data-admin-tab="products" onclick="showAdminTab('products')"><span class="admin-nav-icon" aria-hidden="true">▦</span><span class="admin-nav-text">Products</span></button>
+            <button class="btn btn-secondary notification-btn" type="button" data-admin-tab="orders" onclick="showAdminTab('orders')"><span class="admin-nav-icon" aria-hidden="true">◧</span><span class="admin-nav-text">Orders</span> <span class="notification-badge" data-notification-badge="admin-orders" style="display:none;">0</span></button>
+            <button class="btn btn-secondary notification-btn" type="button" data-admin-tab="messages" onclick="showAdminTab('messages')"><span class="admin-nav-icon" aria-hidden="true">✉</span><span class="admin-nav-text">Messages</span> <span class="notification-badge" data-notification-badge="admin-messages" style="display:none;">0</span></button>
+            <button class="btn btn-secondary" type="button" data-admin-tab="customers" onclick="showAdminTab('customers')"><span class="admin-nav-icon" aria-hidden="true">☺</span><span class="admin-nav-text">Customers</span></button>
+            <button class="btn btn-secondary" type="button" data-admin-tab="history" onclick="showAdminTab('history')"><span class="admin-nav-icon" aria-hidden="true">↺</span><span class="admin-nav-text">History</span></button>
+            <button class="btn btn-secondary" type="button" data-admin-tab="reports" onclick="showAdminTab('reports')"><span class="admin-nav-icon" aria-hidden="true">▤</span><span class="admin-nav-text">Reports</span></button>
+            <button class="btn btn-secondary" type="button" data-admin-tab="settings" onclick="showAdminTab('settings')"><span class="admin-nav-icon" aria-hidden="true">⚙</span><span class="admin-nav-text">Settings</span></button>
+        </div>
+        <div class="admin-sidebar-backdrop" onclick="closeAdminNavMenu()" aria-hidden="true"></div>
 
         <div class="admin-container">
             <!-- Products Management -->
             <div id="productsTab" class="admin-tab">
-                <h2>Manage Products</h2>
-                
-                <div class="add-product-form">
+                <div class="admin-page-head">
+                    <div>
+                        <h2>Manage Products</h2>
+                        <p class="admin-page-subtitle">Add products, change prices and stock, and keep the shop catalog up to date.</p>
+                    </div>
+                    <button type="button" id="addProductToggle" class="btn btn-primary" aria-expanded="false" aria-controls="addProductPanel" onclick="toggleAddProductForm()">+ Add New Product</button>
+                </div>
+
+                <div id="addProductPanel" class="add-product-form" hidden>
                     <h3>Add New Product</h3>
-                    <form id="addProductForm">
+                    <form id="addProductForm" class="add-product-grid">
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="productName">Jersey/Item Name:</label>
@@ -835,10 +907,12 @@
                 </div>
 
                 <!-- Product Inventory Management -->
-                <div style="margin-top: 40px; padding-top: 30px; border-top: 2px solid #3a3a3a;">
-                    <h3>📦 Product Inventory Management</h3>
-                    <p style="color: #a0a0a0; margin-bottom: 20px;">Manage all your manually added products</p>
-                    <div class="orders-table">
+                <section class="admin-panel">
+                    <div class="table-toolbar">
+                        <h3>Product Inventory</h3>
+                        <input type="search" id="adminProductSearch" class="search-input" placeholder="Search products by name or type..." aria-label="Search products" oninput="onAdminProductSearchChanged()">
+                    </div>
+                    <div class="orders-table data-table-wrap">
                         <table id="adminProductsTable">
                             <thead>
                                 <tr>
@@ -856,7 +930,8 @@
                             </tbody>
                         </table>
                     </div>
-                </div>
+                    <div id="adminProductsPager" class="table-pager" hidden></div>
+                </section>
 
                 <!-- Edit Product Modal -->
                 <div id="editProductModal" class="modal" style="display: none;">
@@ -990,17 +1065,34 @@
 
             <!-- Orders Management -->
             <div id="ordersTab" class="admin-tab" style="display: none;">
-                <h2>Manage Orders</h2>
+                <div class="admin-page-head">
+                    <div>
+                        <h2>Manage Orders</h2>
+                        <p class="admin-page-subtitle">Check payment proofs, record payments and move orders through production.</p>
+                    </div>
+                </div>
                 <div class="production-summary" aria-label="Production order summary">
+                    <div class="production-metric production-metric-attention"><span>Proofs to review</span><strong id="paymentReviewCount">0</strong></div>
+                    <div class="production-metric"><span>With balance</span><strong id="balanceDueCount">0</strong></div>
                     <div class="production-metric"><span>Pending</span><strong id="productionPendingCount">0</strong></div>
                     <div class="production-metric"><span>In Production</span><strong id="productionInProgressCount">0</strong></div>
                     <div class="production-metric"><span>Ready</span><strong id="productionReadyCount">0</strong></div>
                     <div class="production-metric"><span>Completed</span><strong id="productionCompletedCount">0</strong></div>
                     <div class="production-metric production-metric-delayed"><span>Delayed</span><strong id="productionDelayedCount">0</strong></div>
                 </div>
-                <div class="production-order-controls">
+                <div class="production-order-controls table-toolbar">
+                    <input type="search" id="adminOrderSearch" class="search-input" placeholder="Search order no., name, email or phone..." aria-label="Search orders" oninput="onAdminOrderFiltersChanged()">
+                    <label for="adminPaymentFilter">Payment</label>
+                    <select id="adminPaymentFilter" onchange="onAdminOrderFiltersChanged()">
+                        <option value="all">All payments</option>
+                        <option value="proof-review">Proof to review</option>
+                        <option value="downpayment-unpaid">Downpayment unpaid</option>
+                        <option value="with-balance">With balance</option>
+                        <option value="fully-paid">Fully paid</option>
+                    </select>
                     <label for="productionStageFilter">Production stage</label>
-                    <select id="productionStageFilter" onchange="renderAdminOrders()">
+                    <select id="productionStageFilter" onchange="onAdminOrderFiltersChanged()">
+                        <option value="active" selected>Active orders</option>
                         <option value="all">All stages</option>
                         <option value="order-placed">Order Placed</option>
                         <option value="payment-verification">Payment Verification</option>
@@ -1014,16 +1106,16 @@
                     </select>
                 </div>
                 
-                <div class="orders-table">
+                <div class="orders-table data-table-wrap">
                     <table id="ordersInventory">
                         <thead>
                             <tr>
                                 <th>Order ID</th>
-                                <th>Customer Name</th>
+                                <th>Customer</th>
                                 <th>Products</th>
-                                <th>Order Status</th>
+                                <th class="cell-money">Total</th>
+                                <th>Payment</th>
                                 <th>Production Stage</th>
-                                <th>Order Date</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -1032,6 +1124,7 @@
                         </tbody>
                     </table>
                 </div>
+                <div id="adminOrdersPager" class="table-pager" hidden></div>
             </div>
 
             <!-- Customer Messages -->
@@ -1049,19 +1142,33 @@
 
             <!-- Customer Database Management -->
             <div id="customersTab" class="admin-tab" style="display: none;">
-                <h2>Customer List</h2>
-                <div class="history-controls">
-                    <input type="search" id="customerSearch" placeholder="Search customers by name..." aria-label="Search customers by name" class="search-input" oninput="renderCustomersTable()">
-                    <button class="btn btn-secondary" onclick="exportCustomersToCSV()">📥 Export Customers (Excel)</button>
+                <div class="admin-page-head">
+                    <div>
+                        <h2>Customer List</h2>
+                        <p class="admin-page-subtitle">See who still has a downpayment or balance to pay, and who is fully paid.</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="downloadCustomersReportPdf(this)">Download PDF</button>
                 </div>
-                <div class="orders-table">
+                <div class="production-summary customer-balance-summary" aria-label="Customer payment summary">
+                    <div class="production-metric production-metric-attention"><span>Balance to collect</span><strong id="customerReceivableTotal">₱0.00</strong></div>
+                    <div class="production-metric"><span>Downpayment unpaid</span><strong id="customerDpUnpaidCount">0</strong></div>
+                    <div class="production-metric"><span>With balance</span><strong id="customerBalanceCount">0</strong></div>
+                    <div class="production-metric"><span>Fully paid</span><strong id="customerFullyPaidCount">0</strong></div>
+                </div>
+                <div class="table-toolbar">
+                    <div id="customerStandingFilters" class="filter-chips" role="group" aria-label="Filter customers by payment"></div>
+                    <input type="search" id="customerSearch" placeholder="Search customers by name or email..." aria-label="Search customers by name" class="search-input" oninput="onCustomerSearchChanged()">
+                </div>
+                <div class="orders-table data-table-wrap">
                     <table id="customersTable">
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th>Email</th>
-                                <th>Phone</th>
-                                <th>Total Orders</th>
+                                <th>Contact</th>
+                                <th class="cell-money">Total</th>
+                                <th class="cell-money">Paid</th>
+                                <th class="cell-money">Balance</th>
+                                <th>Payment Status</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -1070,6 +1177,7 @@
                         </tbody>
                     </table>
                 </div>
+                <div id="customersPager" class="table-pager" hidden></div>
             </div>
 
             <!-- Edit Customer Modal -->
@@ -1107,9 +1215,15 @@
 
             <!-- History Management -->
             <div id="historyTab" class="admin-tab" style="display: none;">
-                <h2>Purchase History</h2>
-                <div class="history-controls">
-                    <select id="yearSelector" class="search-input" onchange="loadHistoryTable()">
+                <div class="admin-page-head">
+                    <div>
+                        <h2>Purchase History</h2>
+                        <p class="admin-page-subtitle">Completed and cancelled orders.</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="downloadHistoryReportPdf(this)">Download PDF</button>
+                </div>
+                <div class="history-controls table-toolbar">
+                    <select id="yearSelector" class="search-input" onchange="onHistoryFiltersChanged()" aria-label="Year">
                         <option value="">All Years</option>
                         <option value="2024">2024</option>
                         <option value="2025">2025</option>
@@ -1117,7 +1231,7 @@
                         <option value="2027">2027</option>
                         <option value="2028">2028</option>
                     </select>
-                    <select id="monthSelector" class="search-input" onchange="loadHistoryTable()">
+                    <select id="monthSelector" class="search-input" onchange="onHistoryFiltersChanged()" aria-label="Month">
                         <option value="all">All Months</option>
                         <option value="01">January</option>
                         <option value="02">February</option>
@@ -1132,21 +1246,19 @@
                         <option value="11">November</option>
                         <option value="12">December</option>
                     </select>
-                    <input type="text" id="historySearch" placeholder="Search by customer name or order ID..." class="search-input">
-                    <button class="btn btn-secondary" onclick="exportHistoryToCSV()">📥 Export to CSV</button>
+                    <input type="search" id="historySearch" placeholder="Search by customer name, email or order ID..." class="search-input" aria-label="Search history">
                 </div>
-                <div class="orders-table">
+                <div class="orders-table data-table-wrap">
                     <table id="historyTable">
                         <thead>
                             <tr>
-                                <th>Order ID</th>
-                                <th>Customer Name</th>
-                                <th>Email</th>
+                                <th>Order</th>
+                                <th>Customer</th>
                                 <th>Products</th>
-                                <th>Total Amount</th>
+                                <th class="cell-money">Total</th>
+                                <th>Payment</th>
                                 <th>Status</th>
-                                <th>Order Date</th>
-                                <th>Delivery Address</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="historyList">
@@ -1154,11 +1266,18 @@
                         </tbody>
                     </table>
                 </div>
+                <div id="historyPager" class="table-pager" hidden></div>
             </div>
 
             <!-- Reports Management -->
             <div id="reportsTab" class="admin-tab" style="display: none;">
-                <h2>Sales & Performance Reports</h2>
+                <div class="admin-page-head">
+                    <div>
+                        <h2>Sales &amp; Performance Reports</h2>
+                        <p class="admin-page-subtitle">Pick a period, then download the PDF made from the saved records.</p>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="downloadSalesReportPdf(this)">Download Report (PDF)</button>
+                </div>
                 <div class="report-filters" aria-label="Report date filter">
                     <label for="reportPeriod">Report period</label>
                     <select id="reportPeriod" class="search-input" onchange="toggleCustomReportDates(); generateReports()">
@@ -1213,6 +1332,7 @@
                     </div>
                 </div>
 
+                <div class="report-two-col">
                 <div class="report-section">
                     <h3>Top Selling Products</h3>
                     <table id="topProductsTable">
@@ -1244,9 +1364,17 @@
                         </tbody>
                     </table>
                 </div>
+                </div>
 
-                <div class="report-section">
-                    <button class="btn btn-primary" onclick="generateFullReport()">Generate Full Report (Excel)</button>
+                <div class="report-two-col">
+                <div class="report-section report-verify">
+                    <h3>Verify a printed report</h3>
+                    <p class="price-recompute-hint">Every PDF has a report number and a data fingerprint. Enter the number to check that a report really came from this system.</p>
+                    <form class="report-verify-form" onsubmit="verifyReportNumber(event)">
+                        <input type="text" id="reportVerifyNumber" class="search-input" placeholder="RPT-20261112-153000-AB12" aria-label="Report number" autocomplete="off">
+                        <button type="submit" class="btn btn-secondary">Verify</button>
+                    </form>
+                    <div id="reportVerifyResult" class="report-verify-result" role="status"></div>
                 </div>
 
                 <div class="report-section price-recompute">
@@ -1254,6 +1382,7 @@
                     <p class="price-recompute-hint">If you changed product prices, recompute existing orders with the current prices so Sales &amp; Reports match. You will see the changes before anything is saved.</p>
                     <button type="button" id="priceRecomputePreviewBtn" class="btn btn-secondary" onclick="previewOrderPriceRecompute()">Recompute Order Prices</button>
                     <div id="priceRecomputeResult" class="price-recompute-result" hidden></div>
+                </div>
                 </div>
             </div>
 
@@ -1514,8 +1643,9 @@
     <script src="js/team-order.js?v=20261104-player-details-1"></script>
     <script src="js/production-tracking.js?v=20261015-production-1"></script>
     <script src="js/order-media.js?v=20261019-multi-design-1"></script>
-    <script src="js/app.js?v=20261107-recompute-prices-1"></script>
-    <script src="js/storefront.js"></script>
+    <script src="js/payment-summary.js?v=20261112-payments-1"></script>
+    <script src="js/app.js?v=20261113-balance-proof-1"></script>
+    <script src="js/storefront.js?v=20261113-customer-layout-1"></script>
     <script src="js/design-interface.js?v=20261020-hide-upload-filenames-1"></script>
     <script>
         // Force initialization when page loads

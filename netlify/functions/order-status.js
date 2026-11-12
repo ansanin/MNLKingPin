@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const { connectLambda, getStore } = require('@netlify/blobs');
 const { authenticateEvent } = require('./lib/auth');
 const { renderOrderUpdateEmail } = require('./lib/order-email');
+const { getLocalSmtpSettings, sendLocalEmail } = require('./lib/local-mail');
 
 function jsonResponse(statusCode, body) {
     return {
@@ -24,7 +25,8 @@ exports.handler = async function handler(event) {
     const smtpPass = process.env.SMTP_PASS;
     const resendApiKey = process.env.RESEND_API_KEY;
     const resendFromEmail = process.env.RESEND_FROM_EMAIL;
-    if ((!smtpUser || !smtpPass) && (!resendApiKey || !resendFromEmail)) {
+    const localSmtp = getLocalSmtpSettings();
+    if (!localSmtp && (!smtpUser || !smtpPass) && (!resendApiKey || !resendFromEmail)) {
         return jsonResponse(500, { error: 'Email service is not configured' });
     }
 
@@ -45,6 +47,14 @@ exports.handler = async function handler(event) {
         const status = String(productionEvent.message || 'updated');
         const subject = `KingPin Order #${order.id} Status Update`;
         const html = await renderOrderUpdateEmail(order, productionEvent, process.env.URL || 'https://mnlkingpin.netlify.app');
+
+        if (localSmtp) {
+            // Local `netlify dev` only (see lib/local-mail.js): deliver to the local test inbox.
+            await sendLocalEmail(localSmtp, { to: order.customerEmail, subject, html });
+            order.productionEmailEventIds = [...sentEmailIds, data.eventId];
+            await store.setJSON(`order-${String(order.id)}`, order);
+            return jsonResponse(200, { success: true, message: 'Order status email sent to the local test inbox' });
+        }
 
         if (smtpUser && smtpPass) {
             const transporter = nodemailer.createTransport({

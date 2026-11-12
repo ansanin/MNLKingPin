@@ -51,7 +51,10 @@ function setCustomerActiveView(activeSectionId) {
     });
 
     const isShop = activeSectionId === 'productsSection';
-    document.getElementById('customerPage')?.classList.toggle('is-shop-view', isShop);
+    const customerPage = document.getElementById('customerPage');
+    customerPage?.classList.toggle('is-shop-view', isShop);
+    // Account pages (orders, cart, settings, ...) show the "My account" sidebar.
+    customerPage?.classList.toggle('is-account-view', !isShop);
     document.querySelectorAll('#customerPage .customer-service-footer, #customerPage [data-shop-footer]').forEach(footer => {
         footer.hidden = !isShop;
     });
@@ -70,8 +73,17 @@ function safeStorageSet(storage, key, value) {
     }
 }
 
-function saveNavigationState(role, view) {
-    safeStorageSet(sessionStorage, 'kingpinNavigationState', JSON.stringify({ role, view }));
+// Remembers the open screen (and an open admin order) so a refresh returns there.
+function saveNavigationState(role, view, extra = {}) {
+    safeStorageSet(sessionStorage, 'kingpinNavigationState', JSON.stringify({ role, view, ...extra }));
+}
+
+function rememberOpenAdminOrder(orderId) {
+    const state = loadNavigationState();
+    if (state?.role !== 'admin') return;
+    const next = { ...state };
+    if (orderId) next.orderId = String(orderId); else delete next.orderId;
+    safeStorageSet(sessionStorage, 'kingpinNavigationState', JSON.stringify(next));
 }
 
 function loadNavigationState() {
@@ -147,11 +159,13 @@ function closeCustomerNavMenu() {
     navMenu.style.display = 'none';
 }
 
+// The admin menu is a sidebar on wide screens and a slide-in panel on phones.
 function closeAdminNavMenu() {
     const navMenu = document.getElementById('adminNavMenu');
     if (!navMenu) return;
     navMenu.classList.remove('visible');
-    navMenu.style.display = 'none';
+    document.getElementById('adminPage')?.classList.remove('admin-menu-open');
+    document.querySelector('.admin-nav-menu-toggle')?.setAttribute('aria-expanded', 'false');
 }
 
 function toggleNavMenu() {
@@ -174,12 +188,8 @@ function toggleAdminNavMenu() {
 
     const isOpen = navMenu.classList.contains('visible');
     navMenu.classList.toggle('visible', !isOpen);
-    navMenu.style.display = isOpen ? 'none' : 'flex';
-    navMenu.style.position = 'fixed';
-    navMenu.style.top = '62px';
-    navMenu.style.right = '12px';
-    navMenu.style.left = 'auto';
-    navMenu.style.zIndex = '2147483647';
+    document.getElementById('adminPage')?.classList.toggle('admin-menu-open', !isOpen);
+    document.querySelector('.admin-nav-menu-toggle')?.setAttribute('aria-expanded', String(!isOpen));
 }
 
 document.addEventListener('click', (event) => {
@@ -283,7 +293,7 @@ function markNotificationAsRead(id) {
         notification.read = true;
         saveNotifications();
         if (notification.orderId && appData.currentRole === 'customer') {
-            viewOrders();
+            openCustomerOrder(notification.orderId);
         }
     }
     updateNotificationBadges();
@@ -682,24 +692,84 @@ function clearUserCart() {
 }
 
 // Restore only a session that the server signed and has not expired.
+// The sign-in token is kept in localStorage so a refresh, a new tab or a
+// reopened browser stays signed in until the token expires (8 hours).
+const ACCESS_TOKEN_KEY = 'kingpinAccessToken';
+
+function readSavedAccessToken() {
+    try {
+        return localStorage.getItem(ACCESS_TOKEN_KEY) || sessionStorage.getItem(ACCESS_TOKEN_KEY) || '';
+    } catch (error) {
+        return '';
+    }
+}
+
+function getTokenExpiry(token) {
+    try {
+        const payload = JSON.parse(atob(String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return Number(payload.exp) * 1000 || 0;
+    } catch (error) {
+        return 0;
+    }
+}
+
+// Asks the server whether the saved token is still valid. Only a 401/403
+// means signed out; a network error or a slow server start is retried and
+// never signs the user out by itself.
+async function verifySavedSession(token) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+            const response = await fetch('/.netlify/functions/auth', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+            if (response.status === 401 || response.status === 403) return { invalid: true };
+            if (response.ok) return { identity: await response.json() };
+        } catch (error) {
+            console.warn('Session check failed; retrying.', error);
+        }
+        await new Promise(resolve => setTimeout(resolve, 700 * (attempt + 1)));
+    }
+    return { offline: true };
+}
+
+function setSessionRestoreNotice(visible) {
+    const notice = document.getElementById('sessionRestoreNotice');
+    if (notice) notice.hidden = !visible;
+}
+
+function showLoginAfterSessionEnd(message = '') {
+    clearCurrentSession();
+    ['customerPage', 'adminPage', 'accessDeniedPage'].forEach(pageId => {
+        const page = document.getElementById(pageId);
+        if (page) page.style.display = 'none';
+    });
+    const loginPage = document.getElementById('loginPage');
+    if (loginPage) loginPage.style.display = 'block';
+    if (message) showStatusUpdateToast(message);
+}
+
 async function checkSavedSession() {
     const session = loadCurrentSession();
-    const token = sessionStorage.getItem('kingpinAccessToken');
+    const token = readSavedAccessToken();
     if (!session || !token) {
-        clearCurrentSession();
+        showLoginAfterSessionEnd();
+        return;
+    }
+    const expiry = getTokenExpiry(token);
+    if (expiry && expiry <= Date.now()) {
+        showLoginAfterSessionEnd('Your session expired. Please sign in again.');
         return;
     }
 
+    setSessionRestoreNotice(true);
     try {
-        const response = await fetch('/.netlify/functions/auth', {
-            headers: { Authorization: `Bearer ${token}` },
-            cache: 'no-store'
-        });
-        if (!response.ok) {
-            clearCurrentSession();
+        const check = await verifySavedSession(token);
+        if (check.invalid) {
+            showLoginAfterSessionEnd('Your session ended. Please sign in again.');
             return;
         }
-        const identity = await response.json();
+        // If the server cannot be reached, keep the saved session: every
+        // request is still checked by the server once it answers again.
+        const identity = check.identity || { role: session.role, user: session.user };
+        if (check.offline) showStatusUpdateToast('The server is not responding yet. Your page will update when the connection is back.');
         if (identity.role === 'customer' && session.role === 'customer' && identity.user === session.user) {
             if (isAdminPortalPage()) {
                 showAccessDenied();
@@ -709,48 +779,66 @@ async function checkSavedSession() {
             appData.currentUser = session.user;
             appData.currentRole = 'customer';
             appData.currentUserProfile = session.userProfile || { email: session.user, username: session.user };
-            startCustomerProfileRefresh();
-            await refreshCustomerProfile().catch(error => {
-                console.error('Unable to refresh customer account information:', error);
-            });
-            await loadUserCart();
-            initializeData();
+            saveCurrentSession();
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('customerPage').style.display = 'block';
             document.getElementById('adminPage').style.display = 'none';
-            document.getElementById('productsSection').style.display = 'block';
-            document.getElementById('cartSection').style.display = 'none';
-            document.getElementById('ordersSection').style.display = 'none';
-            document.getElementById('notificationsSection').style.display = 'none';
-            document.getElementById('checkoutSection').style.display = 'none';
-            const savedView = loadNavigationState();
-            if (savedView?.role === 'customer' && typeof window[savedView.view] === 'function') window[savedView.view]();
-            document.getElementById('customerDisplayName').textContent = `Welcome, ${appData.currentUserProfile.username || appData.currentUser}!`;
-            loadProducts();
+            // A screen that fails to redraw must not sign the customer out.
+            try {
+                startCustomerProfileRefresh();
+                await refreshCustomerProfile().catch(error => {
+                    console.error('Unable to refresh customer account information:', error);
+                });
+                await loadUserCart();
+                initializeData();
+                document.getElementById('productsSection').style.display = 'block';
+                document.getElementById('cartSection').style.display = 'none';
+                document.getElementById('ordersSection').style.display = 'none';
+                document.getElementById('notificationsSection').style.display = 'none';
+                document.getElementById('checkoutSection').style.display = 'none';
+                const savedView = loadNavigationState();
+                if (savedView?.role === 'customer' && typeof window[savedView.view] === 'function') window[savedView.view]();
+                document.getElementById('customerDisplayName').textContent = `Welcome, ${appData.currentUserProfile.username || appData.currentUser}!`;
+                loadProducts();
+            } catch (error) {
+                console.error('Part of the customer page could not be restored after refresh:', error);
+            }
             setTimeout(updateNotificationBadges, 150);
         } else if (identity.role === 'admin' && session.role === 'admin' && identity.user === session.user) {
             if (!isAdminPortalPage()) {
-                showAccessDenied();
+                // Signed in as admin on the shop address: go back to the admin portal.
+                window.location.replace('index.html?portal=admin');
                 return;
             }
             appData.authToken = token;
             appData.currentUser = session.user;
             appData.currentRole = 'admin';
             appData.currentUserProfile = null;
-            initializeData();
+            saveCurrentSession();
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('customerPage').style.display = 'none';
             document.getElementById('adminPage').style.display = 'block';
-            const savedView = loadNavigationState();
-            showAdminTab(savedView?.role === 'admin' && savedView.view ? savedView.view : 'products');
-            loadAdminOrders();
+            // A screen that fails to redraw must not sign the admin out.
+            try {
+                initializeData();
+                const savedView = loadNavigationState();
+                showAdminTab(savedView?.role === 'admin' && savedView.view ? savedView.view : 'products');
+                await loadAdminOrders();
+                startAdminCustomerServiceRefresh();
+                updateShopLogoDisplay();
+                if (savedView?.role === 'admin' && savedView.orderId) viewOrderDetails(Number(savedView.orderId) || String(savedView.orderId));
+            } catch (error) {
+                console.error('Part of the admin page could not be restored after refresh:', error);
+            }
             setTimeout(updateNotificationBadges, 150);
         } else {
-            clearCurrentSession();
+            showLoginAfterSessionEnd();
         }
     } catch (e) {
-        console.error('Error checking saved session:', e);
-        clearCurrentSession();
+        // Errors while redrawing the page are not a sign-out: keep the session.
+        console.error('Error restoring the saved session:', e);
+    } finally {
+        setSessionRestoreNotice(false);
     }
 }
 
@@ -819,14 +907,26 @@ function fetchSharedProducts({ full = appData.currentRole === 'admin' } = {}) {
 }
 
 async function fetchProductDetails(productId) {
+    const id = encodeURIComponent(productId);
+    // On localhost, `netlify dev` answers from the Netlify function and returns PHP files as plain text,
+    // while XAMPP (Apache + PHP) only has api/product-detail.php. Try the function first, then the PHP file.
     const isLocalServer = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-    const endpoint = isLocalServer
-        ? `api/product-detail.php?id=${encodeURIComponent(productId)}`
-        : `/.netlify/functions/product-detail?id=${encodeURIComponent(productId)}`;
-    const response = await fetch(endpoint, { cache: 'no-store' });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.product) throw new Error(result.error || 'Unable to load product details.');
-    return result.product;
+    const endpoints = isLocalServer
+        ? [`/.netlify/functions/product-detail?id=${id}`, `api/product-detail.php?id=${id}`]
+        : [`/.netlify/functions/product-detail?id=${id}`];
+    let lastError = new Error('Unable to load product details.');
+    for (const endpoint of endpoints) {
+        try {
+            const response = await fetch(endpoint, { cache: 'no-store' });
+            const isJson = (response.headers.get('content-type') || '').includes('application/json');
+            const result = isJson ? await response.json().catch(() => ({})) : {};
+            if (response.ok && result.product) return result.product;
+            if (result.error) lastError = new Error(result.error);
+        } catch (error) {
+            lastError = error;
+        }
+    }
+    throw lastError;
 }
 
 function getCachedProducts() {
@@ -1374,7 +1474,10 @@ function saveCurrentSession() {
         savedAt: Date.now()
     };
     safeStorageSet(localStorage, 'kingpinCurrentSession', JSON.stringify(session));
-    if (appData.authToken) safeStorageSet(sessionStorage, 'kingpinAccessToken', appData.authToken);
+    if (appData.authToken) {
+        safeStorageSet(localStorage, ACCESS_TOKEN_KEY, appData.authToken);
+        safeStorageSet(sessionStorage, ACCESS_TOKEN_KEY, appData.authToken);
+    }
 }
 
 function rememberQuickLogin() {
@@ -1408,7 +1511,8 @@ function loadCurrentSession() {
 // Clear current session
 function clearCurrentSession() {
     localStorage.removeItem('kingpinCurrentSession');
-    sessionStorage.removeItem('kingpinAccessToken');
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
     appData.authToken = null;
     appData.customerServiceMessages = [];
 }
@@ -1455,7 +1559,13 @@ async function signupCustomer(e) {
 
     try {
         if (!verificationCode) {
-            await callAuthApi({ action: 'register', username, fullName, email, phone, password });
+            const registration = await callAuthApi({ action: 'register', username, fullName, email, phone, password });
+            if (registration.token) {
+                // Local `netlify dev` with email verification skipped: the account is ready.
+                await establishAuthenticatedSession(registration);
+                showStatusUpdateToast('Account created. You are now signed in.');
+                return;
+            }
             ensureSignupVerificationField(true);
             errorMessage.textContent = 'We sent a 6-digit verification code to your email. Enter it here to finish creating your account.';
             errorMessage.style.display = 'block';
@@ -1543,17 +1653,40 @@ function initializeGoogleSignIn() {
         cancel_on_tap_outside: true
     });
 
-    const button = document.getElementById('googleSignInButton');
-    if (button && !button.hasChildNodes()) {
-        google.accounts.id.renderButton(button, {
-            type: 'standard',
-            theme: 'outline',
-            size: 'large',
-            text: 'signin_with',
-            shape: 'rectangular',
-            width: 320
+    renderGoogleSignInButton();
+    // Redraw when the login form is shown or the window is resized, so the
+    // button keeps the width of the email box.
+    const emailField = document.getElementById('customerLoginEmail');
+    if (emailField && typeof ResizeObserver === 'function' && !window.kingPinGoogleButtonObserver) {
+        let resizeTimer = null;
+        window.kingPinGoogleButtonObserver = new ResizeObserver(() => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(renderGoogleSignInButton, 120);
         });
+        window.kingPinGoogleButtonObserver.observe(emailField);
     }
+}
+
+// Google draws its button at most 400px wide, so it matches the email box
+// up to that width and is centered above it.
+function renderGoogleSignInButton() {
+    const button = document.getElementById('googleSignInButton');
+    if (!button || !window.google?.accounts?.id) return;
+    const fieldWidth = document.getElementById('customerLoginEmail')?.offsetWidth || 0;
+    if (!fieldWidth) return;
+    const width = Math.round(Math.min(400, Math.max(200, fieldWidth)));
+    if (Number(button.dataset.renderedWidth) === width && button.hasChildNodes()) return;
+    button.replaceChildren();
+    button.dataset.renderedWidth = String(width);
+    google.accounts.id.renderButton(button, {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'rectangular',
+        logo_alignment: 'center',
+        width
+    });
 }
 
 function loginWithGmail() {
@@ -2181,6 +2314,13 @@ function showAdminTab(tabName) {
     document.getElementById('reportsTab').style.display = tabName === 'reports' ? 'block' : 'none';
     document.getElementById('settingsTab').style.display = tabName === 'settings' ? 'block' : 'none';
     saveNavigationState('admin', tabName);
+    document.querySelectorAll('#adminNavMenu [data-admin-tab]').forEach(button => {
+        const active = button.dataset.adminTab === tabName;
+        button.classList.toggle('is-active', active);
+        if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+    });
+    closeAdminNavMenu();
+    window.scrollTo({ top: 0, behavior: 'instant' });
 
     if (tabName === 'settings') {
         const shopNameInput = document.getElementById('shopLogoName');
@@ -2197,13 +2337,16 @@ function showAdminTab(tabName) {
         loadAdminInventoryProducts();
     } else if (tabName === 'orders') {
         loadNotifications();
+        // Opening Orders clears its badge, like My Orders does for customers.
+        markAdminOrderNotificationsRead();
         loadAdminOrders();
     } else if (tabName === 'messages') {
         loadAdminMessages();
     } else if (tabName === 'customers') {
         loadCustomersTable();
     } else if (tabName === 'history') {
-        loadHistoryTable();
+        setupHistorySearch();
+        openHistoryTab();
     } else if (tabName === 'reports') {
         generateReports();
     }
@@ -2393,31 +2536,38 @@ async function refreshCustomerOrdersFromServer(activeOnly = false) {
     syncProductionNotifications(appData.orders, 'customer');
 }
 
+// Order events meant for the admin; every other event is for the customer.
+const ADMIN_ORDER_EVENT_TYPES = ['new-order', 'design-response', 'customer-cancel', 'refund-requested', 'payment-proof'];
+
+// Copies new order events into this browser's notifications and returns the ones added.
 function syncProductionNotifications(orders, recipientRole) {
     const notificationType = recipientRole === 'admin' ? 'admin' : 'customer';
     const existingEventIds = new Set(appData.notifications.map(notification => notification.productionEventId).filter(Boolean));
-    let changed = false;
+    const added = [];
     (orders || []).forEach(order => {
         (order.productionNotifications || []).forEach(event => {
-            const targetType = ['design-response', 'customer-cancel', 'refund-requested', 'payment-proof'].includes(event.type) ? 'admin' : 'customer';
+            const targetType = ADMIN_ORDER_EVENT_TYPES.includes(event.type) ? 'admin' : 'customer';
             if (targetType !== notificationType || existingEventIds.has(event.id)) return;
             existingEventIds.add(event.id);
-            appData.notifications.push({
+            const notification = {
                 id: event.id,
                 productionEventId: event.id,
+                eventType: event.type,
                 type: targetType,
                 message: `Order #${order.id}: ${event.message}`,
                 orderId: order.id,
                 read: false,
                 timestamp: new Date(event.timestamp).toLocaleString()
-            });
-            changed = true;
+            };
+            appData.notifications.push(notification);
+            added.push(notification);
         });
     });
-    if (changed) {
+    if (added.length) {
         saveNotifications();
         updateNotificationBadges();
     }
+    return added;
 }
 
 function startCustomerOrderRefresh() {
@@ -2717,10 +2867,11 @@ function loadCustomerNotifications() {
     const notificationList = document.getElementById('notificationsList');
     notificationList.innerHTML = '';
 
-    const customerNotifications = appData.notifications.filter(n => n.type === 'customer');
-    
+    // Newest first: notifications are stored in the order they arrived.
+    const customerNotifications = appData.notifications.filter(n => n.type === 'customer').reverse();
+
     if (customerNotifications.length === 0) {
-        notificationList.innerHTML = '<p style="text-align: center; padding: 40px; color: #a0a0a0;">No notifications</p>';
+        notificationList.innerHTML = '<div class="customer-empty-state"><strong>No notifications</strong><span>Order updates from the shop appear here.</span></div>';
         return;
     }
 
@@ -2728,10 +2879,25 @@ function loadCustomerNotifications() {
         const notifItem = document.createElement('div');
         notifItem.className = 'notification-item ' + (notification.read ? 'read' : 'unread');
         notifItem.innerHTML = `
-            <p><strong>${notification.message}</strong></p>
-            <p class="notification-timestamp">${notification.timestamp}</p>
+            <span class="notification-dot" aria-hidden="true"></span>
+            <div class="notification-copy">
+                <p><strong>${escapeProductionHtml(notification.message)}</strong></p>
+                <p class="notification-timestamp">${escapeProductionHtml(notification.timestamp)}</p>
+            </div>
+            ${notification.orderId ? '<span class="notification-open">View order ›</span>' : ''}
         `;
         notifItem.onclick = () => markNotificationAsRead(notification.id);
+        if (notification.orderId) {
+            notifItem.classList.add('has-order');
+            notifItem.tabIndex = 0;
+            notifItem.setAttribute('role', 'button');
+            notifItem.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    markNotificationAsRead(notification.id);
+                }
+            });
+        }
         notificationList.appendChild(notifItem);
     });
 }
@@ -3641,6 +3807,7 @@ function placeOrderDirect() {
 function updateCartCount() {
     const totalItems = appData.cart.reduce((sum, item) => sum + item.quantity, 0);
     document.getElementById('cartCount').textContent = totalItems;
+    if (typeof updateCustomerAccountCounts === 'function') updateCustomerAccountCounts();
 }
 
 // Update Cart Display
@@ -3763,9 +3930,21 @@ function getOrderMediaSource(order, field) {
 function updateCartDisplay() {
     const cartItems = document.getElementById('cartItems');
     const cartTotal = document.getElementById('cartTotal');
+    const cartSubtitle = document.getElementById('cartSubtitle');
+    const cartPieces = appData.cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    document.getElementById('cartSection')?.classList.toggle('is-empty', appData.cart.length === 0);
+    if (cartSubtitle) {
+        cartSubtitle.textContent = appData.cart.length
+            ? `${cartPieces} ${cartPieces === 1 ? 'piece' : 'pieces'} in your cart. Check sizes and quantities before you check out.`
+            : 'Your cart is empty.';
+    }
 
     if (appData.cart.length === 0) {
-        cartItems.innerHTML = '<div class="empty-cart">Your cart is empty</div>';
+        cartItems.innerHTML = `<div class="empty-cart customer-empty-state">
+            <strong>Your cart is empty</strong>
+            <span>Browse the shop or the Design Studio to add jerseys and teamwear.</span>
+            <button type="button" class="btn btn-primary" onclick="navigateStorefront('shop')">Browse products</button>
+        </div>`;
         cartTotal.textContent = '0.00';
         return;
     }
@@ -4800,7 +4979,10 @@ function buildProductionTrackingHtml(order, customerView = false) {
     const approvalActions = customerView && status === 'design-approval' && order.designApproval?.status === 'pending'
         ? `<div class="production-approval-actions"><button type="button" class="btn btn-primary btn-small" onclick="submitCustomerDesignDecision(${Number(order.id) || 0}, 'approved')">Approve Design</button><button type="button" class="btn btn-secondary btn-small" onclick="submitCustomerDesignDecision(${Number(order.id) || 0}, 'revision-requested')">Request Revision</button></div>`
         : '';
-    const latestNotification = order.productionNotifications?.slice(-1)[0];
+    // Customers see their own latest update, not the admin's "new order" or "proof uploaded" notes.
+    const latestNotification = (order.productionNotifications || [])
+        .filter(event => !customerView || !ADMIN_ORDER_EVENT_TYPES.includes(event.type))
+        .slice(-1)[0];
 
     return `<section class="production-tracking-panel ${customerView ? 'customer-production-tracking' : ''}">
         <h3>Production Tracking</h3>
@@ -4834,206 +5016,477 @@ async function submitCustomerDesignDecision(orderId, decision) {
     }
 }
 
+// ===== CUSTOMER ORDER LISTS (My Orders and Purchase History) =====
+// Each order is a card: a summary row that is always shown, and the full
+// details below it that open on click. Open cards stay open across the
+// automatic refresh, so a re-render never closes what the customer is reading.
+const customerOpenOrderIds = new Set();
+const customerClosedOrderIds = new Set();
+let customerOrderFilter = 'all';
+let pendingCustomerOrderFocus = null;
+
+const CUSTOMER_ORDER_FILTERS = [
+    { id: 'all', label: 'All' },
+    { id: 'action', label: 'Needs your action' },
+    { id: 'progress', label: 'In progress' },
+    { id: 'ready', label: 'Ready for pickup' }
+];
+
+function getCurrentCustomerOrders() {
+    const currentUserEmail = appData.currentUser || '';
+    if (!currentUserEmail) return [];
+    return appData.orders
+        .filter(order => order.customerUsername === currentUserEmail || order.customerEmail === currentUserEmail)
+        .sort((firstOrder, secondOrder) => Number(secondOrder.id) - Number(firstOrder.id));
+}
+
+// The sidebar counts: active orders and pieces in the cart.
+function updateCustomerAccountCounts() {
+    const setCount = (key, value) => {
+        const element = document.querySelector(`[data-account-count="${key}"]`);
+        if (!element) return;
+        element.textContent = String(value);
+        element.hidden = !value;
+    };
+    setCount('cart', (appData.cart || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0));
+    setCount('orders', appData.currentRole === 'customer'
+        ? getCurrentCustomerOrders().filter(order => !isOrderInPurchaseHistory(order)).length
+        : 0);
+}
+
+// What happens next on an active order. `action` is true when the customer
+// has to do something; otherwise it is the shop's turn and the text only informs.
+function getCustomerOrderNextStep(order) {
+    const summary = getOrderPaymentSummary(order);
+    if (summary.standing === 'cancelled') return null;
+    const status = getOrderProductionStatus(order);
+    const isGcash = normalizePaymentMethod(order.paymentMethod) === 'gcash';
+    const downpaymentDue = summary.downpaymentDue || summary.downpayment;
+
+    if (status === 'design-approval' && order.designApproval?.status === 'pending') {
+        return { action: true, text: 'Review and approve your final design' };
+    }
+    if (isGcash && order.paymentStatus === 'rejected') {
+        return { action: true, text: 'Payment proof rejected. Upload a new one' };
+    }
+    if (isGcash && summary.amountPaid < summary.downpayment
+        && !['downpayment-received', 'verified'].includes(order.paymentStatus)
+        && !getOrderMediaSource(order, 'gcashPaymentProof')) {
+        return { action: true, text: `Upload proof of your ${pesoText(downpaymentDue)} GCash downpayment` };
+    }
+    if (!isGcash && summary.amountPaid <= 0) {
+        return { action: false, text: `Pay the ${pesoText(summary.downpayment)} downpayment at the shop` };
+    }
+    if (isGcash && order.paymentStatus === 'verified' && summary.balance > 0) {
+        if (order.balanceProofStatus === 'rejected') return { action: true, text: 'Balance proof rejected. Upload a new one' };
+        if (order.balanceProofStatus === 'pending') return { action: false, text: 'The shop is checking your balance payment' };
+    }
+    if (status === 'ready-for-release') {
+        if (summary.balance <= 0) return { action: false, text: 'Ready for pickup or delivery' };
+        return { action: false, text: isGcash ? `Ready. Pay the ${pesoText(summary.balance)} balance by GCash or at pickup` : `Ready. Bring ${pesoText(summary.balance)} for the balance` };
+    }
+    if (order.paymentStatus === 'downpayment-received' && summary.amountPaid < summary.downpayment) {
+        return { action: false, text: 'The shop is checking your payment proof' };
+    }
+    return null;
+}
+
+function customerOrderMatchesFilter(order, filter) {
+    if (filter === 'action') return Boolean(getCustomerOrderNextStep(order)?.action);
+    if (filter === 'ready') return getOrderProductionStatus(order) === 'ready-for-release';
+    if (filter === 'progress') return getOrderProductionStatus(order) !== 'ready-for-release';
+    return true;
+}
+
+function buildCustomerMetricsHtml(metrics) {
+    return metrics.map(metric => `<div class="customer-metric${metric.attention ? ' is-attention' : ''}">
+        <span>${escapeProductionHtml(metric.label)}</span><strong>${escapeProductionHtml(metric.value)}</strong>
+    </div>`).join('');
+}
+
+function buildCustomerOrderSummaryHtml(order, { history = false } = {}) {
+    const id = escapeProductionHtml(order.id);
+    const items = Array.isArray(order.items) ? order.items : [];
+    const pieces = items.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+    const firstName = items[0]?.name || items[0]?.productName || order.productName || 'Jersey order';
+    const extraItems = items.length > 1 ? ` +${items.length - 1} more` : '';
+    const image = items.length ? getCustomerOrderProductImage(items[0]) : '';
+    const payment = getOrderPaymentSummary(order);
+    const status = getOrderProductionStatus(order);
+    const cancelled = payment.standing === 'cancelled' || status === 'cancelled';
+
+    let stageHtml;
+    if (history) {
+        stageHtml = cancelled
+            ? '<span class="order-state-badge state-cancelled">Cancelled</span>'
+            : '<span class="order-state-badge state-completed">Completed</span>';
+    } else {
+        const stages = window.KingPinProductionTracking.PRODUCTION_STAGES;
+        const activeStatus = status === 'on-hold' ? order.previousProductionStatus : status;
+        const stageIndex = stages.findIndex(stage => stage.id === activeStatus);
+        const progress = stageIndex < 0 ? 0 : Math.round((stageIndex / (stages.length - 1)) * 100);
+        stageHtml = `<span class="production-stage-label${status === 'on-hold' ? ' is-on-hold' : ''}">${escapeProductionHtml(getProductionStageLabel(status))}</span>
+            <span class="production-progress-track" aria-hidden="true"><span style="width:${progress}%"></span></span>
+            <small>Step ${Math.max(1, stageIndex + 1)} of ${stages.length}</small>`;
+    }
+
+    const nextStep = history ? null : getCustomerOrderNextStep(order);
+    const proofWaiting = Boolean(getProofToReview(order));
+    const paymentBadge = proofWaiting ? paymentBadgeHtml('awaiting-verification', 'Proof being checked') : paymentBadgeHtml(payment.standing, payment.label, true);
+
+    return `<span class="customer-order-thumb">${image
+            ? `<img src="${escapeProductionHtml(image)}" alt="" loading="lazy">`
+            : '<span aria-hidden="true">KP</span>'}</span>
+        <span class="customer-order-main">
+            <span class="customer-order-title"><strong>Order #${id}</strong><small>${escapeProductionHtml(formatOrderDate(order))} · ${pieces} pc${pieces === 1 ? '' : 's'}${order.teamOrder?.isTeamOrder ? ' · Team' : ''}</small></span>
+            <span class="customer-order-items-line">${escapeProductionHtml(firstName)}${escapeProductionHtml(extraItems)}</span>
+            ${nextStep ? `<span class="customer-order-next${nextStep.action ? ' is-action' : ''}">${nextStep.action ? '<b aria-hidden="true">!</b>' : ''}${escapeProductionHtml(nextStep.text)}</span>` : ''}
+        </span>
+        <span class="customer-order-stage">${stageHtml}</span>
+        <span class="customer-order-pay">${paymentBadge}${payment.balance > 0 && !cancelled ? `<small>Balance ${pesoText(payment.balance)}</small>` : ''}</span>
+        <span class="customer-order-total"><small>Total</small>${pesoText(payment.total)}</span>
+        <span class="customer-order-chevron" aria-hidden="true"></span>`;
+}
+
+function buildCustomerOrderMetaHtml(order) {
+    const paymentMethod = normalizePaymentMethod(order.paymentMethod);
+    return `<section class="customer-order-section customer-order-meta">
+        <div><span>Customer</span><strong>${escapeProductionHtml(order.customerName || '—')}</strong></div>
+        <div><span>Email</span><strong>${escapeProductionHtml(order.customerEmail || '—')}</strong></div>
+        <div><span>Order date</span><strong>${escapeProductionHtml(order.date || '—')}</strong></div>
+        <div><span>Payment</span><strong>${escapeProductionHtml(paymentMethod === 'pickup' ? 'PAY AT SHOP' : paymentMethod.toUpperCase())}</strong></div>
+        <div class="customer-order-address"><span>Delivery address</span><strong>${escapeProductionHtml(order.customerAddress || '—')}</strong></div>
+    </section>`;
+}
+
+// The full details of an active order: items, payment, production and actions.
+function buildCustomerOrderDetailsHtml(order) {
+    const items = Array.isArray(order.items) ? order.items : [];
+    const itemsList = items.map(item => {
+        const customization = item.customization || {};
+        const productName = item.name || item.productName || 'Jersey product';
+        const productImage = getCustomerOrderProductImage(item);
+        const options = [
+            customization.size ? `Top: ${customization.size}` : '',
+            customization.bottomSize ? `Bottom: ${customization.bottomSize}` : '',
+            customization.name ? `Name: ${customization.name}` : '',
+            customization.number ? `No. ${customization.number}` : '',
+            customization.color || customization.colour ? `Color: ${customization.color || customization.colour}` : ''
+        ].filter(Boolean);
+        return `<div class="customer-order-product">
+            <div class="customer-order-product-image-wrap">
+                ${productImage
+                    ? `<img src="${escapeProductionHtml(productImage)}" alt="${escapeProductionHtml(productName)}" loading="lazy">`
+                    : '<span>No photo</span>'}
+            </div>
+            <div class="customer-order-product-copy">
+                <div class="customer-order-product-heading">
+                    <strong>${escapeProductionHtml(productName)}</strong>
+                    <span class="customer-order-quantity">Qty ${Number(item.quantity) || 1}</span>
+                </div>
+                ${options.length ? `<div class="customer-order-product-options">${options.map(option => `<span>${escapeProductionHtml(option)}</span>`).join('')}</div>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+    const uploadedDesignsHtml = items.map((item, itemIndex) =>
+        getUploadedDesignImageSources(item, order.id, itemIndex).map((imageSource, imageIndex) =>
+            `<img src="${imageSource}" alt="Uploaded customer design ${imageIndex + 1}" class="customer-order-design-image">`
+        ).join('')
+    ).join('');
+
+    const teamOrder = normalizeTeamOrderInput(order.teamOrder);
+    const teamOrderDetails = teamOrder.isTeamOrder
+        ? `<section class="customer-order-section customer-order-team">
+            <h3>Team order</h3>
+            <div class="customer-order-meta">
+                <div><span>Team</span><strong>${escapeProductionHtml(teamOrder.teamName || 'Team order')}</strong></div>
+                ${teamOrder.teamType ? `<div><span>Sport / type</span><strong>${escapeProductionHtml(teamOrder.teamType)}</strong></div>` : ''}
+                ${teamOrder.totalPlayers ? `<div><span>Players</span><strong>${teamOrder.totalPlayers}</strong></div>` : ''}
+            </div>
+            ${teamOrder.teamSizes.length ? `<div class="customer-order-team-sizes">
+                <h4>Player sizes</h4>
+                <div class="customer-order-team-size-grid">
+                    ${teamOrder.teamSizes.map(size => `<div class="customer-order-team-size">
+                        <strong>Player ${size.player}${size.surname ? ` — ${escapeProductionHtml(size.surname)}` : ''}${size.jerseyNumber ? ` (#${escapeProductionHtml(size.jerseyNumber)})` : ''}</strong>
+                        <span><small>Upper</small>${escapeProductionHtml(size.topSize || '—')}</span>
+                        <span><small>Lower</small>${escapeProductionHtml(size.bottomSize || '—')}</span>
+                    </div>`).join('')}
+                </div>
+            </div>` : ''}
+            ${!teamOrder.teamSizes.length && teamOrder.teamNotes ? `<div class="customer-order-team-notes"><h4>Team notes</h4><p>${escapeProductionHtml(teamOrder.teamNotes)}</p></div>` : ''}
+        </section>`
+        : '';
+    const measurements = order.measurements;
+    const measurementsHtml = measurements
+        ? `<section class="customer-order-section">
+            <h3>Measurements</h3>
+            <div class="customer-order-measurements">
+                <div><span>Chest</span><strong>${escapeProductionHtml(measurements.chest || '—')}${measurements.chest && measurements.chest !== 'Not provided' ? '<small>cm</small>' : ''}</strong></div>
+                <div><span>Waist</span><strong>${escapeProductionHtml(measurements.waist || '—')}${measurements.waist && measurements.waist !== 'Not provided' ? '<small>cm</small>' : ''}</strong></div>
+                <div><span>Length</span><strong>${escapeProductionHtml(measurements.length || '—')}${measurements.length && measurements.length !== 'Not provided' ? '<small>cm</small>' : ''}</strong></div>
+            </div>
+        </section>`
+        : '';
+
+    const paymentMethod = normalizePaymentMethod(order.paymentMethod);
+    const orderGcashQr = getOrderMediaSource(order, 'gcashQRCode') || (paymentMethod === 'gcash' ? (appData.gcashQRCode || localStorage.getItem('kingpinGCashQR')) : null);
+    const requestLabel = order.requestType === 'cancel' ? 'Cancel / Change of Mind' : 'Refund';
+
+    return `<div class="customer-order-columns">
+            <div class="customer-order-column">
+                <section class="customer-order-section">
+                    <h3>Items ordered</h3>
+                    <div class="customer-order-products">${itemsList}</div>
+                </section>
+                ${uploadedDesignsHtml ? `<section class="customer-order-section customer-order-designs"><h3>Your uploaded design</h3><div class="customer-order-design-gallery">${uploadedDesignsHtml}</div></section>` : ''}
+                ${teamOrderDetails}
+                ${measurementsHtml}
+                ${buildCustomerOrderMetaHtml(order)}
+            </div>
+            <div class="customer-order-column">
+                ${buildCustomerPaymentPanel(order, orderGcashQr)}
+            </div>
+        </div>
+        ${buildProductionTrackingHtml(order, true)}
+        <div class="customer-order-footer">
+            <div class="order-total">Total: ${pesoText(order.totalAmount)}</div>
+            <button type="button" class="btn btn-small view-receipt-button" onclick="viewCustomerReceipt(${Number(order.id) || 0})">View Receipt</button>
+        </div>
+        <div class="order-actions"><strong>Need to cancel or ask for a refund?</strong><div class="order-action-buttons"><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${Number(order.id) || 0}, 'cancel')">Cancel / Change of Mind</button><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${Number(order.id) || 0}, 'refund')">Request Refund</button></div><div id="orderReason-${escapeProductionHtml(order.id)}" class="order-reason-options"></div>${order.requestType ? `<p class="order-request-status">Request: ${requestLabel} (${escapeProductionHtml(order.requestStatus || 'pending')})</p>` : ''}</div>
+        ${getOrderReviewsSection(order)}`;
+}
+
+// The details of a finished or cancelled order: products, receipt and reviews.
+function buildPurchaseHistoryDetailsHtml(order) {
+    return `<div class="customer-order-columns">
+            <div class="customer-order-column">${buildPurchaseHistoryProducts(order)}</div>
+            <div class="customer-order-column">
+                ${buildCustomerOrderMetaHtml(order)}
+                ${order.measurements ? `<p class="payment-meta">Measurements: chest ${escapeProductionHtml(order.measurements.chest)} cm, waist ${escapeProductionHtml(order.measurements.waist)} cm, length ${escapeProductionHtml(order.measurements.length)} cm</p>` : ''}
+            </div>
+        </div>
+        <div class="customer-order-footer">
+            <div class="order-total">Total: ${pesoText(order.totalAmount)}</div>
+            <button type="button" class="btn btn-small view-receipt-button" onclick="viewCustomerReceipt(${Number(order.id) || 0})">View Receipt</button>
+        </div>
+        ${getOrderReviewsSection(order)}`;
+}
+
+function setCustomerOrderCardOpen(card, open) {
+    const id = card.dataset.orderId;
+    card.classList.toggle('is-open', open);
+    card.querySelector('.customer-order-summary')?.setAttribute('aria-expanded', String(open));
+    const body = card.querySelector('.customer-order-body');
+    if (body) body.hidden = !open;
+    if (open) {
+        customerOpenOrderIds.add(id);
+        customerClosedOrderIds.delete(id);
+    } else {
+        customerOpenOrderIds.delete(id);
+        customerClosedOrderIds.add(id);
+    }
+}
+
+function renderCustomerOrderCards(container, orders, { history = false } = {}) {
+    const autoOpenId = orders.length === 1 ? String(orders[0].id) : '';
+    orders.forEach(order => {
+        const id = String(order.id);
+        const open = customerOpenOrderIds.has(id) || (id === autoOpenId && !customerClosedOrderIds.has(id));
+        const nextStep = history ? null : getCustomerOrderNextStep(order);
+        const card = document.createElement('article');
+        card.className = `customer-order-card${open ? ' is-open' : ''}${nextStep?.action ? ' needs-action' : ''}`;
+        card.dataset.orderId = id;
+        const bodyId = `customerOrderBody-${history ? 'h' : 'a'}-${id.replace(/[^\w-]/g, '')}`;
+        card.innerHTML = `<button type="button" class="customer-order-summary" aria-expanded="${open}" aria-controls="${bodyId}">${buildCustomerOrderSummaryHtml(order, { history })}</button>
+            <div id="${bodyId}" class="customer-order-body"${open ? '' : ' hidden'}>${history ? buildPurchaseHistoryDetailsHtml(order) : buildCustomerOrderDetailsHtml(order)}</div>`;
+        card.querySelector('.customer-order-summary').addEventListener('click', () => {
+            setCustomerOrderCardOpen(card, !card.classList.contains('is-open'));
+        });
+        container.appendChild(card);
+    });
+}
+
+function scrollToPendingCustomerOrder(container) {
+    if (!pendingCustomerOrderFocus) return;
+    const card = Array.from(container.querySelectorAll('.customer-order-card'))
+        .find(element => element.dataset.orderId === pendingCustomerOrderFocus);
+    if (!card) return;
+    pendingCustomerOrderFocus = null;
+    setCustomerOrderCardOpen(card, true);
+    requestAnimationFrame(() => card.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+}
+
+// Opens My Orders (or Purchase History) at one order, with its details open.
+function openCustomerOrder(orderId) {
+    const id = String(orderId);
+    const order = appData.orders.find(savedOrder => String(savedOrder.id) === id);
+    pendingCustomerOrderFocus = order ? id : null;
+    customerOpenOrderIds.add(id);
+    customerClosedOrderIds.delete(id);
+    if (order && isOrderInPurchaseHistory(order)) {
+        const index = getCurrentCustomerOrders().filter(isOrderInPurchaseHistory).findIndex(savedOrder => String(savedOrder.id) === id);
+        if (index >= 0) showPageContaining('customer-history', index);
+        viewPurchaseHistory();
+    } else {
+        customerOrderFilter = 'all';
+        const index = getCurrentCustomerOrders().filter(savedOrder => !isOrderInPurchaseHistory(savedOrder)).findIndex(savedOrder => String(savedOrder.id) === id);
+        if (index >= 0) showPageContaining('customer-orders', index);
+        viewOrders();
+    }
+}
+
+function renderCustomerOrderFilters(activeOrders) {
+    const filters = document.getElementById('customerOrderFilters');
+    if (!filters) return;
+    filters.hidden = activeOrders.length === 0;
+    filters.replaceChildren(...CUSTOMER_ORDER_FILTERS.map(filter => {
+        const count = activeOrders.filter(order => customerOrderMatchesFilter(order, filter.id)).length;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `filter-chip${customerOrderFilter === filter.id ? ' is-active' : ''}`;
+        button.setAttribute('aria-pressed', String(customerOrderFilter === filter.id));
+        button.textContent = `${filter.label} (${count})`;
+        button.addEventListener('click', () => {
+            customerOrderFilter = filter.id;
+            resetPager('customer-orders');
+            loadCustomerOrders();
+        });
+        return button;
+    }));
+}
+
 function loadCustomerOrders() {
     const ordersList = document.getElementById('ordersList');
     if (!ordersList) return;
     ordersList.innerHTML = '';
 
-    const currentUserEmail = appData.currentUser || '';
-    const customerOrders = appData.orders
-        .filter(order => {
-            const matchesUsername = order.customerUsername === currentUserEmail;
-            const matchesEmail = order.customerEmail === currentUserEmail;
-            const isActive = !isOrderInPurchaseHistory(order);
-            return (matchesUsername || matchesEmail) && isActive;
-        })
-        .sort((firstOrder, secondOrder) => Number(secondOrder.id) - Number(firstOrder.id));
+    const activeOrders = getCurrentCustomerOrders().filter(order => !isOrderInPurchaseHistory(order));
+    const actionCount = activeOrders.filter(order => getCustomerOrderNextStep(order)?.action).length;
+    const balanceToPay = activeOrders.reduce((sum, order) => {
+        const payment = getOrderPaymentSummary(order);
+        return payment.standing === 'cancelled' ? sum : sum + payment.balance;
+    }, 0);
+    const summary = document.getElementById('customerOrderSummary');
+    if (summary) {
+        summary.hidden = activeOrders.length === 0;
+        summary.innerHTML = buildCustomerMetricsHtml([
+            { label: 'Active orders', value: activeOrders.length },
+            { label: 'Needs your action', value: actionCount, attention: actionCount > 0 },
+            { label: 'Balance to pay', value: pesoText(balanceToPay) },
+            { label: 'Ready for pickup', value: activeOrders.filter(order => getOrderProductionStatus(order) === 'ready-for-release').length }
+        ]);
+    }
+    if (!CUSTOMER_ORDER_FILTERS.some(filter => filter.id === customerOrderFilter)) customerOrderFilter = 'all';
+    renderCustomerOrderFilters(activeOrders);
+    updateCustomerAccountCounts();
 
-    if (customerOrders.length === 0) {
-        ordersList.dataset.currentOrderId = '';
-        ordersList.innerHTML = '<p style="text-align: center; padding: 40px; color: #a0a0a0;">No active orders. <a href="javascript:viewPurchaseHistory()" style="color: #d4af37; text-decoration: underline;">View purchase history</a></p>';
+    if (activeOrders.length === 0) {
+        renderTablePager('customerOrdersPager', 'customer-orders', { total: 0 }, loadCustomerOrders, 'orders');
+        ordersList.innerHTML = `<div class="customer-empty-state">
+            <strong>No active orders</strong>
+            <span>Orders you place show up here until they are completed or cancelled.</span>
+            <div class="customer-empty-actions">
+                <button type="button" class="btn btn-primary" onclick="navigateStorefront('shop')">Browse products</button>
+                <button type="button" class="btn btn-secondary" onclick="viewPurchaseHistory()">View purchase history</button>
+            </div>
+        </div>`;
         return;
     }
 
-    const selectedOrderId = ordersList.dataset.currentOrderId;
-    ordersList.innerHTML = `
-        <div class="customer-orders-carousel">
-            <div class="customer-orders-carousel-controls">
-                <button type="button" class="btn btn-secondary customer-order-nav-button" data-order-direction="-1" aria-label="Previous order">← Previous</button>
-                <span class="customer-orders-position" aria-live="polite"></span>
-                <button type="button" class="btn btn-secondary customer-order-nav-button" data-order-direction="1" aria-label="Next order">Next →</button>
-            </div>
-            <div class="customer-orders-track" role="region" aria-label="Customer orders" tabindex="0"></div>
-            <p class="customer-orders-swipe-hint">Swipe left or right to view another order.</p>
-        </div>`;
-    const ordersTrack = ordersList.querySelector('.customer-orders-track');
-    const orderPosition = ordersList.querySelector('.customer-orders-position');
-    const previousOrderButton = ordersList.querySelector('[data-order-direction="-1"]');
-    const nextOrderButton = ordersList.querySelector('[data-order-direction="1"]');
-
-    const updateCarouselControls = () => {
-        const slides = Array.from(ordersTrack.querySelectorAll('.customer-order-slide'));
-        const currentIndex = Math.min(slides.length - 1, Math.max(0, Math.round(ordersTrack.scrollLeft / Math.max(ordersTrack.clientWidth, 1))));
-        const currentSlide = slides[currentIndex];
-        ordersList.dataset.currentOrderId = currentSlide?.dataset.orderId || '';
-        orderPosition.textContent = `${currentIndex + 1} of ${slides.length}`;
-        previousOrderButton.disabled = currentIndex === 0;
-        nextOrderButton.disabled = currentIndex === slides.length - 1;
-        if (currentSlide) {
-            const activeOrderHeight = `${currentSlide.offsetHeight}px`;
-            if (ordersTrack.style.height !== activeOrderHeight) {
-                ordersTrack.style.height = activeOrderHeight;
-            }
-        }
-    };
-
-    const orderTrackResizeObserver = typeof ResizeObserver === 'function'
-        ? new ResizeObserver(updateCarouselControls)
-        : null;
-
-    const navigateOrder = direction => {
-        const currentIndex = Math.round(ordersTrack.scrollLeft / Math.max(ordersTrack.clientWidth, 1));
-        const nextIndex = Math.min(customerOrders.length - 1, Math.max(0, currentIndex + direction));
-        ordersTrack.scrollTo({ left: nextIndex * ordersTrack.clientWidth, behavior: 'smooth' });
-    };
-
-    previousOrderButton.addEventListener('click', () => navigateOrder(-1));
-    nextOrderButton.addEventListener('click', () => navigateOrder(1));
-    ordersTrack.addEventListener('scroll', updateCarouselControls, { passive: true });
-    ordersTrack.addEventListener('keydown', event => {
-        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-            event.preventDefault();
-            navigateOrder(event.key === 'ArrowLeft' ? -1 : 1);
-        }
-    });
-
-    customerOrders.forEach(order => {
-        const itemsList = order.items.map(item => {
-            const customization = item.customization || {};
-            const productName = item.name || item.productName || 'Jersey product';
-            const productImage = getCustomerOrderProductImage(item);
-            const options = [
-                customization.size ? `Top: ${customization.size}` : '',
-                customization.bottomSize ? `Bottom: ${customization.bottomSize}` : '',
-                customization.name ? `Name: ${customization.name}` : '',
-                customization.number ? `No. ${customization.number}` : '',
-                customization.color || customization.colour ? `Color: ${customization.color || customization.colour}` : ''
-            ].filter(Boolean);
-            return `<div class="customer-order-product">
-                <div class="customer-order-product-image-wrap">
-                    ${productImage
-                        ? `<img src="${escapeProductionHtml(productImage)}" alt="${escapeProductionHtml(productName)}" loading="lazy">`
-                        : '<span>No photo</span>'}
-                </div>
-                <div class="customer-order-product-copy">
-                    <div class="customer-order-product-heading">
-                        <strong>${escapeProductionHtml(productName)}</strong>
-                        <span class="customer-order-quantity">Qty ${Number(item.quantity) || 1}</span>
-                    </div>
-                    ${options.length ? `<div class="customer-order-product-options">${options.map(option => `<span>${escapeProductionHtml(option)}</span>`).join('')}</div>` : ''}
-                </div>
-            </div>`;
-        }).join('');
-        const uploadedDesignsHtml = order.items.map((item, itemIndex) => {
-            return getUploadedDesignImageSources(item, order.id, itemIndex).map((imageSource, imageIndex) =>
-                `<img src="${imageSource}" alt="Uploaded customer design ${imageIndex + 1}" style="display: inline-block; max-width: 180px; max-height: 140px; object-fit: contain; margin: 8px 8px 0 0; border: 1px solid #5b6268; border-radius: 4px;">`
-            ).join('');
-        }).join('');
-        
-        const orderItem = document.createElement('div');
-        orderItem.className = 'order-item';
-        orderItem.classList.add('customer-order-slide');
-        orderItem.dataset.orderId = String(order.id);
-
-        const teamOrder = normalizeTeamOrderInput(order.teamOrder);
-        const teamOrderDetails = teamOrder.isTeamOrder
-            ? `<section class="customer-order-section customer-order-team">
-                <h3>Team order</h3>
-                <div class="customer-order-meta">
-                    <div><span>Team</span><strong>${escapeProductionHtml(teamOrder.teamName || 'Team order')}</strong></div>
-                    ${teamOrder.teamType ? `<div><span>Sport / type</span><strong>${escapeProductionHtml(teamOrder.teamType)}</strong></div>` : ''}
-                    ${teamOrder.totalPlayers ? `<div><span>Players</span><strong>${teamOrder.totalPlayers}</strong></div>` : ''}
-                </div>
-                ${teamOrder.teamSizes.length ? `<div class="customer-order-team-sizes">
-                    <h4>Player sizes</h4>
-                    <div class="customer-order-team-size-grid">
-                        ${teamOrder.teamSizes.map(size => `<div class="customer-order-team-size">
-                            <strong>Player ${size.player}${size.surname ? ` — ${escapeProductionHtml(size.surname)}` : ''}${size.jerseyNumber ? ` (#${escapeProductionHtml(size.jerseyNumber)})` : ''}</strong>
-                            <span><small>Upper</small>${escapeProductionHtml(size.topSize || '—')}</span>
-                            <span><small>Lower</small>${escapeProductionHtml(size.bottomSize || '—')}</span>
-                        </div>`).join('')}
-                    </div>
-                </div>` : ''}
-                ${!teamOrder.teamSizes.length && teamOrder.teamNotes ? `<div class="customer-order-team-notes"><h4>Team notes</h4><p>${escapeProductionHtml(teamOrder.teamNotes)}</p></div>` : ''}
-            </section>`
-            : '';
-        const measurements = order.measurements;
-        const measurementsHtml = measurements
-            ? `<section class="customer-order-section">
-                <h3>Measurements</h3>
-                <div class="customer-order-measurements">
-                    <div><span>Chest</span><strong>${escapeProductionHtml(measurements.chest || '—')}${measurements.chest && measurements.chest !== 'Not provided' ? '<small>cm</small>' : ''}</strong></div>
-                    <div><span>Waist</span><strong>${escapeProductionHtml(measurements.waist || '—')}${measurements.waist && measurements.waist !== 'Not provided' ? '<small>cm</small>' : ''}</strong></div>
-                    <div><span>Length</span><strong>${escapeProductionHtml(measurements.length || '—')}${measurements.length && measurements.length !== 'Not provided' ? '<small>cm</small>' : ''}</strong></div>
-                </div>
-            </section>`
-            : '';
-
-        const paymentMethod = normalizePaymentMethod(order.paymentMethod);
-        const requiredDownpayment = Number(order.gcashDownpaymentAmount ?? ((Number(order.totalAmount || 0) / 2) || 0));
-        const orderGcashQr = getOrderMediaSource(order, 'gcashQRCode') || (paymentMethod === 'gcash' ? (appData.gcashQRCode || localStorage.getItem('kingpinGCashQR')) : null);
-        const paymentProof = getOrderMediaSource(order, 'gcashPaymentProof');
-        const gcashProofHtml = paymentProof
-            ? `<p style="color: ${order.paymentStatus === 'rejected' ? '#ff6b6b' : '#4caf50'};">${order.paymentStatus === 'rejected' ? `Proof rejected: ${escapeProductionHtml(order.paymentRejectionReason || 'Please upload a new proof.')}` : `Downpayment proof saved — ${order.paymentStatus === 'verified' ? 'verified by admin' : 'awaiting admin verification'}`}</p><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="Saved GCash downpayment proof"></a>`
-            : '<p style="color: #ffb74d;">Proof not uploaded yet</p>';
-        
-        const productionTrackingHtml = buildProductionTrackingHtml(order, true);
-        
-        orderItem.innerHTML = `
-            <div class="order-header">
-                <span class="order-id">Order #${order.id}</span>
-                <span class="order-status ${getOrderProductionStatus(order)}">${escapeProductionHtml(getProductionStageLabel(getOrderProductionStatus(order)))}</span>
-            </div>
-            <div class="order-details">
-                <section class="customer-order-section customer-order-meta">
-                    <div><span>Customer</span><strong>${escapeProductionHtml(order.customerName || '—')}</strong></div>
-                    <div><span>Email</span><strong>${escapeProductionHtml(order.customerEmail || '—')}</strong></div>
-                    <div><span>Order date</span><strong>${escapeProductionHtml(order.date || '—')}</strong></div>
-                    <div><span>Payment</span><strong>${escapeProductionHtml(paymentMethod.toUpperCase())}</strong></div>
-                    <div class="customer-order-address"><span>Delivery address</span><strong>${escapeProductionHtml(order.customerAddress || '—')}</strong></div>
-                </section>
-                <section class="customer-order-section">
-                    <h3>Items ordered</h3>
-                    <div class="customer-order-products">${itemsList}</div>
-                </section>
-                ${uploadedDesignsHtml ? `<div class="customer-order-designs"><strong>Uploaded Design:</strong>${uploadedDesignsHtml}</div>` : ''}
-                ${teamOrderDetails}
-                ${measurementsHtml}
-            </div>
-            ${productionTrackingHtml}
-            <div class="order-total">Total: ₱${order.totalAmount.toFixed(2)}</div>
-            <button type="button" class="btn btn-small view-receipt-button" onclick="viewCustomerReceipt(${order.id})">View Receipt</button>
-            ${paymentMethod === 'gcash' && orderGcashQr ? `<div class="order-gcash-qr"><strong>GCash Installment QR:</strong><button type="button" class="btn btn-small qr-view-button" onclick="openGcashQrViewer('${orderGcashQr}')">View larger</button><img src="${orderGcashQr}" alt="GCash installment QR code" onclick="openGcashQrViewer('${orderGcashQr}')"></div>` : ''}
-            ${paymentMethod === 'gcash' ? `<div class="order-payment-proof"><strong>GCash Downpayment Proof:</strong><p class="half-payment-notice">Downpayment amount: ₱${requiredDownpayment.toFixed(2)}</p>${gcashProofHtml}${paymentProof && order.paymentStatus !== 'rejected' ? '<p>Your proof is saved with this order and available to the admin. No need to upload again.</p>' : `<p>${order.paymentStatus === 'rejected' ? 'Upload a new payment proof to resubmit it for verification.' : 'Upload your payment proof.'}</p><input type="file" accept="image/*" onchange="uploadOrderPaymentProof(${order.id}, this)">`}</div>` : ''}
-            <div class="order-actions"><strong>Order action:</strong><div class="order-action-buttons"><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'cancel')">Cancel / Change of Mind</button><button type="button" class="btn btn-small order-action-button" onclick="showOrderRequestReasons(${order.id}, 'refund')">Request Refund</button></div><div id="orderReason-${order.id}" class="order-reason-options"></div>${order.requestType ? `<p class="order-request-status">Request: ${order.requestType === 'cancel' ? 'Cancel / Change of Mind' : 'Refund'} (${order.requestStatus || 'pending'})</p>` : ''}</div>
-            ${getOrderReviewsSection(order)}
-        `;
-        ordersTrack.appendChild(orderItem);
-        orderTrackResizeObserver?.observe(orderItem);
-    });
-
-    const selectedIndex = customerOrders.findIndex(order => String(order.id) === selectedOrderId);
-    if (selectedIndex > 0) {
-        ordersTrack.scrollLeft = selectedIndex * ordersTrack.clientWidth;
+    const visibleOrders = activeOrders.filter(order => customerOrderMatchesFilter(order, customerOrderFilter));
+    const pageInfo = paginateItems('customer-orders', visibleOrders);
+    renderTablePager('customerOrdersPager', 'customer-orders', pageInfo, loadCustomerOrders, 'orders');
+    if (visibleOrders.length === 0) {
+        ordersList.innerHTML = '<div class="customer-empty-state"><strong>No orders here</strong><span>None of your active orders match this filter.</span></div>';
+        return;
     }
-    updateCarouselControls();
+    renderCustomerOrderCards(ordersList, pageInfo.items);
+    scrollToPendingCustomerOrder(ordersList);
 }
 
-function openGcashQrViewer(qrSource) {
+// Shows an image large: the shop's GCash QR, or a customer's payment proof.
+// The customer's view of an order's payment: what is paid and still due,
+// the current proof, why a proof was rejected, and where to upload a new one.
+function buildCustomerPaymentPanel(order, gcashQr = '') {
+    const id = Number(order.id) || 0;
+    const summary = getOrderPaymentSummary(order);
+    const isGcash = normalizePaymentMethod(order.paymentMethod) === 'gcash';
+    const proof = getOrderMediaSource(order, 'gcashPaymentProof');
+    const status = order.paymentStatus;
+    const cancelled = summary.standing === 'cancelled';
+    let proofHtml = '';
+    if (isGcash && !cancelled) {
+        const notice = {
+            rejected: `<p class="payment-alert payment-alert-error" role="alert"><strong>Your payment proof was rejected.</strong> ${escapeProductionHtml(order.paymentRejectionReason || '')} Please upload a new screenshot of your GCash payment below.</p>`,
+            'downpayment-received': '<p class="payment-alert">Your proof was sent. The shop will check it and update your order.</p>',
+            verified: '<p class="payment-alert payment-alert-ok">Your downpayment was verified by the shop.</p>'
+        }[status] || `<p class="payment-alert payment-alert-warn">Pay the downpayment of <strong>${pesoText(summary.downpaymentDue || summary.downpayment)}</strong> using the shop's GCash QR, then upload a screenshot of the payment.</p>`;
+        const canUpload = status !== 'verified';
+        const uploadLabel = status === 'rejected' ? 'Upload a new proof' : status === 'downpayment-received' ? 'Sent the wrong picture? Upload the correct one' : 'Upload proof of payment';
+        proofHtml = `${notice}
+            <div class="customer-payment-proof-row">
+                ${proof ? `<div class="payment-proof-current"><strong>${status === 'rejected' ? 'Rejected proof' : 'Your downpayment proof'}</strong><button type="button" class="proof-preview" onclick="viewPaymentProof('${escapeProductionHtml(proof)}')" aria-label="View your payment proof"><img src="${escapeProductionHtml(proof)}" alt="Your GCash payment proof"></button></div>` : ''}
+                ${gcashQr && status !== 'verified' ? `<div class="payment-proof-current"><strong>Shop GCash QR</strong><button type="button" class="proof-preview" onclick="openGcashQrViewer('${escapeProductionHtml(gcashQr)}')" aria-label="View the shop GCash QR larger"><img src="${escapeProductionHtml(gcashQr)}" alt="Shop GCash QR code"></button></div>` : ''}
+            </div>
+            ${canUpload ? `<label class="proof-upload${status === 'rejected' ? ' proof-upload-urgent' : ''}"><span>${uploadLabel}</span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onchange="uploadOrderPaymentProof(${id}, this)"><small>JPG, PNG, WEBP or GIF, up to 5 MB.</small></label>` : ''}
+            ${buildProofHistoryHtml(order, true)}`;
+    } else if (!isGcash && !cancelled && summary.amountPaid <= 0) {
+        proofHtml = `<p class="payment-alert payment-alert-warn">Pay the downpayment of <strong>${pesoText(summary.downpayment)}</strong> at the shop. The shop will record it here.</p>`;
+    }
+    const balanceHtml = isGcash && !cancelled && status === 'verified' && summary.balance > 0
+        ? buildCustomerBalanceProofHtml(order, summary, gcashQr)
+        : '';
+    const hasPayments = Array.isArray(order.payments) && order.payments.length;
+    return `<section class="customer-order-section customer-payment-panel">
+        <div class="payment-panel-head"><h3>Payment</h3>${paymentBadgeHtml(summary.standing, summary.label)}</div>
+        <div class="payment-figures">
+            <div><span>Order total</span><strong>${pesoText(summary.total)}</strong></div>
+            <div><span>Downpayment (50%)</span><strong>${pesoText(summary.downpayment)}</strong></div>
+            <div><span>Paid</span><strong class="amount-paid">${pesoText(summary.amountPaid)}</strong></div>
+            <div><span>Balance</span><strong class="${summary.balance > 0 ? 'amount-due' : 'amount-paid'}">${pesoText(summary.balance)}</strong></div>
+        </div>
+        ${!isGcash && summary.balance > 0 && summary.amountPaid >= summary.downpayment && !cancelled ? `<p class="payment-meta">The remaining ${pesoText(summary.balance)} is paid when you pick up or receive your order.</p>` : ''}
+        ${proofHtml}
+        ${balanceHtml}
+        ${hasPayments ? `<details class="payment-history"><summary>Payments received (${order.payments.length})</summary>${buildPaymentLedgerHtml(order)}</details>` : ''}
+    </section>`;
+}
+
+// After the downpayment is verified: pay the rest by GCash and send a proof,
+// or pay at the shop on pickup. The shop then verifies it like the downpayment.
+function buildCustomerBalanceProofHtml(order, summary, gcashQr = '') {
+    const id = Number(order.id) || 0;
+    const status = order.balanceProofStatus || '';
+    const proof = order.balanceProofUrl || '';
+    const notice = {
+        pending: '<p class="payment-alert">Your proof for the balance was sent. The shop will check it and update your payment.</p>',
+        rejected: `<p class="payment-alert payment-alert-error" role="alert"><strong>Your proof for the balance was rejected.</strong> ${escapeProductionHtml(order.balanceProofRejectionReason || '')} Please upload a new screenshot below.</p>`
+    }[status] || `<p class="payment-alert payment-alert-warn">Remaining balance: <strong>${pesoText(summary.balance)}</strong>. Pay it with the shop's GCash QR and upload the screenshot here, or pay at the shop when you pick up your order.</p>`;
+    const uploadLabel = status === 'rejected' ? 'Upload a new proof for the balance'
+        : status === 'pending' ? 'Sent the wrong picture? Upload the correct one'
+            : 'Upload proof of balance payment';
+    return `<div class="customer-balance-proof">
+        <h4>Balance payment</h4>
+        ${notice}
+        <div class="customer-payment-proof-row">
+            ${proof && ['pending', 'rejected'].includes(status) ? `<div class="payment-proof-current"><strong>${status === 'rejected' ? 'Rejected proof' : 'Your balance proof'}</strong><button type="button" class="proof-preview" onclick="viewPaymentProof('${escapeProductionHtml(proof)}')" aria-label="View your balance payment proof"><img src="${escapeProductionHtml(proof)}" alt="Your GCash proof for the balance"></button></div>` : ''}
+            ${gcashQr ? `<div class="payment-proof-current"><strong>Shop GCash QR</strong><button type="button" class="proof-preview" onclick="openGcashQrViewer('${escapeProductionHtml(gcashQr)}')" aria-label="View the shop GCash QR larger"><img src="${escapeProductionHtml(gcashQr)}" alt="Shop GCash QR code"></button></div>` : ''}
+        </div>
+        <label class="proof-upload${status === 'rejected' ? ' proof-upload-urgent' : ''}"><span>${uploadLabel}</span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onchange="uploadOrderPaymentProof(${id}, this, 'balance')"><small>JPG, PNG, WEBP or GIF, up to 5 MB.</small></label>
+        ${buildProofHistoryHtml(order, true, 'balance')}
+    </div>`;
+}
+
+function openGcashQrViewer(qrSource, title = '') {
     const modal = document.getElementById('gcashQrViewerModal');
     const image = document.getElementById('gcashQrViewerImage');
     if (!modal || !image || !qrSource) return;
 
+    const heading = document.getElementById('gcashQrViewerTitle');
+    const caption = modal.querySelector('.gcash-qr-viewer-content p');
+    if (heading) heading.textContent = title || 'GCash Payment QR';
+    if (caption) caption.textContent = title ? 'Scroll or pinch to zoom. Close when done.' : 'Scan this QR code to pay the required downpayment.';
+    image.alt = title || 'Enlarged GCash payment QR code';
     image.src = qrSource;
     modal.style.display = 'flex';
 }
@@ -5099,46 +5552,33 @@ function loadPurchaseHistory() {
     if (!historyList) return;
     historyList.innerHTML = '';
 
-    const currentUserEmail = appData.currentUser || '';
-    const purchaseHistory = appData.orders
-        .filter(order => {
-            const matchesUsername = order.customerUsername === currentUserEmail;
-            const matchesEmail = order.customerEmail === currentUserEmail;
-            return (matchesUsername || matchesEmail) && isOrderInPurchaseHistory(order);
-        })
-        .sort((firstOrder, secondOrder) => Number(secondOrder.id) - Number(firstOrder.id));
+    const purchaseHistory = getCurrentCustomerOrders().filter(isOrderInPurchaseHistory);
+    const completed = purchaseHistory.filter(order => getOrderPaymentSummary(order).standing !== 'cancelled');
+    const summary = document.getElementById('customerHistorySummary');
+    if (summary) {
+        summary.hidden = purchaseHistory.length === 0;
+        summary.innerHTML = buildCustomerMetricsHtml([
+            { label: 'Past orders', value: purchaseHistory.length },
+            { label: 'Completed', value: completed.length },
+            { label: 'Cancelled', value: purchaseHistory.length - completed.length },
+            { label: 'Total spent', value: pesoText(completed.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0)) }
+        ]);
+    }
 
     if (purchaseHistory.length === 0) {
-        historyList.innerHTML = '<p style="text-align: center; padding: 40px; color: #a0a0a0;">No purchase history yet</p>';
+        renderTablePager('customerHistoryPager', 'customer-history', { total: 0 }, loadPurchaseHistory, 'orders');
+        historyList.innerHTML = `<div class="customer-empty-state">
+            <strong>No purchase history yet</strong>
+            <span>Completed and cancelled orders move here from My Orders.</span>
+            <div class="customer-empty-actions"><button type="button" class="btn btn-secondary" onclick="navigateStorefront('orders')">View my orders</button></div>
+        </div>`;
         return;
     }
 
-    purchaseHistory.forEach(order => {
-        const productsHtml = buildPurchaseHistoryProducts(order);
-        
-        const historyItem = document.createElement('div');
-        historyItem.className = 'order-item';
-
-        historyItem.innerHTML = `
-            <div class="order-header">
-                <span class="order-id">Order #${order.id}</span>
-                <span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span>
-            </div>
-            <div class="order-details">
-                <p><strong>Customer:</strong> ${order.customerName}</p>
-                <p><strong>Email:</strong> ${order.customerEmail}</p>
-                <p><strong>Delivery Address:</strong> ${order.customerAddress}</p>
-                <p><strong>Order Date:</strong> ${order.date}</p>
-                <p><strong>Payment Method:</strong> ${(order.paymentMethod || 'gcash').toUpperCase()}</p>
-                ${order.measurements ? `<p><strong>Measurements:</strong> Chest: ${order.measurements.chest}cm, Waist: ${order.measurements.waist}cm, Length: ${order.measurements.length}cm</p>` : ''}
-            </div>
-            ${productsHtml}
-            <div class="order-total">Total: ₱${order.totalAmount.toFixed(2)}</div>
-            <button type="button" class="btn btn-small view-receipt-button" onclick="viewCustomerReceipt(${order.id})">View Receipt</button>
-            ${getOrderReviewsSection(order)}
-        `;
-        historyList.appendChild(historyItem);
-    });
+    const pageInfo = paginateItems('customer-history', purchaseHistory);
+    renderTablePager('customerHistoryPager', 'customer-history', pageInfo, loadPurchaseHistory, 'orders');
+    renderCustomerOrderCards(historyList, pageInfo.items, { history: true });
+    scrollToPendingCustomerOrder(historyList);
 }
 
 function showOrderRequestReasons(orderId, requestType) {
@@ -5361,22 +5801,6 @@ async function requestOrderAction(orderId, requestType, reason) {
     showStatusUpdateToast(`✓ ${requestLabel} request submitted.`);
 }
 
-function updateOrderDownpayment(orderId, amountValue) {
-    const order = appData.orders.find(item => item.id === orderId);
-    if (!order) return;
-
-    const parsedValue = Number(amountValue);
-    if (!Number.isFinite(parsedValue) || parsedValue < 0) {
-        showStatusUpdateToast('Please enter a valid downpayment amount.');
-        return;
-    }
-
-    order.gcashDownpaymentAmount = parsedValue;
-    saveOrders();
-    showStatusUpdateToast(`✓ Downpayment for order #${orderId} updated to ₱${parsedValue.toFixed(2)}.`);
-    loadCustomerOrders();
-}
-
 const paymentProofCache = new WeakMap();
 
 function compressPaymentProof(file) {
@@ -5428,7 +5852,9 @@ async function preparePaymentProof(file) {
     }
 }
 
-function uploadOrderPaymentProof(orderId, input) {
+// kind 'balance' sends the proof for the rest of the payment, after the downpayment was verified.
+function uploadOrderPaymentProof(orderId, input, kind = 'downpayment') {
+    const isBalance = kind === 'balance';
     const file = input.files[0];
     if (!file) return;
 
@@ -5445,113 +5871,48 @@ function uploadOrderPaymentProof(orderId, input) {
         return;
     }
 
+    input.disabled = true;
+    const label = input.closest('.proof-upload');
+    label?.classList.add('is-uploading');
     compressPaymentProof(file).then(async proof => {
-        const order = appData.orders.find(item => item.id === orderId);
+        const order = appData.orders.find(item => String(item.id) === String(orderId));
         if (!order || normalizePaymentMethod(order.paymentMethod) !== 'gcash') return;
 
-        const targetAmount = Number(order.gcashDownpaymentAmount ?? ((Number(order.totalAmount || 0) / 2)));
-        if (targetAmount <= 0) {
-            order.gcashDownpaymentAmount = Number(order.totalAmount || 0) / 2;
-        }
-
-        order.gcashPaymentProof = proof;
-        order.paymentStatus = 'downpayment-received';
-        delete order.paymentRejectionReason;
-        let sharedSaveSucceeded = false;
+        // Only the new proof is sent. The order shown afterwards is the copy
+        // the server saved, so the customer sees exactly what the admin sees.
+        let savedOrder;
         try {
-            const savedOrder = await saveOrderToSharedServer(order, 'customer-update');
-            sharedSaveSucceeded = true;
-            if (savedOrder && typeof savedOrder === 'object') Object.assign(order, savedOrder);
+            savedOrder = await saveOrderToSharedServer(isBalance ? { id: order.id, balancePaymentProof: proof } : { id: order.id, gcashPaymentProof: proof }, 'customer-update');
         } catch (error) {
-            console.error('Payment proof was not shared with admin:', error);
+            console.error('Payment proof was not saved:', error);
+            showStatusUpdateToast(`Your proof was not sent: ${error.message} Please choose the image again.`);
+            input.disabled = false;
+            input.value = '';
+            label?.classList.remove('is-uploading');
+            return;
         }
-        try {
-            saveOrders();
-        } catch (error) {
-            console.warn('Payment proof could not be saved in local storage:', error);
-        }
-        addNotification('customer', `✓ Payment proof uploaded for order #${order.id}.`, order.id);
-        saveNotifications();
-
-        const paymentProofContainer = input.closest('.order-payment-proof');
-        if (paymentProofContainer) {
-            const proofStatus = sharedSaveSucceeded
-                ? '<p style="color: #4caf50;">✓ Proof uploaded</p>'
-                : '<p style="color: #ffb74d;">Proof not synced with admin. Select the image again to retry.</p>';
-            const retryInput = sharedSaveSucceeded
-                ? ''
-                : `<input type="file" accept="image/*" onchange="uploadOrderPaymentProof(${order.id}, this)">`;
-            paymentProofContainer.innerHTML = `
-                <strong>GCash Payment Proof:</strong>
-                ${proofStatus}
-                <img src="${proof}" alt="GCash payment proof" style="max-width: 200px; height: auto; border-radius: 6px; margin-top: 8px; border: 1px solid #4caf50;">
-                ${retryInput}
-            `;
+        if (savedOrder && typeof savedOrder === 'object') {
+            delete order.gcashPaymentProof;
+            Object.keys(order).forEach(key => { if (!(key in savedOrder)) delete order[key]; });
+            Object.assign(order, savedOrder);
+            applyServerOrderUpdate(order);
         } else {
             loadCustomerOrders();
         }
-
-        showStatusUpdateToast(sharedSaveSucceeded
-            ? `✓ Payment proof uploaded for order #${order.id}.`
-            : `Proof could not sync with admin. Please try again.`);
+        const sentMessage = `✓ ${isBalance ? 'Balance payment proof' : 'Payment proof'} sent for order #${order.id}. The shop will check it.`;
+        addNotification('customer', sentMessage, order.id);
+        saveNotifications();
+        showStatusUpdateToast(sentMessage);
     }).catch(error => {
         console.error('Unable to process GCash payment proof:', error);
         showStatusUpdateToast(error.message || 'Unable to process the payment proof. Please try another image.');
+        input.disabled = false;
         input.value = '';
+        label?.classList.remove('is-uploading');
     });
 }
 
 // ===== ADMIN FUNCTIONS =====
-
-// Add new product to inventory table in real-time (with animation)
-function addProductToInventoryTable(product, index) {
-    const typeLabels = {
-        'basketball': '🏀 Basketball Jersey',
-        'volleyball': '🏐 Volleyball Jersey',
-        'longsleeve': '👕 Longsleeve Warmer',
-        'varsity': '🎓 Varsity Jacket',
-        'rider': '🏍️ Rider Jersey',
-        'tshirt': '👕 T-Shirt',
-        'polo': '👔 Polo Shirt',
-        'club': '⚽ Club Uniform',
-        'organization': '🏢 Organization Uniform'
-    };
-
-    const row = document.createElement('tr');
-    const typeDisplay = typeLabels[product.type] || product.type || 'N/A';
-    
-    // Add animation class
-    row.className = 'new-product-row';
-    
-    row.innerHTML = `
-        <td><img src="${product.image}" alt="${product.name}" class="product-thumbnail"></td>
-        <td>${product.name}</td>
-        <td>${typeDisplay}</td>
-        <td>₱${product.price.toFixed(2)}</td>
-        <td><strong>${product.stock}</strong></td>
-        <td>
-            <div class="action-buttons">
-                <button class="btn-edit" onclick="editPrice(${index})" title="Edit Price">💰 Price</button>
-                <button class="btn-edit" onclick="editProduct(${index})">Edit</button>
-                <button class="btn-delete" onclick="deleteProduct(${index})">Delete</button>
-            </div>
-        </td>
-    `;
-    
-    // Add to top of table with animation
-    const adminProductsList = document.getElementById('adminProductsList');
-    if (!adminProductsList) return;
-    adminProductsList.insertBefore(row, adminProductsList.firstChild);
-    
-    // Trigger animation (highlight effect)
-    setTimeout(() => {
-        row.style.backgroundColor = '#4a7c59';
-        row.style.transition = 'background-color 1.5s ease';
-        setTimeout(() => {
-            row.style.backgroundColor = '';
-        }, 1500);
-    }, 10);
-}
 
 // Handle Add Product with Image Upload
 document.getElementById('productImage').addEventListener('change', function(event) {
@@ -5646,8 +6007,11 @@ document.getElementById('addProductForm').addEventListener('submit', function(e)
             uploadMessage.style.display = 'block';
         });
         
-        // Add product to table INSTANTLY (real-time display)
-        addProductToInventoryTable(newProduct, appData.products.length - 1);
+        // Show the new product right away, on the page where it is listed.
+        const searchBox = document.getElementById('adminProductSearch');
+        if (searchBox) searchBox.value = '';
+        showPageContaining('admin-products', appData.products.length - 1);
+        loadAdminInventoryProducts(appData.products.length - 1);
         
         // Reset form
         document.getElementById('addProductForm').reset();
@@ -5784,9 +6148,10 @@ window.onclick = function(event) {
 // ===== ADMIN PRODUCT INVENTORY MANAGEMENT =====
 
 // Load Admin Inventory Products
-function loadAdminInventoryProducts() {
+function loadAdminInventoryProducts(highlightIndex = -1) {
     const adminProductsList = document.getElementById('adminProductsList');
     if (!adminProductsList) return;
+    if (typeof highlightIndex !== 'number') highlightIndex = -1;
     
     adminProductsList.innerHTML = '';
     
@@ -5802,34 +6167,59 @@ function loadAdminInventoryProducts() {
         'organization': '🏢 Organization Uniform'
     };
     
-    if (appData.products.length === 0) {
-        adminProductsList.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">No products added yet</td></tr>';
+    const query = String(document.getElementById('adminProductSearch')?.value || '').trim().toLowerCase();
+    const indexed = appData.products
+        .map((product, index) => ({ product, index }))
+        .filter(({ product }) => !query || `${product.name || ''} ${typeLabels[product.type] || product.type || ''}`.toLowerCase().includes(query));
+    const pageInfo = paginateItems('admin-products', indexed);
+    renderTablePager('adminProductsPager', 'admin-products', pageInfo, loadAdminInventoryProducts, 'products');
+
+    if (indexed.length === 0) {
+        adminProductsList.innerHTML = `<tr><td colspan="7" class="table-empty">${query ? 'No products match your search.' : 'No products added yet'}</td></tr>`;
         return;
     }
-    
-    appData.products.forEach((product, index) => {
+
+    pageInfo.items.forEach(({ product, index }) => {
         const typeDisplay = typeLabels[product.type] || product.type || 'N/A';
-        const stockStatus = product.stock > 0 ? 'In Stock' : 'Out of Stock';
-        const statusClass = product.stock > 0 ? 'in-stock' : 'out-of-stock';
-        
+        const stock = Number(product.stock) || 0;
+        const stockStatus = stock > 0 ? 'In Stock' : 'Out of Stock';
+        const statusClass = stock > 0 ? 'in-stock' : 'out-of-stock';
+
         const row = document.createElement('tr');
+        if (index === highlightIndex) row.classList.add('row-highlight');
         row.innerHTML = `
-            <td><img src="${product.image}" alt="${product.name}" class="product-thumbnail" style="width: 50px; height: 50px; object-fit: cover; border-radius: 5px;"></td>
-            <td>${product.name}</td>
-            <td>${typeDisplay}</td>
-            <td>₱${product.price.toFixed(2)}</td>
-            <td><strong>${product.stock}</strong></td>
-            <td><span class="status-badge ${statusClass}">${stockStatus}</span></td>
-            <td>
-                <div class="action-buttons" style="display: flex; gap: 5px; flex-wrap: wrap;">
-                    <button class="btn-sm" onclick="openEditProductModal(${index})" style="background-color: #5a9fd4; padding: 6px 10px; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em;">✏️ Edit</button>
-                    <button class="btn-sm" onclick="toggleProductStock(${index})" style="background-color: #d4a255; padding: 6px 10px; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em;">${product.stock > 0 ? '📦 Out Stock' : '✅ Restock'}</button>
-                    <button class="btn-sm" onclick="deleteAdminProduct(${index})" style="background-color: #d45a5a; padding: 6px 10px; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em;">🗑️ Delete</button>
+            <td data-label="Image"><img src="${escapeProductionHtml(product.image || '')}" alt="${escapeProductionHtml(product.name)}" class="product-thumbnail" loading="lazy"></td>
+            <td data-label="Product"><strong>${escapeProductionHtml(product.name)}</strong></td>
+            <td data-label="Type">${escapeProductionHtml(typeDisplay)}</td>
+            <td data-label="Price" class="cell-money">${pesoText(product.price)}</td>
+            <td data-label="Stock" class="cell-number"><strong>${stock}</strong></td>
+            <td data-label="Status"><span class="status-badge ${statusClass}">${stockStatus}</span></td>
+            <td data-label="Actions">
+                <div class="action-buttons table-actions">
+                    <button type="button" class="btn-table btn-table-edit" onclick="openEditProductModal(${index})">Edit</button>
+                    <button type="button" class="btn-table btn-table-stock" onclick="toggleProductStock(${index})">${stock > 0 ? 'Set Out of Stock' : 'Restock'}</button>
+                    <button type="button" class="btn-table btn-table-delete" onclick="deleteAdminProduct(${index})">Delete</button>
                 </div>
             </td>
         `;
         adminProductsList.appendChild(row);
     });
+}
+
+function onAdminProductSearchChanged() {
+    resetPager('admin-products');
+    loadAdminInventoryProducts();
+}
+
+function toggleAddProductForm(forceOpen) {
+    const panel = document.getElementById('addProductPanel');
+    const button = document.getElementById('addProductToggle');
+    if (!panel || !button) return;
+    const open = typeof forceOpen === 'boolean' ? forceOpen : panel.hidden;
+    panel.hidden = !open;
+    button.setAttribute('aria-expanded', String(open));
+    button.textContent = open ? 'Close Form' : '+ Add New Product';
+    if (open) document.getElementById('productName')?.focus();
 }
 
 // Open Edit Product Modal
@@ -6062,50 +6452,202 @@ window.onload = function() {
 }
 
 // Load Admin Orders
-async function loadAdminOrders() {
-    if (!window.kingPinAdminOrdersRefreshTimer) {
-        window.kingPinAdminOrdersRefreshTimer = setInterval(() => {
-            if (appData.currentRole === 'admin' && document.getElementById('ordersTab')?.style.display === 'block') {
-                loadAdminOrders();
-            }
-        }, 15000);
-    }
+// ===== TABLE PAGINATION =====
+// Admin tables show one page at a time. The page and page size are kept per
+// table for this browser tab, so a refresh stays on the same page.
+const TABLE_PAGE_SIZES = [10, 25, 50];
 
-    loadOrders();
-    renderAdminOrders();
+function readPagerState(key) {
     try {
-        const sharedOrders = await fetchSharedOrders({ activeOnly: true });
-        const sharedIds = new Set(sharedOrders.map(order => String(order.id)));
-        const localOnlyOrders = appData.orders.filter(order => !sharedIds.has(String(order.id)));
-        appData.orders = [...sharedOrders, ...localOnlyOrders];
-        saveOrders();
-        syncProductionNotifications(sharedOrders, 'admin');
-        localOnlyOrders.forEach(order => {
-            saveOrderToSharedServer(order, 'admin-migrate').catch(error => {
-                console.error('Unable to migrate local order to shared storage:', error);
-            });
-        });
-        renderAdminOrders();
-        if (document.getElementById('historyTab')?.style.display === 'block') {
-            loadHistoryTable();
-        }
+        return JSON.parse(sessionStorage.getItem(`kingpinPager-${key}`) || '{}') || {};
     } catch (error) {
-        console.warn('Using local orders because shared orders could not be loaded:', error);
+        return {};
+    }
+}
+
+function writePagerState(key, state) {
+    safeStorageSet(sessionStorage, `kingpinPager-${key}`, JSON.stringify(state));
+}
+
+function resetPager(key) {
+    writePagerState(key, { ...readPagerState(key), page: 1 });
+}
+
+function paginateItems(key, items, defaultSize = 10) {
+    const state = readPagerState(key);
+    const size = TABLE_PAGE_SIZES.includes(Number(state.size)) ? Number(state.size) : defaultSize;
+    const pages = Math.max(1, Math.ceil(items.length / size));
+    const page = Math.min(Math.max(1, Number(state.page) || 1), pages);
+    const start = (page - 1) * size;
+    return { items: items.slice(start, start + size), page, pages, size, total: items.length, start };
+}
+
+function showPageContaining(key, index, defaultSize = 10) {
+    const state = readPagerState(key);
+    const size = TABLE_PAGE_SIZES.includes(Number(state.size)) ? Number(state.size) : defaultSize;
+    writePagerState(key, { ...state, page: Math.floor(index / size) + 1 });
+}
+
+function renderTablePager(containerId, key, info, rerender, noun = 'records') {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.replaceChildren();
+    container.hidden = !info.total;
+    if (!info.total) return;
+
+    const summary = document.createElement('span');
+    summary.className = 'table-pager-summary';
+    summary.textContent = `Showing ${info.start + 1}-${info.start + info.items.length} of ${info.total} ${noun}`;
+
+    const sizeLabel = document.createElement('label');
+    sizeLabel.className = 'table-pager-size';
+    sizeLabel.textContent = 'Rows per page ';
+    const sizeSelect = document.createElement('select');
+    TABLE_PAGE_SIZES.forEach(size => sizeSelect.add(new Option(String(size), String(size), false, size === info.size)));
+    sizeSelect.addEventListener('change', () => {
+        writePagerState(key, { size: Number(sizeSelect.value), page: 1 });
+        rerender();
+    });
+    sizeLabel.appendChild(sizeSelect);
+
+    const nav = document.createElement('div');
+    nav.className = 'table-pager-pages';
+    nav.setAttribute('role', 'navigation');
+    nav.setAttribute('aria-label', `${noun} pages`);
+    const goTo = page => {
+        writePagerState(key, { ...readPagerState(key), page });
+        rerender();
+    };
+    const addButton = (label, page, { disabled = false, current = false, aria = '' } = {}) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `table-pager-button${current ? ' is-current' : ''}`;
+        button.textContent = label;
+        button.disabled = disabled || current;
+        if (current) button.setAttribute('aria-current', 'page');
+        if (aria) button.setAttribute('aria-label', aria);
+        button.addEventListener('click', () => goTo(page));
+        nav.appendChild(button);
+    };
+    addButton('‹ Prev', info.page - 1, { disabled: info.page === 1, aria: 'Previous page' });
+    const first = Math.max(1, Math.min(info.page - 2, info.pages - 4));
+    const last = Math.min(info.pages, first + 4);
+    if (first > 1) {
+        addButton('1', 1);
+        if (first > 2) nav.appendChild(Object.assign(document.createElement('span'), { className: 'table-pager-gap', textContent: '…' }));
+    }
+    for (let page = first; page <= last; page += 1) addButton(String(page), page, { current: page === info.page, aria: `Page ${page}` });
+    if (last < info.pages) {
+        if (last < info.pages - 1) nav.appendChild(Object.assign(document.createElement('span'), { className: 'table-pager-gap', textContent: '…' }));
+        addButton(String(info.pages), info.pages);
+    }
+    addButton('Next ›', info.page + 1, { disabled: info.page === info.pages, aria: 'Next page' });
+
+    container.append(summary, nav, sizeLabel);
+}
+
+// ===== PAYMENT DISPLAY HELPERS =====
+function getOrderPaymentSummary(order) {
+    return window.KingPinPaymentSummary.getPaymentSummary(order);
+}
+
+// Short names for table cells; the order window shows the full wording.
+const SHORT_PAYMENT_LABELS = {
+    'downpayment-unpaid': 'Downpayment unpaid',
+    'awaiting-verification': 'Proof to review',
+    'partial-downpayment': 'Partly paid',
+    'with-balance': 'Balance due',
+    'fully-paid': 'Fully paid',
+    cancelled: 'Cancelled',
+    'no-orders': 'No orders yet'
+};
+
+function paymentBadgeHtml(standing, label, short = false) {
+    const text = short ? (SHORT_PAYMENT_LABELS[standing] || label) : label;
+    return `<span class="payment-badge payment-${escapeProductionHtml(standing)}" title="${escapeProductionHtml(label)}">${escapeProductionHtml(text)}</span>`;
+}
+
+function pesoText(value) {
+    return formatPeso(value);
+}
+
+// New orders and customer updates reach the admin on every admin tab: the
+// orders are checked every 15 seconds while the page is on screen, and at once
+// when the admin comes back to the tab. The first check after signing in only
+// fills the badge; later ones also pop up a message.
+let adminOrdersRequest = null;
+let adminOrdersSynced = false;
+let adminHighlightOrderIds = new Set();
+
+function isAdminOrdersTabOpen() {
+    return document.getElementById('ordersTab')?.style.display === 'block';
+}
+
+function markAdminOrderNotificationsRead() {
+    let changed = false;
+    appData.notifications.forEach(notification => {
+        if (notification.type === 'admin' && !notification.read) {
+            notification.read = true;
+            changed = true;
+        }
+    });
+    if (changed) saveNotifications();
+    updateNotificationBadges();
+}
+
+function announceAdminOrderUpdates(added) {
+    const newOrders = added.filter(notification => notification.eventType === 'new-order');
+    adminHighlightOrderIds = new Set(newOrders.map(notification => String(notification.orderId)));
+    if (adminHighlightOrderIds.size) setTimeout(() => { adminHighlightOrderIds = new Set(); }, 4000);
+    if (added.length === 1) {
+        showStatusUpdateToast(added[0].message);
+    } else if (newOrders.length === added.length) {
+        showStatusUpdateToast(`${newOrders.length} new orders arrived. Open Orders to see them.`);
+    } else {
+        showStatusUpdateToast(`${added.length} order updates${newOrders.length ? `, including ${newOrders.length} new order${newOrders.length === 1 ? '' : 's'}` : ''}. Open Orders to see them.`);
+    }
+}
+
+function refreshAdminOrdersInBackground() {
+    if (appData.currentRole === 'admin' && document.visibilityState !== 'hidden'
+        && document.getElementById('adminPage')?.style.display === 'block') {
+        loadAdminOrders();
+    }
+}
+
+function loadAdminOrders() {
+    if (!window.kingPinAdminOrdersRefreshTimer) {
+        window.kingPinAdminOrdersRefreshTimer = setInterval(refreshAdminOrdersInBackground, 15000);
+        document.addEventListener('visibilitychange', refreshAdminOrdersInBackground);
+        window.addEventListener('focus', refreshAdminOrdersInBackground);
     }
 
-    if (!window.kingPinLegacyOrderImportStarted) {
-        window.kingPinLegacyOrderImportStarted = true;
-        fetchSharedOrders().then(sharedOrders => {
-            const ordersById = new Map(appData.orders.map(order => [String(order.id), order]));
-            sharedOrders.forEach(order => ordersById.set(String(order.id), order));
-            appData.orders = Array.from(ordersById.values());
-            saveOrders();
-            syncProductionNotifications(sharedOrders, 'admin');
+    // Keep showing the current list while the newest one loads, so the table
+    // never flashes empty during the automatic refresh.
+    renderAdminOrders();
+    // One request at a time: the timer, the tab coming back and a click can all ask at once.
+    if (adminOrdersRequest) return adminOrdersRequest;
+    adminOrdersRequest = (async () => {
+        try {
+            // All orders, so the Completed and Cancelled counts and filters work.
+            const sharedOrders = await fetchSharedOrders({ activeOnly: false });
+            if (appData.currentRole !== 'admin') return;
+            appData.orders = sharedOrders;
+            appData.reportOrders = sharedOrders;
+            const added = syncProductionNotifications(sharedOrders, 'admin');
+            if (adminOrdersSynced && added.length) announceAdminOrderUpdates(added);
+            adminOrdersSynced = true;
+            if (isAdminOrdersTabOpen() && document.visibilityState !== 'hidden') markAdminOrderNotificationsRead();
             renderAdminOrders();
-        }).catch(error => {
-            console.warn('Unable to import legacy shared orders yet:', error);
-        });
-    }
+            refreshOpenOrderDetails();
+            if (document.getElementById('historyTab')?.style.display === 'block') loadHistoryTable();
+        } catch (error) {
+            console.warn('Orders could not be loaded from the server; showing the last loaded list.', error);
+        } finally {
+            adminOrdersRequest = null;
+        }
+    })();
+    return adminOrdersRequest;
 }
 
 function escapeProductionHtml(value) {
@@ -6121,60 +6663,93 @@ function getProductionStageLabel(status) {
     return tracker.PRODUCTION_STAGES.find(stage => stage.id === status)?.label || (status === 'on-hold' ? 'On Hold' : 'Cancelled');
 }
 
+function formatOrderDate(order) {
+    const placed = getOrderPlacedDate(order);
+    return placed ? placed.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : (order.date || '—');
+}
+
+// Which GCash proof waits for the shop: 'downpayment', 'balance', or '' for none.
+function getProofToReview(order) {
+    const summary = getOrderPaymentSummary(order);
+    if (summary.standing === 'cancelled') return '';
+    if (order.paymentStatus === 'downpayment-received') return 'downpayment';
+    if (order.balanceProofStatus === 'pending' && summary.balance > 0) return 'balance';
+    return '';
+}
+
+function orderMatchesPaymentFilter(order, filter) {
+    if (!filter || filter === 'all') return true;
+    const summary = getOrderPaymentSummary(order);
+    if (filter === 'proof-review') return Boolean(getProofToReview(order));
+    if (filter === 'downpayment-unpaid') return ['downpayment-unpaid', 'partial-downpayment', 'awaiting-verification'].includes(summary.standing);
+    return summary.standing === filter;
+}
+
+function onAdminOrderFiltersChanged() {
+    resetPager('admin-orders');
+    renderAdminOrders();
+}
+
 function renderAdminOrders() {
     const ordersList = document.getElementById('adminOrdersList');
     if (!ordersList) return;
-    ordersList.innerHTML = '';
 
-    const allOrders = [...appData.orders].sort((firstOrder, secondOrder) => {
-            const firstValue = Number(firstOrder.id) || 0;
-            const secondValue = Number(secondOrder.id) || 0;
-            return secondValue - firstValue;
-        });
+    const allOrders = [...appData.orders].sort((firstOrder, secondOrder) => (Number(secondOrder.id) || 0) - (Number(firstOrder.id) || 0));
     const stages = window.KingPinProductionTracking.PRODUCTION_STAGES;
     const productionStatus = order => getOrderProductionStatus(order);
     const isDelayed = order => Boolean(order.estimatedCompletionDate)
         && order.estimatedCompletionDate < new Date().toISOString().slice(0, 10)
         && !['completed', 'cancelled'].includes(productionStatus(order));
+    const setCount = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
 
-    document.getElementById('productionPendingCount').textContent = allOrders.filter(order => ['order-placed', 'payment-verification', 'design-approval'].includes(productionStatus(order))).length;
-    document.getElementById('productionInProgressCount').textContent = allOrders.filter(order => ['printing', 'quality-checking'].includes(productionStatus(order))).length;
-    document.getElementById('productionReadyCount').textContent = allOrders.filter(order => productionStatus(order) === 'ready-for-release').length;
-    document.getElementById('productionCompletedCount').textContent = allOrders.filter(order => productionStatus(order) === 'completed').length;
-    document.getElementById('productionDelayedCount').textContent = allOrders.filter(isDelayed).length;
+    setCount('productionPendingCount', allOrders.filter(order => ['order-placed', 'payment-verification', 'design-approval'].includes(productionStatus(order))).length);
+    setCount('productionInProgressCount', allOrders.filter(order => ['printing', 'quality-checking'].includes(productionStatus(order))).length);
+    setCount('productionReadyCount', allOrders.filter(order => productionStatus(order) === 'ready-for-release').length);
+    setCount('productionCompletedCount', allOrders.filter(order => productionStatus(order) === 'completed').length);
+    setCount('productionDelayedCount', allOrders.filter(isDelayed).length);
+    setCount('paymentReviewCount', allOrders.filter(order => orderMatchesPaymentFilter(order, 'proof-review')).length);
+    setCount('balanceDueCount', allOrders.filter(order => getOrderPaymentSummary(order).standing === 'with-balance').length);
 
-    const stageFilter = document.getElementById('productionStageFilter')?.value || 'all';
-    const ordersToRender = stageFilter === 'all'
-        ? allOrders
-        : allOrders.filter(order => productionStatus(order) === stageFilter);
+    const stageFilter = document.getElementById('productionStageFilter')?.value || 'active';
+    const paymentFilter = document.getElementById('adminPaymentFilter')?.value || 'all';
+    const query = String(document.getElementById('adminOrderSearch')?.value || '').trim().toLowerCase();
+    const ordersToRender = allOrders
+        .filter(order => stageFilter === 'all'
+            || (stageFilter === 'active' ? !['completed', 'cancelled'].includes(productionStatus(order)) : productionStatus(order) === stageFilter))
+        .filter(order => orderMatchesPaymentFilter(order, paymentFilter))
+        .filter(order => !query || `${order.id} ${order.customerName || ''} ${order.customerEmail || ''} ${order.customerPhone || ''}`.toLowerCase().includes(query));
 
+    const pageInfo = paginateItems('admin-orders', ordersToRender);
+    renderTablePager('adminOrdersPager', 'admin-orders', pageInfo, renderAdminOrders, 'orders');
+    ordersList.innerHTML = '';
     if (ordersToRender.length === 0) {
-        ordersList.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No orders at this production stage.</td></tr>';
+        ordersList.innerHTML = `<tr><td colspan="7" class="table-empty">${query ? 'No orders match your search.' : 'No orders match these filters.'}</td></tr>`;
         return;
     }
 
-    ordersToRender.forEach(order => {
-        const itemCount = Array.isArray(order.items) ? order.items.length : 0;
-        const designImages = (order.items || []).flatMap((item, itemIndex) => getUploadedDesignImageSources(item, order.id, itemIndex));
-        const designGallery = designImages.length
-            ? `<div class="order-design-gallery admin-order-design-gallery" aria-label="Customer uploaded design photos">${designImages.map((image, imageIndex) => `<img src="${image}" alt="Customer design ${imageIndex + 1}" class="order-design-thumbnail">`).join('')}</div>`
-            : '';
+    pageInfo.items.forEach(order => {
+        const itemCount = Array.isArray(order.items) ? order.items.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0) : 0;
+        const firstItem = order.items?.[0]?.name || 'Order items';
         const customerName = escapeProductionHtml(order.customerName || 'N/A');
         const customerEmail = escapeProductionHtml(order.customerEmail || 'No email');
-        const customerPhone = escapeProductionHtml(order.customerPhone || 'No phone');
         const status = productionStatus(order);
         const currentStageIndex = stages.findIndex(stage => stage.id === status);
         const progress = currentStageIndex < 0 ? 0 : Math.round((currentStageIndex / (stages.length - 1)) * 100);
+        const payment = getOrderPaymentSummary(order);
+        const proofKind = getProofToReview(order);
+        const proofWaiting = Boolean(proofKind);
 
         const row = document.createElement('tr');
+        if (proofWaiting) row.classList.add('row-needs-action');
+        if (adminHighlightOrderIds.has(String(order.id))) row.classList.add('row-highlight');
         row.innerHTML = `
-            <td data-label="Order ID"><strong>#${order.id}</strong></td>
-            <td data-label="Customer" class="admin-order-customer-cell"><strong>${customerName}</strong><small>${customerEmail}</small><small>${customerPhone}</small></td>
-            <td data-label="Products"><span class="admin-order-item-count">${itemCount} ${itemCount === 1 ? 'item' : 'items'}</span>${order.teamOrder?.isTeamOrder ? '<small class="admin-order-team-label">Team order</small>' : ''}${designGallery}</td>
-            <td data-label="Order status"><span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span></td>
+            <td data-label="Order ID" class="cell-nowrap"><strong>#${escapeProductionHtml(order.id)}</strong></td>
+            <td data-label="Customer" class="admin-order-customer-cell"><strong>${customerName}</strong><small class="cell-truncate" title="${customerEmail}">${customerEmail}</small></td>
+            <td data-label="Products"><span class="cell-truncate" title="${escapeProductionHtml(firstItem)}">${escapeProductionHtml(firstItem)}</span><small>${itemCount} pc${itemCount === 1 ? '' : 's'}${order.teamOrder?.isTeamOrder ? ' · Team' : ''} · ${escapeProductionHtml(formatOrderDate(order))}</small></td>
+            <td data-label="Total" class="cell-money">${pesoText(payment.total)}</td>
+            <td data-label="Payment">${proofWaiting ? paymentBadgeHtml('awaiting-verification', proofKind === 'balance' ? 'Balance proof to review' : 'Proof to review') : paymentBadgeHtml(payment.standing, payment.label, true)}${payment.balance > 0 && payment.standing !== 'cancelled' ? `<small>Balance ${pesoText(payment.balance)}</small>` : ''}</td>
             <td data-label="Production stage" class="production-stage-cell"><span class="production-stage-label">${escapeProductionHtml(getProductionStageLabel(status))}</span>${isDelayed(order) ? '<small class="production-delayed-label">Delayed</small>' : ''}<div class="production-progress-track" aria-label="${progress}% complete"><span style="width:${progress}%"></span></div></td>
-            <td data-label="Order date">${order.date}</td>
-            <td data-label="Actions" class="admin-order-actions"><button type="button" class="btn btn-small" onclick="viewOrderDetails(${Number(order.id) || 0})">Update Production</button></td>
+            <td data-label="Actions" class="admin-order-actions"><button type="button" class="btn btn-small" onclick="viewOrderDetails(${Number(order.id) || 0})">${proofWaiting ? 'Review' : 'Open'}</button></td>
         `;
         ordersList.appendChild(row);
     });
@@ -6196,6 +6771,12 @@ async function submitAdminProductionStage(orderId) {
     const estimatedCompletionDate = document.getElementById(`productionEstimate-${orderId}`)?.value || '';
     const remarks = document.getElementById(`productionRemarks-${orderId}`)?.value || '';
     if (!stageSelect) return;
+    const order = findLoadedOrder(orderId);
+    const payment = order ? getOrderPaymentSummary(order) : null;
+    if (stageSelect.value === 'completed' && payment && payment.balance > 0
+        && !await confirmAction(`Order #${orderId} still has an unpaid balance of ${pesoText(payment.balance)}. If the customer already paid, record the payment first in the Payment section. Mark it completed anyway?`)) {
+        return;
+    }
     try {
         const updatedOrder = await saveAdminOrderOperation(orderId, 'production-stage', {
             productionStatus: stageSelect.value,
@@ -6239,39 +6820,130 @@ async function checkOrderEmailDelivery(orderId) {
     } catch (error) { output.textContent = error.message; }
 }
 
-async function verifyAdminOrderPayment(orderId) {
-    const remarks = document.getElementById(`productionRemarks-${orderId}`)?.value || '';
+const PROOF_REJECTION_REASONS = [
+    'The screenshot is blurry or unreadable.',
+    'The amount does not match the downpayment.',
+    'The reference number was not found in our GCash records.',
+    'This proof was already used for another payment.',
+    'The payment was sent to the wrong account.',
+    'Other'
+];
+
+// Runs one payment action from the order window: disables its buttons while
+// saving so it cannot be sent twice, then shows the saved order.
+async function runAdminPaymentAction(orderId, operation, fields, successMessage, formId) {
+    const form = document.getElementById(formId);
+    const buttons = form ? Array.from(form.querySelectorAll('button')) : [];
+    buttons.forEach(button => { button.disabled = true; });
     try {
-        const updatedOrder = await saveAdminOrderOperation(orderId, 'verify-payment', { remarks });
+        const updatedOrder = await saveAdminOrderOperation(orderId, operation, fields);
         applyServerOrderUpdate(updatedOrder);
         viewOrderDetails(orderId);
-        showStatusUpdateToast(`Payment verified for order #${orderId}.`);
+        showStatusUpdateToast(successMessage(updatedOrder));
     } catch (error) {
         showStatusUpdateToast(error.message);
+        buttons.forEach(button => { button.disabled = false; });
     }
 }
 
-async function rejectAdminOrderPayment(orderId) {
-    const enteredReason = prompt('Why is this payment proof being rejected?');
-    if (enteredReason === null) return;
-    const reason = enteredReason.trim();
-    if (!reason) {
-        showStatusUpdateToast('Enter a reason to reject the payment proof.');
+async function verifyAdminOrderPayment(orderId) {
+    const amount = document.getElementById(`verifyAmount-${orderId}`)?.value || '';
+    const reference = document.getElementById(`verifyReference-${orderId}`)?.value || '';
+    const remarks = document.getElementById(`verifyNote-${orderId}`)?.value || '';
+    if (amount !== '' && !(Number(amount) > 0)) {
+        showStatusUpdateToast('Enter the amount received, greater than zero.');
         return;
     }
+    await runAdminPaymentAction(orderId, 'verify-payment', { amount, reference, remarks }, order => {
+        const summary = getOrderPaymentSummary(order);
+        return `Payment verified for order #${orderId}. Remaining balance: ${pesoText(summary.balance)}.`;
+    }, `verifyPaymentForm-${orderId}`);
+}
+
+async function rejectAdminOrderPayment(orderId) {
+    const choice = document.getElementById(`rejectReason-${orderId}`)?.value || '';
+    const note = (document.getElementById(`rejectNote-${orderId}`)?.value || '').trim();
+    if (!choice) {
+        showStatusUpdateToast('Choose why the payment proof is rejected.');
+        return;
+    }
+    if (choice === 'Other' && !note) {
+        showStatusUpdateToast('Write the reason for the customer.');
+        document.getElementById(`rejectNote-${orderId}`)?.focus();
+        return;
+    }
+    const reason = choice === 'Other' ? note : `${choice}${note ? ` ${note}` : ''}`;
     if (reason.length > 1000) {
         showStatusUpdateToast('The rejection reason must be 1000 characters or fewer.');
         return;
     }
+    if (!await confirmAction(`Reject this payment proof? The customer will be asked to upload a new one.\nReason: ${reason}`)) return;
+    await runAdminPaymentAction(orderId, 'reject-payment', { reason }, () => `Payment proof rejected for order #${orderId}. The customer was notified.`, `rejectPaymentForm-${orderId}`);
+}
 
-    try {
-        const updatedOrder = await saveAdminOrderOperation(orderId, 'reject-payment', { reason });
-        applyServerOrderUpdate(updatedOrder);
-        viewOrderDetails(orderId);
-        showStatusUpdateToast(`Payment proof rejected for order #${orderId}.`);
-    } catch (error) {
-        showStatusUpdateToast(error.message);
+async function recordAdminBalancePayment(orderId) {
+    const amount = document.getElementById(`balanceAmount-${orderId}`)?.value || '';
+    const method = document.getElementById(`balanceMethod-${orderId}`)?.value || 'cash';
+    const reference = (document.getElementById(`balanceReference-${orderId}`)?.value || '').trim();
+    const note = document.getElementById(`balanceNote-${orderId}`)?.value || '';
+    if (!(Number(amount) > 0)) {
+        showStatusUpdateToast('Enter the amount received, greater than zero.');
+        return;
     }
+    if (method !== 'cash' && !reference) {
+        showStatusUpdateToast('Enter the reference number of the GCash or bank payment.');
+        document.getElementById(`balanceReference-${orderId}`)?.focus();
+        return;
+    }
+    if (!await confirmAction(`Record a payment of ${pesoText(amount)} for order #${orderId}?`)) return;
+    await runAdminPaymentAction(orderId, 'record-payment', { amount, method, reference, note }, order => {
+        const summary = getOrderPaymentSummary(order);
+        return summary.balance > 0
+            ? `Payment recorded. Remaining balance: ${pesoText(summary.balance)}.`
+            : `Payment recorded. Order #${orderId} is now fully paid.`;
+    }, `balancePaymentForm-${orderId}`);
+}
+
+async function verifyAdminBalanceProof(orderId) {
+    const amount = document.getElementById(`balanceProofAmount-${orderId}`)?.value || '';
+    const reference = (document.getElementById(`balanceProofReference-${orderId}`)?.value || '').trim();
+    const remarks = document.getElementById(`balanceProofNote-${orderId}`)?.value || '';
+    if (!(Number(amount) > 0)) {
+        showStatusUpdateToast('Enter the amount received, greater than zero.');
+        return;
+    }
+    if (!await confirmAction(`Approve this GCash proof and record ${pesoText(amount)} as paid for order #${orderId}?`)) return;
+    await runAdminPaymentAction(orderId, 'verify-balance-proof', { amount, reference, remarks }, order => {
+        const summary = getOrderPaymentSummary(order);
+        return summary.balance > 0
+            ? `Balance payment approved. Remaining balance: ${pesoText(summary.balance)}.`
+            : `Balance payment approved. Order #${orderId} is now fully paid.`;
+    }, `verifyBalanceProofForm-${orderId}`);
+}
+
+async function rejectAdminBalanceProof(orderId) {
+    const choice = document.getElementById(`rejectBalanceReason-${orderId}`)?.value || '';
+    const note = (document.getElementById(`rejectBalanceNote-${orderId}`)?.value || '').trim();
+    if (!choice) {
+        showStatusUpdateToast('Choose why the balance proof is rejected.');
+        return;
+    }
+    if (choice === 'Other' && !note) {
+        showStatusUpdateToast('Write the reason for the customer.');
+        document.getElementById(`rejectBalanceNote-${orderId}`)?.focus();
+        return;
+    }
+    const reason = choice === 'Other' ? note : `${choice}${note ? ` ${note}` : ''}`;
+    if (reason.length > 1000) {
+        showStatusUpdateToast('The rejection reason must be 1000 characters or fewer.');
+        return;
+    }
+    if (!await confirmAction(`Reject this balance proof? The customer will be asked to upload a new one.\nReason: ${reason}`)) return;
+    await runAdminPaymentAction(orderId, 'reject-balance-proof', { reason }, () => `Balance proof rejected for order #${orderId}. The customer was notified.`, `rejectBalanceProofForm-${orderId}`);
+}
+
+function viewPaymentProof(source) {
+    if (source) openGcashQrViewer(source, 'Payment proof');
 }
 
 async function uploadFinalOrderDesign(orderId, input) {
@@ -6333,20 +7005,180 @@ function updateOrderStatus(orderId) {
 }
 
 // View Order Details Modal
+// Finds an order already loaded on this page (active list or the full list).
+function findLoadedOrder(orderId) {
+    const id = String(orderId);
+    return (appData.orders || []).find(order => String(order.id) === id)
+        || (appData.reportOrders || []).find(order => String(order.id) === id)
+        || null;
+}
+
+let openOrderDetailsId = null;
+let openOrderDetailsSignature = '';
+
+function orderDetailsSignature(order) {
+    return JSON.stringify([order.paymentStatus, order.paymentProofVersion || 0, order.balanceProofStatus || '', order.balanceProofVersion || 0, (order.payments || []).length, order.productionStatus, order.designApproval?.status, order.finalDesignUrl ? 1 : 0]);
+}
+
+// Called after the automatic refresh: redraws the open order window only when
+// its payment or stage changed (for example, the customer sent a new proof).
+function refreshOpenOrderDetails() {
+    const modal = document.getElementById('orderDetailsModal');
+    if (!openOrderDetailsId || modal?.style.display !== 'block') return;
+    const order = findLoadedOrder(openOrderDetailsId);
+    if (order && orderDetailsSignature(order) !== openOrderDetailsSignature) {
+        viewOrderDetails(order.id);
+        const proofKind = getProofToReview(order);
+        if (proofKind) showStatusUpdateToast(`Order #${order.id}: a new ${proofKind === 'balance' ? 'balance payment' : 'payment'} proof is ready to review.`);
+    }
+}
+
+// Earlier proofs of the downpayment, or with kind 'balance', of the balance payment.
+function buildProofHistoryHtml(order, customerView = false, kind = 'downpayment') {
+    const isBalance = kind === 'balance';
+    const currentVersion = Number(isBalance ? order.balanceProofVersion : order.paymentProofVersion);
+    const proofs = (Array.isArray(isBalance ? order.balanceProofs : order.paymentProofs) ? (isBalance ? order.balanceProofs : order.paymentProofs) : [])
+        .filter(proof => proof.version !== currentVersion && proof.url);
+    if (!proofs.length) return '';
+    const labels = { rejected: 'Rejected', replaced: 'Replaced', verified: 'Verified', pending: 'Waiting', 'not-needed': 'Not needed' };
+    return `<details class="proof-history"><summary>Earlier ${isBalance ? 'balance ' : ''}proofs (${proofs.length})</summary><ul>${proofs.slice().reverse().map(proof => `<li>
+        <button type="button" class="proof-thumb" onclick="viewPaymentProof('${escapeProductionHtml(proof.url)}')" aria-label="View proof ${proof.version}"><img src="${escapeProductionHtml(proof.url)}" alt="Payment proof ${proof.version}" loading="lazy"></button>
+        <div><strong>Proof ${proof.version} · ${escapeProductionHtml(labels[proof.status] || proof.status)}</strong>${proof.uploadedAt ? `<small>${escapeProductionHtml(formatProductionTimestamp(proof.uploadedAt))}</small>` : ''}${proof.reason ? `<small>${customerView ? 'Reason' : 'Rejected because'}: ${escapeProductionHtml(proof.reason)}</small>` : ''}</div>
+    </li>`).join('')}</ul></details>`;
+}
+
+function buildPaymentLedgerHtml(order) {
+    const payments = Array.isArray(order.payments) ? order.payments : [];
+    if (!payments.length) return '<p class="payment-empty">No payments recorded yet.</p>';
+    const methodLabels = { cash: 'Cash', gcash: 'GCash', 'bank-transfer': 'Bank transfer' };
+    const typeLabels = { downpayment: 'Downpayment', balance: 'Balance', full: 'Full payment' };
+    return `<div class="table-scroll"><table class="data-table compact payment-ledger"><thead><tr><th>Date</th><th>Type</th><th>Method</th><th class="cell-money">Amount</th><th>Reference</th></tr></thead><tbody>${payments.map(payment => `<tr>
+        <td class="cell-nowrap">${escapeProductionHtml(payment.receivedAt ? new Date(payment.receivedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—')}</td>
+        <td>${escapeProductionHtml(typeLabels[payment.type] || payment.type || 'Payment')}${payment.note ? `<small>${escapeProductionHtml(payment.note)}</small>` : ''}</td>
+        <td>${escapeProductionHtml(methodLabels[payment.method] || payment.method || '—')}</td>
+        <td class="cell-money">${pesoText(payment.amount)}</td>
+        <td>${escapeProductionHtml(payment.reference || '—')}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+function buildAdminPaymentPanel(order) {
+    const id = Number(order.id) || 0;
+    const summary = getOrderPaymentSummary(order);
+    const method = normalizePaymentMethod(order.paymentMethod);
+    const isGcash = method === 'gcash';
+    const proof = getOrderMediaSource(order, 'gcashPaymentProof');
+    const stage = getOrderProductionStatus(order);
+    const canVerify = order.paymentStatus !== 'verified' && ['order-placed', 'payment-verification'].includes(stage)
+        && (!isGcash || order.paymentStatus === 'downpayment-received');
+    const canReject = isGcash && order.paymentStatus === 'downpayment-received' && ['order-placed', 'payment-verification'].includes(stage);
+    const canRecord = order.paymentStatus === 'verified' && summary.balance > 0 && summary.standing !== 'cancelled';
+    const canReviewBalance = getProofToReview(order) === 'balance';
+    const balanceProof = order.balanceProofUrl || '';
+    const hasBalanceProofs = Array.isArray(order.balanceProofs) && order.balanceProofs.length > 0;
+    const balanceProofStatus = {
+        pending: ['downpayment-received', 'Waiting for your review'],
+        verified: ['verified', 'Verified'],
+        rejected: ['rejected', `Rejected: ${order.balanceProofRejectionReason || ''}`],
+        'not-needed': ['awaiting-proof', 'Not needed: the balance was paid another way']
+    }[order.balanceProofStatus] || ['awaiting-proof', ''];
+    const today = new Date().toISOString().slice(0, 10);
+    const proofStatus = {
+        'downpayment-received': 'Waiting for your review',
+        verified: 'Verified',
+        rejected: `Rejected: ${order.paymentRejectionReason || ''}`,
+        'awaiting-proof': 'Not uploaded yet'
+    }[order.paymentStatus] || '';
+
+    return `<section class="payment-panel" aria-labelledby="paymentPanelTitle-${id}">
+        <div class="payment-panel-head"><h3 id="paymentPanelTitle-${id}">Payment</h3>${paymentBadgeHtml(summary.standing, summary.label)}</div>
+        <div class="payment-figures">
+            <div><span>Order total</span><strong>${pesoText(summary.total)}</strong></div>
+            <div><span>Downpayment (50%)</span><strong>${pesoText(summary.downpayment)}</strong></div>
+            <div><span>Paid</span><strong class="amount-paid">${pesoText(summary.amountPaid)}</strong></div>
+            <div><span>Balance</span><strong class="${summary.balance > 0 ? 'amount-due' : 'amount-paid'}">${pesoText(summary.balance)}</strong></div>
+        </div>
+        <p class="payment-meta">Method: <strong>${isGcash ? 'GCash downpayment' : 'Pay at the shop (pickup)'}</strong></p>
+        ${summary.assumed ? '<p class="payment-note">This order was saved before payment amounts were recorded, so the paid amount is estimated from its status.</p>' : ''}
+        ${isGcash ? `<div class="payment-proof-current">
+            <div class="payment-proof-label"><strong>Downpayment proof${order.paymentProofVersion ? ` (upload ${order.paymentProofVersion})` : ''}</strong><small class="proof-status proof-${escapeProductionHtml(order.paymentStatus || 'none')}">${escapeProductionHtml(proofStatus)}</small></div>
+            ${proof ? `<button type="button" class="proof-preview" onclick="viewPaymentProof('${escapeProductionHtml(proof)}')" aria-label="Open payment proof"><img src="${escapeProductionHtml(proof)}" alt="Payment proof for order #${id}"></button>` : '<p class="payment-empty">The customer has not uploaded a proof yet.</p>'}
+            ${buildProofHistoryHtml(order)}
+        </div>` : ''}
+        ${canVerify ? `<form id="verifyPaymentForm-${id}" class="payment-form" onsubmit="event.preventDefault(); verifyAdminOrderPayment(${id})">
+            <h4>${isGcash ? 'Approve this proof' : 'Record the downpayment received'}</h4>
+            <p class="payment-checklist">Check that the reference number is in the shop's GCash history, the amount matches, and it was sent to the shop's account.</p>
+            <div class="form-grid-3">
+                <label>Amount received (PHP)<input id="verifyAmount-${id}" type="number" min="0.01" step="0.01" value="${summary.downpaymentDue > 0 ? summary.downpaymentDue.toFixed(2) : summary.balance.toFixed(2)}" required></label>
+                <label>Reference no.<input id="verifyReference-${id}" type="text" maxlength="80" placeholder="${isGcash ? 'GCash reference' : 'Optional'}"></label>
+                <label>Note<input id="verifyNote-${id}" type="text" maxlength="500" placeholder="Optional"></label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-small">${isGcash ? 'Approve Payment' : 'Record Downpayment'}</button>
+        </form>` : ''}
+        ${canReject ? `<form id="rejectPaymentForm-${id}" class="payment-form payment-form-reject" onsubmit="event.preventDefault(); rejectAdminOrderPayment(${id})">
+            <h4>Reject this proof</h4>
+            <div class="form-grid-2">
+                <label>Reason<select id="rejectReason-${id}" required><option value="">Choose a reason</option>${PROOF_REJECTION_REASONS.map(reason => `<option value="${escapeProductionHtml(reason)}">${escapeProductionHtml(reason === 'Other' ? 'Other (write below)' : reason)}</option>`).join('')}</select></label>
+                <label>Note to customer<input id="rejectNote-${id}" type="text" maxlength="500" placeholder="Optional details"></label>
+            </div>
+            <button type="submit" class="btn btn-danger btn-small">Reject Proof</button>
+        </form>` : ''}
+        ${hasBalanceProofs ? `<div class="payment-proof-current">
+            <div class="payment-proof-label"><strong>Balance proof${order.balanceProofVersion ? ` (upload ${order.balanceProofVersion})` : ''}</strong><small class="proof-status proof-${balanceProofStatus[0]}">${escapeProductionHtml(balanceProofStatus[1])}</small></div>
+            ${balanceProof ? `<button type="button" class="proof-preview" onclick="viewPaymentProof('${escapeProductionHtml(balanceProof)}')" aria-label="Open balance payment proof"><img src="${escapeProductionHtml(balanceProof)}" alt="Balance payment proof for order #${id}"></button>` : ''}
+            ${buildProofHistoryHtml(order, false, 'balance')}
+        </div>` : ''}
+        ${canReviewBalance ? `<form id="verifyBalanceProofForm-${id}" class="payment-form" onsubmit="event.preventDefault(); verifyAdminBalanceProof(${id})">
+            <h4>Approve the balance proof</h4>
+            <p class="payment-checklist">Check that the reference number is in the shop's GCash history, the amount matches, and it was sent to the shop's account.</p>
+            <div class="form-grid-3">
+                <label>Amount received (PHP)<input id="balanceProofAmount-${id}" type="number" min="0.01" max="${summary.balance.toFixed(2)}" step="0.01" value="${summary.balance.toFixed(2)}" required></label>
+                <label>Reference no.<input id="balanceProofReference-${id}" type="text" maxlength="80" placeholder="GCash reference"></label>
+                <label>Note<input id="balanceProofNote-${id}" type="text" maxlength="500" placeholder="Optional"></label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-small">Approve Balance Payment</button>
+        </form>
+        <form id="rejectBalanceProofForm-${id}" class="payment-form payment-form-reject" onsubmit="event.preventDefault(); rejectAdminBalanceProof(${id})">
+            <h4>Reject the balance proof</h4>
+            <div class="form-grid-2">
+                <label>Reason<select id="rejectBalanceReason-${id}" required><option value="">Choose a reason</option>${PROOF_REJECTION_REASONS.map(reason => `<option value="${escapeProductionHtml(reason)}">${escapeProductionHtml(reason === 'Other' ? 'Other (write below)' : reason)}</option>`).join('')}</select></label>
+                <label>Note to customer<input id="rejectBalanceNote-${id}" type="text" maxlength="500" placeholder="Optional details"></label>
+            </div>
+            <button type="submit" class="btn btn-danger btn-small">Reject Proof</button>
+        </form>` : ''}
+        ${canRecord ? `<form id="balancePaymentForm-${id}" class="payment-form" onsubmit="event.preventDefault(); recordAdminBalancePayment(${id})">
+            <h4>${canReviewBalance ? 'Or record a payment received another way' : 'Record balance payment'}</h4>
+            <div class="form-grid-2">
+                <label>Amount received (PHP)<input id="balanceAmount-${id}" type="number" min="0.01" max="${summary.balance.toFixed(2)}" step="0.01" value="${summary.balance.toFixed(2)}" required></label>
+                <label>Method<select id="balanceMethod-${id}"><option value="cash">Cash</option><option value="gcash">GCash</option><option value="bank-transfer">Bank transfer</option></select></label>
+                <label>Reference no.<input id="balanceReference-${id}" type="text" maxlength="80" placeholder="Needed for GCash or bank"></label>
+                <label>Note<input id="balanceNote-${id}" type="text" maxlength="500" placeholder="e.g., paid at pickup on ${today}"></label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-small">Record Payment</button>
+        </form>` : ''}
+        <h4>Payments received</h4>
+        ${buildPaymentLedgerHtml(order)}
+    </section>`;
+}
+
 function viewOrderDetails(orderStr) {
     try {
         let order = orderStr;
         if (typeof orderStr === 'string') {
+            let parsed = null;
             try {
-                order = JSON.parse(decodeURIComponent(orderStr));
+                parsed = JSON.parse(decodeURIComponent(orderStr));
             } catch (error) {
-                order = appData.orders.find(savedOrder => String(savedOrder.id) === orderStr);
+                parsed = null;
             }
+            order = parsed && typeof parsed === 'object' ? parsed : findLoadedOrder(orderStr);
         } else if (typeof orderStr === 'number') {
-            order = appData.orders.find(savedOrder => String(savedOrder.id) === String(orderStr));
+            order = findLoadedOrder(orderStr);
         }
 
         if (!order) throw new Error('Order not found');
+        openOrderDetailsId = order.id;
+        openOrderDetailsSignature = orderDetailsSignature(order);
+        rememberOpenAdminOrder(order.id);
         
         // Build the order details HTML
         let itemsHtml = '';
@@ -6443,7 +7275,7 @@ function viewOrderDetails(orderStr) {
             : '';
         const paymentMethod = normalizePaymentMethod(order.paymentMethod);
         const paymentProof = getOrderMediaSource(order, 'gcashPaymentProof');
-        const paymentHtml = `<div class="admin-order-customer-info"><h3>Payment</h3><div class="admin-order-customer-field"><strong>Method:</strong> ${paymentMethod.toUpperCase()}</div><div class="admin-order-customer-field"><strong>Status:</strong> ${String(order.paymentStatus || 'pending').replace('-', ' ')}</div>${order.paymentRejectionReason ? `<div class="admin-order-customer-field"><strong>Rejection reason:</strong> ${escapeDetailText(order.paymentRejectionReason)}</div>` : ''}${order.gcashDownpaymentAmount ? `<div class="admin-order-customer-field"><strong>Downpayment:</strong> ₱${Number(order.gcashDownpaymentAmount).toFixed(2)}</div>` : ''}${paymentMethod === 'gcash' ? paymentProof ? `<div class="admin-order-customer-field"><strong>Proof:</strong> Uploaded<br><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="GCash payment proof for order #${order.id}" style="max-width:240px; max-height:180px; object-fit:contain; margin-top:8px; border:1px solid #4caf50; border-radius:4px;"></a></div>` : '<div class="admin-order-customer-field">Payment proof not uploaded yet</div>' : ''}</div>`;
+        const paymentHtml = appData.currentRole === 'admin' ? buildAdminPaymentPanel(order) : `<div class="admin-order-customer-info"><h3>Payment</h3><div class="admin-order-customer-field"><strong>Method:</strong> ${paymentMethod.toUpperCase()}</div><div class="admin-order-customer-field"><strong>Status:</strong> ${String(order.paymentStatus || 'pending').replace('-', ' ')}</div>${order.paymentRejectionReason ? `<div class="admin-order-customer-field"><strong>Rejection reason:</strong> ${escapeDetailText(order.paymentRejectionReason)}</div>` : ''}${order.gcashDownpaymentAmount ? `<div class="admin-order-customer-field"><strong>Downpayment:</strong> ₱${Number(order.gcashDownpaymentAmount).toFixed(2)}</div>` : ''}${paymentMethod === 'gcash' ? paymentProof ? `<div class="admin-order-customer-field"><strong>Proof:</strong> Uploaded<br><a href="${paymentProof}" target="_blank" rel="noopener"><img src="${paymentProof}" alt="GCash payment proof for order #${order.id}" style="max-width:240px; max-height:180px; object-fit:contain; margin-top:8px; border:1px solid #4caf50; border-radius:4px;"></a></div>` : '<div class="admin-order-customer-field">Payment proof not uploaded yet</div>' : ''}</div>`;
         const currentProductionStatus = getOrderProductionStatus(order);
         const stageOptions = [...window.KingPinProductionTracking.PRODUCTION_STAGES, { id: 'on-hold', label: 'On Hold' }, { id: 'cancelled', label: 'Cancelled' }]
             .map(stage => `<option value="${stage.id}" ${stage.id === currentProductionStatus ? 'selected' : ''}>${escapeDetailText(stage.label)}</option>`).join('');
@@ -6458,58 +7290,56 @@ function viewOrderDetails(orderStr) {
                         <button type="button" class="btn btn-primary btn-small" onclick="submitAdminProductionStage(${Number(order.id) || 0})">Update Production Status</button>
                         <button type="button" class="btn btn-secondary btn-small" onclick="saveAdminProductionDetails(${Number(order.id) || 0})">Save ETA / Remarks</button>
                         <button type="button" class="btn btn-secondary btn-small" onclick="checkOrderEmailDelivery(${Number(order.id) || 0})">Check Email Status</button>
-                        ${order.paymentStatus === 'verified' || order.paymentStatus === 'rejected' ? '' : `<button type="button" class="btn btn-secondary btn-small" onclick="verifyAdminOrderPayment(${Number(order.id) || 0})">Verify Payment</button>`}
-                        ${paymentMethod === 'gcash' && order.paymentStatus === 'downpayment-received' ? `<button type="button" class="btn btn-secondary btn-small" onclick="rejectAdminOrderPayment(${Number(order.id) || 0})">Reject Payment</button>` : ''}
                     </div>
                     <label class="production-admin-remarks">Upload final design<input id="finalDesignFile-${Number(order.id) || 0}" type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" onchange="uploadFinalOrderDesign(${Number(order.id) || 0}, this)"></label>
                 </div>
                 <p id="emailDeliveryStatus-${Number(order.id) || 0}" role="status"></p>
                 <p><strong>Design approval:</strong> ${escapeDetailText(String(order.designApproval?.status || 'not-requested').replace(/-/g, ' '))}</p>
-            </section>${buildProductionTrackingHtml(order)}`
+            </section>`
             : '';
-        
+        const statusLabel = getProductionStageLabel(currentProductionStatus);
+
+        // Two columns on wide screens: who and what on the left, payment and
+        // production work on the right. Stacks into one column on phones.
         const contentHtml = `
-            <div style="padding: 15px 0;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
-                    <div>
-                        <strong>Order ID:</strong> #${order.id}
+            <div class="order-details-layout">
+                <div class="order-details-summary">
+                    <div><span>Order</span><strong>#${escapeDetailText(order.id)}</strong></div>
+                    <div><span>Placed</span><strong>${escapeDetailText(formatOrderDate(order))}</strong></div>
+                    <div><span>Stage</span><strong>${escapeDetailText(statusLabel)}</strong></div>
+                    <div><span>Total</span><strong>${pesoText(order.totalAmount)}</strong></div>
+                </div>
+                <div class="order-details-grid">
+                    <div class="order-details-main">
+                        <div class="admin-order-customer-info">
+                            <h3>Customer Information</h3>
+                            <div class="admin-order-customer-grid">
+                                <div class="admin-order-customer-field"><span>Name</span><strong>${escapeDetailText(order.customerName || 'N/A')}</strong></div>
+                                <div class="admin-order-customer-field"><span>Email</span><strong>${escapeDetailText(order.customerEmail || 'N/A')}</strong></div>
+                                <div class="admin-order-customer-field"><span>Phone</span><strong>${escapeDetailText(order.customerPhone || 'N/A')}</strong></div>
+                                <div class="admin-order-customer-field admin-order-customer-address"><span>Delivery address</span><strong>${escapeDetailText(order.customerAddress || 'N/A')}</strong></div>
+                            </div>
+                        </div>
+                        ${teamOrderHtml}
+                        <div class="order-details-items">
+                            <h3>Order Items</h3>
+                            ${itemsHtml}
+                        </div>
+                        ${qrCodeHtml}
                     </div>
-                    <div>
-                        <strong>Date:</strong> ${order.date}
-                    </div>
-                    <div>
-                        <strong>Status:</strong> <span class="order-status ${order.status}">${order.status.toUpperCase().replace('-', ' ')}</span>
-                    </div>
-                    <div>
-                        <strong>Total:</strong> ₱${order.totalAmount.toFixed(2)}
+                    <div class="order-details-side">
+                        ${paymentHtml}
+                        ${adminProductionHtml}
                     </div>
                 </div>
-                
-                <div class="admin-order-customer-info">
-                    <h3>Customer Information</h3>
-                    <div class="admin-order-customer-grid">
-                        <div class="admin-order-customer-field"><span>Name</span><strong>${escapeDetailText(order.customerName || 'N/A')}</strong></div>
-                        <div class="admin-order-customer-field"><span>Email</span><strong>${escapeDetailText(order.customerEmail || 'N/A')}</strong></div>
-                        <div class="admin-order-customer-field"><span>Phone</span><strong>${escapeDetailText(order.customerPhone || 'N/A')}</strong></div>
-                        <div class="admin-order-customer-field admin-order-customer-address"><span>Delivery address</span><strong>${escapeDetailText(order.customerAddress || 'N/A')}</strong></div>
-                    </div>
-                </div>
-
-                ${teamOrderHtml}
-                ${adminProductionHtml}
-                
-                <div>
-                    <h3>Order Items</h3>
-                    ${itemsHtml}
-                </div>
-
-                ${paymentHtml}
-                ${qrCodeHtml}
+                ${appData.currentRole === 'admin' ? buildProductionTrackingHtml(order) : ''}
             </div>
         `;
-        
+
         document.getElementById('orderDetailsContent').innerHTML = contentHtml;
-        document.getElementById('orderDetailsModal').style.display = 'block';
+        const modal = document.getElementById('orderDetailsModal');
+        modal.classList.toggle('order-details-wide', appData.currentRole === 'admin');
+        modal.style.display = 'block';
     } catch (e) {
         console.error('Error viewing order details:', e);
         showStatusUpdateToast('Error loading order details');
@@ -6518,6 +7348,9 @@ function viewOrderDetails(orderStr) {
 
 function closeOrderDetailsModal() {
     document.getElementById('orderDetailsModal').style.display = 'none';
+    document.getElementById('orderDetailsModal').classList.remove('order-details-wide');
+    openOrderDetailsId = null;
+    rememberOpenAdminOrder(null);
 }
 
 // Close modal when clicking outside
@@ -6716,8 +7549,7 @@ function applyRecentCustomerEdits(customers) {
 // Load the registered customer list from the server.
 async function loadCustomersTable() {
     const list = document.getElementById('customersList');
-    list.innerHTML = '<tr><td colspan="5">Loading customers...</td></tr>';
-    appData.customers = [];
+    if (!appData.customers?.length) list.innerHTML = `<tr><td colspan="${CUSTOMER_TABLE_COLUMNS}" class="table-empty">Loading customers...</td></tr>`;
     try {
         const response = await fetch('/.netlify/functions/customers', { headers: getAuthenticatedHeaders(), cache: 'no-store' });
         const result = await response.json();
@@ -6728,28 +7560,101 @@ async function loadCustomersTable() {
         list.replaceChildren();
         const row = list.insertRow();
         const cell = row.insertCell();
-        cell.colSpan = 5;
+        cell.colSpan = CUSTOMER_TABLE_COLUMNS;
         cell.textContent = error.message || 'Unable to load customers.';
     }
+}
+
+const CUSTOMER_TABLE_COLUMNS = 7;
+const CUSTOMER_STANDING_FILTERS = [
+    ['all', 'All customers'],
+    ['downpayment-unpaid', 'Downpayment unpaid'],
+    ['with-balance', 'With balance'],
+    ['fully-paid', 'Fully paid'],
+    ['no-orders', 'No orders yet']
+];
+
+function getCustomerStandingFilter() {
+    const saved = sessionStorage.getItem('kingpinCustomerStanding') || 'all';
+    return CUSTOMER_STANDING_FILTERS.some(([value]) => value === saved) ? saved : 'all';
+}
+
+function setCustomerStandingFilter(value) {
+    safeStorageSet(sessionStorage, 'kingpinCustomerStanding', value);
+    resetPager('customers');
+    renderCustomersTable();
+}
+
+function onCustomerSearchChanged() {
+    resetPager('customers');
+    renderCustomersTable();
+}
+
+function getCustomerPayment(customer) {
+    return customer.payment || { totalAmount: 0, amountPaid: 0, balance: 0, standing: 'no-orders', label: 'No orders yet', orders: [] };
+}
+
+// Summary boxes and filter buttons above the customer table.
+function renderCustomerPaymentOverview(customers) {
+    const active = customers.filter(customer => customer.status !== 'old-email');
+    const count = standing => active.filter(customer => getCustomerPayment(customer).standing === standing).length;
+    const receivable = active.reduce((sum, customer) => sum + (Number(getCustomerPayment(customer).balance) || 0), 0);
+    const setText = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
+    setText('customerReceivableTotal', pesoText(receivable));
+    setText('customerBalanceCount', count('with-balance'));
+    setText('customerDpUnpaidCount', count('downpayment-unpaid'));
+    setText('customerFullyPaidCount', count('fully-paid'));
+
+    const filterBar = document.getElementById('customerStandingFilters');
+    if (!filterBar) return;
+    const current = getCustomerStandingFilter();
+    filterBar.replaceChildren(...CUSTOMER_STANDING_FILTERS.map(([value, label]) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `filter-chip${value === current ? ' is-active' : ''}`;
+        button.setAttribute('aria-pressed', String(value === current));
+        button.textContent = `${label} (${value === 'all' ? active.length : count(value)})`;
+        button.addEventListener('click', () => setCustomerStandingFilter(value));
+        return button;
+    }));
 }
 
 function renderCustomersTable() {
     const list = document.getElementById('customersList');
     const query = document.getElementById('customerSearch').value.trim().toLowerCase();
-    const customers = appData.customers.filter(customer => String(customer.name || '').toLowerCase().includes(query));
+    const standing = getCustomerStandingFilter();
+    renderCustomerPaymentOverview(appData.customers || []);
+    const customers = appData.customers
+        .filter(customer => `${customer.name || ''} ${customer.email || ''}`.toLowerCase().includes(query))
+        .filter(customer => standing === 'all' || (customer.status !== 'old-email' && getCustomerPayment(customer).standing === standing));
+    const pageInfo = paginateItems('customers', customers, 25);
+    renderTablePager('customersPager', 'customers', pageInfo, renderCustomersTable, 'customers');
     list.replaceChildren();
     if (!customers.length) {
         const row = list.insertRow();
         const cell = row.insertCell();
-        cell.colSpan = 5;
-        cell.textContent = query ? 'No matching customers.' : 'No registered customers yet.';
+        cell.colSpan = CUSTOMER_TABLE_COLUMNS;
+        cell.className = 'table-empty';
+        cell.textContent = query || standing !== 'all' ? 'No customers match this search or filter.' : 'No registered customers yet.';
         return;
     }
-    customers.forEach(customer => {
+    pageInfo.items.forEach(customer => {
         const row = list.insertRow();
-        [customer.name, customer.email, customer.phone || 'Not provided', customer.totalOrders].forEach(value => {
-            row.insertCell().textContent = String(value ?? '');
-        });
+        const payment = getCustomerPayment(customer);
+        const addCell = (value, className = '', label = '') => {
+            const cell = row.insertCell();
+            cell.textContent = String(value ?? '');
+            if (className) cell.className = className;
+            if (label) cell.dataset.label = label;
+            return cell;
+        };
+        // The first cell holds only the name, so searches and tests read it as is.
+        addCell(customer.name, 'customer-name-cell', 'Name');
+        const contactCell = addCell(customer.email, 'customer-contact-cell', 'Contact');
+        contactCell.title = customer.email || '';
+        const phone = document.createElement('small');
+        phone.textContent = customer.phone || 'No phone';
+        contactCell.appendChild(phone);
         if (customer.status === 'old-email') {
             // Old email kept after the customer changed email: read-only.
             const note = document.createElement('div');
@@ -6758,20 +7663,68 @@ function renderCustomersTable() {
             row.cells[1].appendChild(note);
             row.classList.add('customer-row-old');
             const label = row.insertCell();
+            label.colSpan = CUSTOMER_TABLE_COLUMNS - 2;
             label.className = 'customer-old-email-label';
             label.textContent = 'Old record';
             return;
         }
+        const totalCell = addCell(pesoText(payment.totalAmount), 'cell-money', 'Total');
+        const orderCount = document.createElement('small');
+        orderCount.textContent = `${customer.totalOrders} order${customer.totalOrders === 1 ? '' : 's'}`;
+        totalCell.appendChild(orderCount);
+        addCell(pesoText(payment.amountPaid), 'cell-money amount-paid', 'Paid');
+        addCell(pesoText(payment.balance), `cell-money ${payment.balance > 0 ? 'amount-due' : ''}`, 'Balance');
+        const statusCell = row.insertCell();
+        statusCell.dataset.label = 'Payment';
+        statusCell.innerHTML = paymentBadgeHtml(payment.standing, payment.label, true);
+        if (payment.balance > 0) row.classList.add('row-has-balance');
+
         const actions = row.insertCell();
         actions.className = 'customer-row-actions';
+        actions.dataset.label = 'Actions';
         actions.append(
-            makeCustomerRowButton('Edit', 'btn-edit', `Edit name and Gmail of ${customer.name}`, () => startInlineCustomerEdit(row, customer)),
-            makeCustomerRowButton('More', 'btn-secondary customer-more-btn', `More options for ${customer.name}`, () => openCustomerEditModal(customer.accountEmail))
+            makeCustomerRowButton('Orders', 'btn-secondary customer-more-btn', `Show the orders and balances of ${customer.name}`, () => toggleCustomerOrders(row, customer)),
+            makeCustomerRowButton('Edit', 'btn-edit', `Edit or delete ${customer.name}`, () => openCustomerEditModal(customer.accountEmail))
         );
         if (customer.adminEdited) {
             actions.append(makeCustomerRowButton('Reset', 'btn-secondary customer-more-btn', `Reset ${customer.name} to the original name and Gmail`, () => resetCustomerAdminEdit(customer)));
         }
     });
+}
+
+// Shows each order of one customer under their row: total, paid and balance.
+function toggleCustomerOrders(row, customer) {
+    const next = row.nextElementSibling;
+    if (next?.classList.contains('customer-orders-row')) {
+        next.remove();
+        return;
+    }
+    const payment = getCustomerPayment(customer);
+    const detailRow = document.createElement('tr');
+    detailRow.className = 'customer-orders-row';
+    const cell = detailRow.insertCell();
+    cell.colSpan = CUSTOMER_TABLE_COLUMNS;
+    cell.innerHTML = payment.orders.length
+        ? `<table class="data-table compact"><thead><tr><th>Order</th><th>Date</th><th>Stage</th><th class="cell-money">Total</th><th class="cell-money">Paid</th><th class="cell-money">Balance</th><th>Payment</th><th></th></tr></thead><tbody>${payment.orders.map(order => `<tr>
+            <td class="cell-nowrap">#${escapeProductionHtml(order.id)}</td>
+            <td class="cell-nowrap">${escapeProductionHtml(formatOrderDate(order))}</td>
+            <td>${escapeProductionHtml(getProductionStageLabel(window.KingPinProductionTracking.normalizeProductionStatus({ productionStatus: order.status })))}</td>
+            <td class="cell-money">${pesoText(order.total)}</td>
+            <td class="cell-money">${pesoText(order.amountPaid)}</td>
+            <td class="cell-money ${order.balance > 0 ? 'amount-due' : ''}">${pesoText(order.balance)}</td>
+            <td>${paymentBadgeHtml(order.standing, order.label, true)}${order.assumed ? '<small>Estimated (older order)</small>' : ''}</td>
+            <td><button type="button" class="btn btn-small" onclick="openCustomerOrderFromList(${Number(order.id) || 0})">Open</button></td>
+        </tr>`).join('')}</tbody></table>`
+        : '<p class="payment-empty">This customer has no orders yet.</p>';
+    row.after(detailRow);
+}
+
+async function openCustomerOrderFromList(orderId) {
+    if (!findLoadedOrder(orderId)) {
+        await refreshReportOrders();
+        if (!findLoadedOrder(orderId)) await loadAdminOrders();
+    }
+    viewOrderDetails(orderId);
 }
 
 function makeCustomerRowButton(text, className, label, onClick) {
@@ -6782,65 +7735,6 @@ function makeCustomerRowButton(text, className, label, onClick) {
     button.setAttribute('aria-label', label);
     button.addEventListener('click', onClick);
     return button;
-}
-
-// Edit name and Gmail directly in the customer list row. These are labels for
-// the admin only; the customer's account, login and orders are not changed.
-function startInlineCustomerEdit(row, customer) {
-    const [nameCell, emailCell, , , actionsCell] = row.cells;
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.className = 'search-input customer-inline-input';
-    nameInput.value = customer.name || '';
-    nameInput.maxLength = 120;
-    nameInput.setAttribute('aria-label', 'Customer name');
-    const emailInput = document.createElement('input');
-    emailInput.type = 'email';
-    emailInput.className = 'search-input customer-inline-input';
-    emailInput.value = customer.email || '';
-    emailInput.setAttribute('aria-label', 'Customer Gmail');
-    const note = document.createElement('div');
-    note.className = 'customer-inline-note';
-    note.textContent = "Only changes what admin sees here. The customer's account and login stay the same.";
-    nameCell.replaceChildren(nameInput);
-    emailCell.replaceChildren(emailInput, note);
-
-    const status = document.createElement('div');
-    status.className = 'customer-inline-status';
-    status.setAttribute('role', 'status');
-    const save = async () => {
-        const fullName = nameInput.value.trim();
-        const newEmail = emailInput.value.trim().toLowerCase();
-        if (!fullName) { status.textContent = 'Enter a name.'; nameInput.focus(); return; }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) { status.textContent = 'Enter a valid Gmail.'; emailInput.focus(); return; }
-        if (fullName === customer.name && newEmail === customer.email) { renderCustomersTable(); return; }
-        actionsCell.querySelectorAll('button').forEach(button => { button.disabled = true; });
-        status.textContent = 'Saving...';
-        try {
-            // Phone and address are sent as shown so a cached older label
-            // on the server cannot overwrite them.
-            const result = await sendCustomerAdminRequest({ action: 'update', email: customer.accountEmail, newEmail, fullName, phone: customer.phone || '', address: customer.address || '' });
-            rememberCustomerEdit(customer.accountEmail, result.customer);
-            showStatusUpdateToast("Saved in the admin list. The customer's account was not changed.");
-            await loadCustomersTable();
-        } catch (error) {
-            status.textContent = `Not saved: ${error.message}`;
-            actionsCell.querySelectorAll('button').forEach(button => { button.disabled = false; });
-        }
-    };
-    const onKey = event => {
-        if (event.key === 'Enter') { event.preventDefault(); save(); }
-        if (event.key === 'Escape') renderCustomersTable();
-    };
-    nameInput.addEventListener('keydown', onKey);
-    emailInput.addEventListener('keydown', onKey);
-    actionsCell.replaceChildren(
-        makeCustomerRowButton('Save', 'btn-edit', `Save ${customer.name}`, save),
-        makeCustomerRowButton('Cancel', 'btn-secondary customer-more-btn', 'Cancel editing', () => renderCustomersTable()),
-        status
-    );
-    nameInput.focus();
-    nameInput.select();
 }
 
 async function resetCustomerAdminEdit(customer) {
@@ -6952,144 +7846,108 @@ async function confirmCustomerDelete() {
     }
 }
 
-// Export Customers to CSV
-// Customer list as an Excel workbook: a summary of every customer, then each
-// customer's orders (products, total amount, date and status).
-async function exportCustomersToCSV() {
-    const customers = (appData.customers || []).filter(customer => customer.status !== 'old-email');
-    if (customers.length === 0) {
-        showStatusUpdateToast('No customers to export');
-        return;
+// ===== PDF REPORTS =====
+// Reports are built by the server from the saved records (netlify/functions/reports.js),
+// so the numbers in a PDF cannot be changed in the browser before it is made.
+async function downloadReportPdf(params, button) {
+    const originalLabel = button?.textContent;
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Preparing PDF...';
     }
-    showStatusUpdateToast('Preparing the customer Excel file...');
-    await refreshReportOrders();
-
-    const ordersByEmail = new Map();
-    getReportOrders().forEach(order => {
-        const email = String(order.customerEmail || '').trim().toLowerCase();
-        if (!email) return;
-        if (!ordersByEmail.has(email)) ordersByEmail.set(email, []);
-        ordersByEmail.get(email).push(order);
-    });
-
-    // Text cells use the "@" (text) format so Excel never runs them as formulas.
-    const text = value => `<td class="text">${excelEscape(value)}</td>`;
-    const money = value => `<td class="amount">${Number(value || 0).toFixed(2)}</td>`;
-    const orderDate = order => {
-        const placed = getOrderPlacedDate(order);
-        return placed ? placed.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : (order.date || '');
-    };
-    const products = order => (order.items || []).map(item => `${item.name} (x${item.quantity || 1})`).join(', ') || 'N/A';
-
-    let grandTotal = 0;
-    let grandOrders = 0;
-    const summaryRows = [];
-    const detailSections = [];
-    customers.forEach(customer => {
-        const orders = (ordersByEmail.get(String(customer.accountEmail || customer.email).toLowerCase()) || [])
-            .slice()
-            .sort((first, second) => (getOrderPlacedDate(second) || 0) - (getOrderPlacedDate(first) || 0));
-        const total = orders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
-        grandTotal += total;
-        grandOrders += orders.length;
-        const lastOrder = orders[0] ? orderDate(orders[0]) : 'No orders yet';
-        summaryRows.push(`<tr>${text(customer.name)}${text(customer.email)}${text(customer.phone || 'Not provided')}<td>${orders.length}</td>${money(total)}${text(lastOrder)}</tr>`);
-
-        const orderRows = orders.map(order => `<tr>${text(`#${order.id}`)}${text(orderDate(order))}${text(products(order))}${money(order.totalAmount)}${text(String(order.status || 'pending').toUpperCase())}</tr>`).join('');
-        detailSections.push(`<tr><td colspan="5" class="customer-head">${excelEscape(customer.name)} &nbsp;·&nbsp; ${excelEscape(customer.email)}${customer.phone ? ` &nbsp;·&nbsp; ${excelEscape(customer.phone)}` : ''}</td></tr>`
-            + (orderRows || '<tr><td colspan="5" class="muted">No orders yet.</td></tr>')
-            + (orders.length ? `<tr class="subtotal"><td colspan="3" class="text">Total for ${excelEscape(customer.name)} (${orders.length} order${orders.length === 1 ? '' : 's'})</td>${money(total)}<td></td></tr>` : '')
-            + '<tr><td colspan="5" class="spacer"></td></tr>');
-    });
-
-    const workbook = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-body{font-family:Arial,sans-serif;background:#fff;color:#222}h1{color:#1f4e78}h2{color:#444}
-table{border-collapse:collapse;width:100%}
-th{background:#1f4e78;color:#fff;font-weight:bold}
-th,td{border:1px solid #b7c9d6;padding:7px;text-align:left;vertical-align:top}
-td.text{mso-number-format:"\\@"}td.amount{mso-number-format:"#,##0.00";text-align:right}
-td.customer-head{background:#dbe7f3;font-weight:bold}
-tr.subtotal td{background:#f3f6f9;font-weight:bold}
-td.muted{color:#777;font-style:italic}td.spacer{border:none;height:8px}
-</style></head><body>
-<h1>KINGPIN CLOTHING MANAGEMENT SYSTEM</h1>
-<h2>Customer Orders Report</h2>
-<p><strong>Generated:</strong> ${excelEscape(new Date().toLocaleString('en-PH'))}</p>
-<p><strong>Customers:</strong> ${customers.length} &nbsp; <strong>Orders:</strong> ${grandOrders} &nbsp; <strong>Total Amount:</strong> ${grandTotal.toFixed(2)}</p>
-<h2>Customer Summary</h2>
-<table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Total Orders</th><th>Total Amount</th><th>Last Order</th></tr>${summaryRows.join('')}</table>
-<h2>Orders per Customer</h2>
-<table><tr><th>Order #</th><th>Date</th><th>Products</th><th>Total Amount</th><th>Status</th></tr>${detailSections.join('')}</table>
-</body></html>`;
-
-    const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `KINGPIN-Customer-Orders-${new Date().toISOString().slice(0, 10)}.xls`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    showStatusUpdateToast('Customer Excel file downloaded.');
+    try {
+        const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
+        const response = await fetch(`/.netlify/functions/reports?${query}`, { headers: getAuthenticatedHeaders(), cache: 'no-store' });
+        if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            throw new Error(result.error || `Report service error (${response.status}).`);
+        }
+        const reportNo = response.headers.get('X-Report-Number') || '';
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const fileName = /filename="([^"]+)"/.exec(disposition)?.[1] || `KINGPIN-Report-${reportNo || Date.now()}.pdf`;
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 15000);
+        showStatusUpdateToast(`PDF report ${reportNo} downloaded.`);
+        return reportNo;
+    } catch (error) {
+        showStatusUpdateToast(`The PDF report was not created: ${error.message}`);
+        return '';
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = originalLabel;
+        }
+    }
 }
 
-// Load History Table
+// Customer list as a PDF: the same customers the list shows (search and
+// payment filter), with each customer's orders, paid amounts and balances.
+function downloadCustomersReportPdf(button) {
+    return downloadReportPdf({
+        type: 'customers',
+        standing: getCustomerStandingFilter(),
+        search: document.getElementById('customerSearch')?.value.trim() || ''
+    }, button);
+}
+
+// Load History Table: completed and cancelled orders, newest first.
+function getFilteredHistoryOrders() {
+    const selectedYear = document.getElementById('yearSelector')?.value || '';
+    const selectedMonth = document.getElementById('monthSelector')?.value || 'all';
+    const query = String(document.getElementById('historySearch')?.value || '').trim().toLowerCase();
+    return getReportOrders()
+        .filter(order => isOrderInPurchaseHistory(order) || ['completed', 'cancelled'].includes(getOrderProductionStatus(order)))
+        .filter(order => {
+            const placed = getOrderPlacedDate(order);
+            if (!placed) return !selectedYear && selectedMonth === 'all';
+            const yearMatch = !selectedYear || String(placed.getFullYear()) === selectedYear;
+            const monthMatch = selectedMonth === 'all' || String(placed.getMonth() + 1).padStart(2, '0') === selectedMonth;
+            return yearMatch && monthMatch;
+        })
+        .filter(order => !query || `${order.id} ${order.customerName || ''} ${order.customerEmail || ''}`.toLowerCase().includes(query))
+        .sort((first, second) => (Number(second.id) || 0) - (Number(first.id) || 0));
+}
+
+function onHistoryFiltersChanged() {
+    resetPager('history');
+    loadHistoryTable();
+}
+
 function loadHistoryTable() {
     const historyList = document.getElementById('historyList');
     if (!historyList) return;
-    const liveCompletedOrders = getReportOrders()
-        .filter(order => isOrderInPurchaseHistory(order))
-        .map(order => ({ ...order }));
-    const history = liveCompletedOrders;
-    
-    const selectedYear = document.getElementById('yearSelector').value;
-    const selectedMonth = document.getElementById('monthSelector').value;
-
+    const history = getFilteredHistoryOrders();
+    const pageInfo = paginateItems('history', history);
+    renderTablePager('historyPager', 'history', pageInfo, loadHistoryTable, 'orders');
     historyList.innerHTML = '';
 
-    if (history.length === 0) {
-        historyList.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No purchase history yet</td></tr>';
+    if (!history.length) {
+        const filtered = document.getElementById('yearSelector')?.value || document.getElementById('monthSelector')?.value !== 'all' || document.getElementById('historySearch')?.value;
+        historyList.innerHTML = `<tr><td colspan="7" class="table-empty">${filtered ? 'No completed or cancelled orders match these filters.' : 'No purchase history yet'}</td></tr>`;
         return;
     }
 
-    // Filter orders by year and month if selected
-    let filteredHistory = history.filter(order => {
-        const orderDate = new Date(order.date);
-        const orderYear = String(orderDate.getFullYear());
-        const orderMonth = String(orderDate.getMonth() + 1).padStart(2, '0');
-        
-        const yearMatch = !selectedYear || orderYear === selectedYear;
-        const monthMatch = selectedMonth === 'all' || orderMonth === selectedMonth;
-        
-        return yearMatch && monthMatch;
-    });
-
-    if (filteredHistory.length === 0) {
-        const yearText = selectedYear ? ` in ${selectedYear}` : '';
-        const monthText = selectedMonth !== 'all' ? ` for ${new Date(2000, parseInt(selectedMonth) - 1).toLocaleString('default', { month: 'long' })}` : '';
-        historyList.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px;">No orders${monthText}${yearText}</td></tr>`;
-        return;
-    }
-
-    filteredHistory.sort((firstOrder, secondOrder) => {
-        const idDifference = (Number(secondOrder.id) || 0) - (Number(firstOrder.id) || 0);
-        return idDifference || new Date(secondOrder.date) - new Date(firstOrder.date);
-    });
-
-    filteredHistory.forEach(order => {
+    pageInfo.items.forEach(order => {
         const orderItems = Array.isArray(order.items) ? order.items : [];
+        const status = getOrderProductionStatus(order);
+        const payment = getOrderPaymentSummary(order);
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>#${order.id}</td>
-            <td>${order.customerName}</td>
-            <td>${order.customerEmail}</td>
-            <td class="history-products-cell"></td>
-            <td>₱${order.totalAmount.toFixed(2)}</td>
-            <td><span class="order-status ${order.status}">${order.status}</span></td>
-            <td>${order.date}</td>
-            <td>${order.customerAddress}</td>
+            <td data-label="Order" class="cell-nowrap"><strong>#${escapeProductionHtml(order.id)}</strong><small>${escapeProductionHtml(formatOrderDate(order))}</small></td>
+            <td data-label="Customer"><strong>${escapeProductionHtml(order.customerName || 'N/A')}</strong><small class="cell-truncate" title="${escapeProductionHtml(order.customerEmail || '')}">${escapeProductionHtml(order.customerEmail || '')}</small></td>
+            <td data-label="Products" class="history-products-cell"></td>
+            <td data-label="Total" class="cell-money">${pesoText(order.totalAmount)}</td>
+            <td data-label="Payment">${paymentBadgeHtml(payment.standing, payment.label, true)}${payment.balance > 0 && payment.standing !== 'cancelled' ? `<small>Balance ${pesoText(payment.balance)}</small>` : ''}</td>
+            <td data-label="Status"><span class="order-status ${escapeProductionHtml(status)}">${escapeProductionHtml(getProductionStageLabel(status))}</span></td>
+            <td data-label="Actions"><button type="button" class="btn btn-small" onclick="viewOrderDetails(${Number(order.id) || 0})">Open</button></td>
         `;
 
         const productsCell = row.querySelector('.history-products-cell');
@@ -7100,7 +7958,6 @@ function loadHistoryTable() {
             const image = item.image || item.productImage || item.images?.[0] || (product ? getProductImages(product)[0] : '');
             const productEntry = document.createElement('div');
             productEntry.className = 'history-product-entry';
-
             if (image) {
                 const thumbnail = document.createElement('img');
                 thumbnail.className = 'history-product-image';
@@ -7109,7 +7966,6 @@ function loadHistoryTable() {
                 thumbnail.loading = 'lazy';
                 productEntry.appendChild(thumbnail);
             }
-
             const productName = document.createElement('span');
             productName.textContent = `${item.name} (x${item.quantity})`;
             productEntry.appendChild(productName);
@@ -7120,53 +7976,32 @@ function loadHistoryTable() {
     });
 }
 
+// The History tab needs completed orders too, so it loads the full list first.
+function openHistoryTab() {
+    loadHistoryTable();
+    refreshReportOrders().then(orders => {
+        if (orders && document.getElementById('historyTab')?.style.display === 'block') loadHistoryTable();
+    });
+}
+
 // Search History
 function setupHistorySearch() {
     const searchInput = document.getElementById('historySearch');
-    if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            const searchTerm = this.value.toLowerCase();
-            const historyList = document.getElementById('historyList');
-            const rows = historyList.querySelectorAll('tr');
-
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(searchTerm) ? '' : 'none';
-            });
-        });
+    if (searchInput && !searchInput.dataset.bound) {
+        searchInput.dataset.bound = 'true';
+        searchInput.addEventListener('input', onHistoryFiltersChanged);
     }
 }
 
-// Export History to CSV
-function exportHistoryToCSV() {
-    const history = getReportOrders().filter(order => isOrderInPurchaseHistory(order));
-
-    if (history.length === 0) {
-        showStatusUpdateToast('No history to export');
-        return;
-    }
-
-    let csv = 'Order ID,Customer Name,Email,Products,Total Amount,Status,Date,Address\n';
-
-    history.forEach(order => {
-        const itemsList = order.items.map(item => `${item.name} (x${item.quantity})`).join('; ');
-        csv += `${order.id},"${order.customerName}","${order.customerEmail}","${itemsList}",${order.totalAmount},"${order.status}","${order.date}","${order.customerAddress}"\n`;
-    });
-
-    // Create a blob and download
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-
-    link.setAttribute('href', url);
-    link.setAttribute('download', `order-history-${new Date().toLocaleDateString()}.csv`);
-    link.style.visibility = 'hidden';
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    showStatusUpdateToast('History exported successfully!');
+// History as a PDF, with the same year, month and search filters as the screen.
+function downloadHistoryReportPdf(button) {
+    const month = document.getElementById('monthSelector')?.value || 'all';
+    return downloadReportPdf({
+        type: 'history',
+        year: document.getElementById('yearSelector')?.value || '',
+        month: month === 'all' ? '' : month,
+        search: document.getElementById('historySearch')?.value.trim() || ''
+    }, button);
 }
 
 // ===== ADMIN: REPORTS & ANALYTICS =====
@@ -7621,111 +8456,50 @@ function generateStatusReport(orders) {
     });
 }
 
-function pdfEscape(value) {
-    return String(value ?? '').replace(/[^\x20-\x7E]/g, '?').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+// Sales report as a PDF for the period chosen on the Reports tab. It has the
+// same summary and order details the Excel file had.
+function downloadSalesReportPdf(button) {
+    const { start, end, period } = getReportDateRange();
+    if (period === 'custom' && (!start || !end)) {
+        showStatusUpdateToast('Choose both custom dates first.');
+        return Promise.resolve('');
+    }
+    const lastDay = end ? new Date(end.getTime() - 24 * 60 * 60 * 1000) : null;
+    return downloadReportPdf({
+        type: 'sales',
+        start: start ? getCalendarDayKey(start) : '',
+        end: lastDay ? getCalendarDayKey(lastDay) : ''
+    }, button);
 }
 
-function createSimplePdf(lines) {
-    const pageHeight = 792;
-    const linesPerPage = 50;
-    const pages = [];
-    for (let index = 0; index < lines.length; index += linesPerPage) pages.push(lines.slice(index, index + linesPerPage));
-    const objects = [];
-    const addObject = value => { objects.push(value); return objects.length; };
-    const catalogId = addObject('');
-    const pagesId = addObject('');
-    const fontId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
-    const pageIds = pages.map(pageLines => {
-        const commands = ['BT', '/F1 10 Tf', `50 ${pageHeight - 50} Td`];
-        pageLines.forEach((line, index) => {
-            if (index) commands.push('0 -14 Td');
-            commands.push(`(${pdfEscape(line).slice(0, 180)}) Tj`);
-        });
-        commands.push('ET');
-        const stream = commands.join('\n');
-        const contentId = addObject(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
-        return addObject(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 ${pageHeight}] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
-    });
-    objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
-    objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
-    let pdf = '%PDF-1.4\n';
-    const offsets = [0];
-    objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
-    const xrefOffset = pdf.length;
-    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-    offsets.slice(1).forEach(offset => { pdf += `${String(offset).padStart(10, '0')} 00000 n \n`; });
-    pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-    return new Blob([pdf], { type: 'application/pdf' });
-}
-
-function excelEscape(value) {
-    return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-}
-
-// Generate Full Report as an Excel-compatible workbook
-function generateFullReport() {
-    const allOrders = filterReportOrders(getReportOrders());
-    const soldOrders = allOrders.filter(isSoldOrder);
-
-    if (allOrders.length === 0) {
-        showStatusUpdateToast('No data to generate report');
+// Checks a printed or shared report against the saved report register.
+async function verifyReportNumber(event) {
+    event?.preventDefault();
+    const input = document.getElementById('reportVerifyNumber');
+    const output = document.getElementById('reportVerifyResult');
+    const reportNo = String(input?.value || '').trim().toUpperCase();
+    if (!output) return;
+    if (!reportNo) {
+        output.textContent = 'Enter the report number printed at the top of the PDF.';
         return;
     }
-
-    const reportDate = new Date().toISOString().slice(0, 10);
-    const totalSales = soldOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
-    const totalOrders = soldOrders.length;
-    const uniqueCustomers = new Set(soldOrders.map(order => order.customerEmail)).size;
-
-    let reportContent = `
-KINGPIN CLOTHING MANAGEMENT SYSTEM
-Sales & Performance Report
-Generated: ${reportDate}
-Period: ${getReportPeriodLabel()}
-
-=== EXECUTIVE SUMMARY ===
-Total Sales: ₱${totalSales.toFixed(2)}
-Total Orders: ${totalOrders}
-Unique Customers: ${uniqueCustomers}
-Average Order Value: ₱${totalOrders ? (totalSales / totalOrders).toFixed(2) : '0.00'}
-
-=== ORDER DETAILS ===
-    `;
-
-    // The PDF contains sales from the selected period only, not every stored order.
-    soldOrders.forEach(order => {
-        const itemsList = (order.items || []).map(item => `${item.name} (x${item.quantity})`).join(', ');
-        reportContent += `\nOrder #${order.id}
-Customer: ${order.customerName}
-Email: ${order.customerEmail}
-Products: ${itemsList}
-Total: ₱${order.totalAmount.toFixed(2)}
-Status: ${order.status}
-Date: ${order.date}
----`;
-    });
-
-    const periodLabel = getReportPeriodLabel();
-    const detailRows = soldOrders.map(order => {
-        const itemsList = (order.items || []).map(item => `${item.name} (x${item.quantity})`).join(', ');
-        return `<tr><td>${excelEscape(order.id)}</td><td>${excelEscape(order.customerName || 'N/A')}</td><td>${excelEscape(order.customerEmail || 'N/A')}</td><td>${excelEscape(itemsList || 'N/A')}</td><td>${Number(order.totalAmount || 0).toFixed(2)}</td><td>${excelEscape(order.status || 'pending')}</td><td>${excelEscape(order.date || 'N/A')}</td></tr>`;
-    }).join('');
-    const workbook = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial,sans-serif}h1{color:#1f4e78}h2{color:#666}table{border-collapse:collapse;width:100%}th{background:#1f4e78;color:#fff;font-weight:bold}th,td{border:1px solid #b7c9d6;padding:7px;text-align:left}td.amount{mso-number-format:"0.00"}</style></head><body><h1>KINGPIN CLOTHING MANAGEMENT SYSTEM</h1><h2>Sales &amp; Performance Report</h2><p><strong>Period:</strong> ${excelEscape(periodLabel)}</p><p><strong>Generated:</strong> ${excelEscape(new Date().toLocaleString())}</p><h2>Executive Summary</h2><table><tr><th>Total Sales</th><th>Total Orders</th><th>Unique Customers</th><th>Average Order Value</th></tr><tr><td class="amount">${totalSales.toFixed(2)}</td><td>${totalOrders}</td><td>${uniqueCustomers}</td><td class="amount">${totalOrders ? (totalSales / totalOrders).toFixed(2) : '0.00'}</td></tr></table><h2>Sales Order Details</h2><table><tr><th>Order ID</th><th>Customer Name</th><th>Email</th><th>Products</th><th>Total Amount</th><th>Status</th><th>Date</th></tr>${detailRows || '<tr><td colspan="7">No sales in this period.</td></tr>'}</table></body></html>`;
-    const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-
-    link.setAttribute('href', url);
-    const periodFileName = periodLabel.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
-    link.setAttribute('download', `KINGPIN-Sales-Report-${periodFileName || reportDate}.xls`);
-    link.style.visibility = 'hidden';
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    URL.revokeObjectURL(url);
-    showStatusUpdateToast('Excel report generated and downloaded successfully!');
+    output.textContent = 'Checking...';
+    try {
+        const response = await fetch(`/.netlify/functions/reports?verify=${encodeURIComponent(reportNo)}`, { headers: getAuthenticatedHeaders(), cache: 'no-store' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Unable to check this report.');
+        if (!result.found) {
+            output.innerHTML = `<p class="payment-alert payment-alert-error"><strong>Not found.</strong> ${escapeReportText(reportNo)} was not generated by this system. Treat the document as not genuine.</p>`;
+            return;
+        }
+        const report = result.report;
+        output.innerHTML = `<div class="payment-alert payment-alert-ok"><strong>Genuine report.</strong> ${escapeReportText(report.title)} · ${escapeReportText(report.period)}<br>
+            Generated ${escapeReportText(new Date(report.generatedAt).toLocaleString('en-PH'))} by ${escapeReportText(report.generatedBy)} · ${Number(report.rowCount) || 0} rows<br>
+            ${(report.summary || []).map(([label, value]) => `${escapeReportText(label)}: <strong>${escapeReportText(value)}</strong>`).join(' · ')}<br>
+            <small>Fingerprint (must match the bottom of every page): <code>${escapeReportText(report.fingerprint)}</code></small></div>`;
+    } catch (error) {
+        output.textContent = error.message;
+    }
 }
 
 // Logo file preview handler

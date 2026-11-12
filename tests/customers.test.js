@@ -33,14 +33,19 @@ const { handler } = require('../netlify/functions/customers');
   const post = (token, body) => ({ httpMethod: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
   const adminToken = signAccessToken({ sub: 'admin', role: 'admin' });
   const customerToken = signAccessToken({ sub: 'a@example.com', role: 'customer' });
-  const list = async () => JSON.parse((await handler(request(adminToken))).body).customers;
+  // Payment totals are checked on their own below; the account fields are compared here.
+  const withoutPayment = customers => customers.map(({ payment, ...customer }) => customer);
+  const list = async () => withoutPayment(JSON.parse((await handler(request(adminToken))).body).customers);
   const find = async accountEmail => (await list()).find(customer => customer.accountEmail === accountEmail);
 
   assert.strictEqual((await handler(request())).statusCode, 401);
   assert.strictEqual((await handler(request(customerToken))).statusCode, 403);
   const result = await handler(request(adminToken));
   assert.strictEqual(result.statusCode, 200);
-  assert.deepStrictEqual(JSON.parse(result.body).customers, [
+  const payments = Object.fromEntries(JSON.parse(result.body).customers.map(customer => [customer.accountEmail, customer.payment]));
+  assert.deepStrictEqual(payments['a@example.com'].orders.map(order => order.id), [2, 1]);
+  assert.strictEqual(typeof payments['b@example.com'].balance, 'number');
+  assert.deepStrictEqual(withoutPayment(JSON.parse(result.body).customers), [
     { name: 'Alice', email: 'a@example.com', phone: '09123456789', username: 'alice', address: 'Naga', accountEmail: 'a@example.com', totalOrders: 2, status: 'active', movedTo: '', adminEdited: false },
     { name: 'Bob', email: 'b@example.com', phone: '', username: '', address: '', accountEmail: 'b@example.com', totalOrders: 1, status: 'active', movedTo: '', adminEdited: false }
   ]);

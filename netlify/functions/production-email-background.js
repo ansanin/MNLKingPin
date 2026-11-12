@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const { connectLambda, getStore } = require('@netlify/blobs');
 const { authenticateEvent } = require('./lib/auth');
 const { renderOrderUpdateEmail } = require('./lib/order-email');
+const { getLocalSmtpSettings, sendLocalEmail } = require('./lib/local-mail');
 
 function jsonResponse(statusCode, body) {
     return {
@@ -44,8 +45,12 @@ exports.handler = async function handler(event) {
         const label = String(productionEvent.statusLabel || productionEvent.status).replace(/-/g, ' ');
         const subject = `KingPin Order #${order.id}: ${label}`;
         const html = await renderOrderUpdateEmail(order, productionEvent, process.env.URL || 'https://mnlkingpin.netlify.app');
+        const localSmtp = getLocalSmtpSettings();
 
-        if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+        if (localSmtp) {
+            // Local `netlify dev` only (see lib/local-mail.js): deliver to the local test inbox.
+            await sendLocalEmail(localSmtp, { to: email, subject, html });
+        } else if (process.env.SMTP_USER && process.env.SMTP_PASS) {
             const transporter = nodemailer.createTransport({
                 service: 'gmail',
                 auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }

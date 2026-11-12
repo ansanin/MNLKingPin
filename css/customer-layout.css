@@ -1,0 +1,1061 @@
+/* Customer account pages (My Orders, Purchase History, Notifications, Cart,
+   Design Studio, Support, Settings, Checkout): the same look as the admin
+   portal. A "My account" sidebar, page headers, summary cards, order cards that
+   open, and form panels. The shop catalog keeps its storefront layout.
+   Loaded after storefront.css and admin-layout.css, and uses the --admin-*
+   colours from admin-layout.css, so dark and light mode follow the admin. */
+
+:root {
+    --customer-sidebar-width: 232px;
+    --customer-topbar-height: 68px;
+}
+
+#customerPage .customer-metrics[hidden],
+#customerPage .customer-list-filters[hidden],
+#customerPage .customer-order-body[hidden] {
+    display: none !important;
+}
+
+/* Account pages fill the window, so the page colour reaches the bottom. */
+#customerPage.storefront.is-account-view[style*="display: block"] {
+    min-height: 100vh !important;
+}
+
+/* The account menu never shows over the shop catalog. */
+#customerPage .customer-sidebar {
+    display: none;
+}
+
+/* The floating "Back to Shop" button repeats the sidebar's Shop link. */
+body:has(#customerPage.is-account-view[style*="display: block"]) #floatingBackButton {
+    display: none !important;
+}
+
+/* ---------- Sidebar ---------- */
+#customerPage.is-account-view .customer-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--admin-surface);
+}
+
+#customerPage .customer-sidebar-label {
+    margin: 0;
+    padding: 0 12px 8px;
+    color: var(--admin-muted);
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+
+#customerPage .customer-sidebar-label-gap {
+    margin-top: 14px;
+}
+
+#customerPage .customer-sidebar button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 42px;
+    margin: 0;
+    padding: 9px 12px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--admin-text);
+    cursor: pointer;
+    font: inherit;
+    font-size: .95rem;
+    font-weight: 600;
+    text-align: left;
+}
+
+#customerPage .customer-sidebar button:hover {
+    border-color: var(--admin-border);
+    background: var(--admin-row-hover);
+}
+
+#customerPage .customer-sidebar button.is-active {
+    border-color: rgba(212, 175, 55, .55);
+    background: rgba(212, 175, 55, .15);
+    color: var(--admin-gold);
+}
+
+#customerPage .customer-nav-icon {
+    width: 22px;
+    flex: 0 0 22px;
+    text-align: center;
+    opacity: .85;
+}
+
+#customerPage .customer-nav-count,
+#customerPage .customer-sidebar .notification-badge {
+    position: static;
+    min-width: 22px;
+    height: 20px;
+    margin-left: auto;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--admin-gold);
+    color: #111;
+    font-size: .75rem;
+    font-weight: 800;
+    line-height: 20px;
+    text-align: center;
+    transform: none;
+}
+
+#customerPage .customer-sidebar .notification-badge {
+    background: #ff8a80;
+}
+
+#customerPage .customer-nav-count[hidden] {
+    display: none;
+}
+
+/* Wide screens: a fixed sidebar under the top bar, content beside it. */
+@media (min-width: 1100px) {
+    #customerPage.is-account-view .customer-sidebar {
+        position: fixed;
+        top: var(--customer-topbar-height);
+        bottom: 0;
+        left: 0;
+        z-index: 60;
+        width: var(--customer-sidebar-width);
+        padding: 18px 12px;
+        overflow-y: auto;
+        border-right: 1px solid var(--admin-border);
+    }
+
+    #customerPage.storefront.is-account-view .customer-container {
+        width: auto;
+        max-width: none;
+        margin: 0 0 0 var(--customer-sidebar-width);
+        padding: 24px clamp(16px, 2.2vw, 34px) 56px;
+    }
+}
+
+@media (min-width: 1100px) and (max-width: 1279px) {
+    :root {
+        --customer-sidebar-width: 204px;
+    }
+}
+
+/* Tablets and phones: the sidebar becomes a row of tabs above the page. */
+@media (max-width: 1099px) {
+    #customerPage.is-account-view .customer-sidebar {
+        flex-direction: row;
+        gap: 6px;
+        overflow-x: auto;
+        padding: 10px clamp(12px, 3vw, 24px);
+        border-bottom: 1px solid var(--admin-border);
+        scrollbar-width: none;
+    }
+
+    #customerPage .customer-sidebar::-webkit-scrollbar {
+        display: none;
+    }
+
+    #customerPage .customer-sidebar-label {
+        display: none;
+    }
+
+    #customerPage .customer-sidebar button {
+        flex: 0 0 auto;
+        width: auto;
+        min-height: 40px;
+        padding: 7px 14px;
+        border-color: var(--admin-border);
+        border-radius: 999px;
+        background: var(--admin-surface-2);
+        font-size: .88rem;
+        white-space: nowrap;
+    }
+
+    #customerPage .customer-sidebar button.is-active {
+        border-color: var(--admin-gold);
+        background: var(--admin-gold);
+        color: #111;
+    }
+
+    #customerPage .customer-sidebar button.is-active .customer-nav-count {
+        background: #111;
+        color: #f4c94b;
+    }
+
+    #customerPage .customer-nav-icon {
+        display: none;
+    }
+
+    #customerPage .customer-nav-count,
+    #customerPage .customer-sidebar .notification-badge {
+        margin-left: 2px;
+    }
+}
+
+/* ---------- Page sections: one card per page, like the admin tabs ---------- */
+#customerPage.is-account-view .customer-container > :is(#designSection, #cartSection, #ordersSection, #purchaseHistorySection, #notificationsSection, #customerSettingsSection, #customerServiceSection, #checkoutSection) {
+    max-width: none;
+    margin: 0;
+    padding: clamp(16px, 2vw, 28px);
+    border: 1px solid #353b43;
+    border-radius: 16px;
+    background: linear-gradient(145deg, rgba(24, 27, 31, .97), rgba(14, 16, 19, .97));
+    box-shadow: 0 18px 45px rgba(0, 0, 0, .2);
+    color: var(--admin-text);
+}
+
+body.light-mode #customerPage.is-account-view .customer-container > :is(#designSection, #cartSection, #ordersSection, #purchaseHistorySection, #notificationsSection, #customerSettingsSection, #customerServiceSection, #checkoutSection) {
+    border-color: #d2d8dd;
+    background: linear-gradient(145deg, rgba(255, 255, 255, .98), rgba(244, 246, 247, .98));
+    box-shadow: 0 16px 35px rgba(42, 52, 60, .1);
+}
+
+#customerPage .customer-page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px 20px;
+    margin-bottom: 18px;
+}
+
+#customerPage .customer-container .customer-page-head h2 {
+    margin: 0;
+    color: #f4bd1b;
+    font-family: var(--font-ui, inherit);
+    font-size: clamp(1.5rem, 1.15rem + 1vw, 2rem);
+    line-height: 1.15;
+}
+
+body.light-mode #customerPage .customer-container .customer-page-head h2 {
+    color: #7a5b00;
+}
+
+#customerPage .customer-page-subtitle {
+    margin: 4px 0 0;
+    color: var(--admin-muted);
+    font-size: .95rem;
+}
+
+#customerPage .customer-page-head .btn {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    margin: 0;
+    padding: 10px 18px;
+}
+
+/* ---------- Summary cards ---------- */
+#customerPage .customer-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+#customerPage .customer-metric {
+    display: flex;
+    min-width: 0;
+    min-height: 62px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--admin-border);
+    border-radius: 10px;
+    background: var(--admin-surface-2);
+    color: var(--admin-text);
+}
+
+#customerPage .customer-metric span {
+    font-size: .88rem;
+}
+
+#customerPage .customer-metric strong {
+    color: var(--admin-gold);
+    font-size: 1.35rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+#customerPage .customer-metric.is-attention {
+    border-color: rgba(240, 180, 41, .6);
+}
+
+#customerPage .customer-metric.is-attention strong {
+    color: var(--admin-warn);
+}
+
+#customerPage .customer-list-filters {
+    margin: 0 0 14px;
+}
+
+/* ---------- Order cards (My Orders and Purchase History) ---------- */
+#customerPage .customer-order-list {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+}
+
+#customerPage .customer-order-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    background: var(--admin-surface);
+    color: var(--admin-text);
+    scroll-margin-top: calc(var(--customer-topbar-height) + 16px);
+}
+
+#customerPage .customer-order-card.needs-action {
+    box-shadow: inset 3px 0 0 #f0b429;
+}
+
+#customerPage .customer-order-card.is-open {
+    border-color: rgba(212, 175, 55, .55);
+}
+
+#customerPage .customer-order-summary {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 2.2fr) minmax(150px, 1.2fr) minmax(140px, 1fr) minmax(96px, auto) 18px;
+    grid-template-areas: "thumb main stage pay total chevron";
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    margin: 0;
+    padding: 12px 16px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+#customerPage .customer-order-summary:hover {
+    background: var(--admin-row-hover);
+}
+
+#customerPage .customer-order-thumb {
+    display: grid;
+    width: 56px;
+    height: 56px;
+    grid-area: thumb;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    background: #f4f2ec;
+    color: #8a6a00;
+    font-weight: 800;
+}
+
+#customerPage .customer-order-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#customerPage .customer-order-main {
+    display: flex;
+    min-width: 0;
+    grid-area: main;
+    flex-direction: column;
+    gap: 3px;
+}
+
+#customerPage .customer-order-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+}
+
+#customerPage .customer-order-title strong {
+    color: var(--admin-text);
+    font-size: 1rem;
+}
+
+#customerPage .customer-order-title small,
+#customerPage .customer-order-items-line,
+#customerPage .customer-order-stage small,
+#customerPage .customer-order-pay small {
+    color: var(--admin-muted);
+    font-size: .82rem;
+}
+
+#customerPage .customer-order-items-line {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#customerPage .customer-order-next {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--admin-info);
+    font-size: .82rem;
+    font-weight: 700;
+}
+
+#customerPage .customer-order-next.is-action {
+    color: var(--admin-warn);
+}
+
+#customerPage .customer-order-next b {
+    display: inline-grid;
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    place-items: center;
+    border-radius: 50%;
+    background: #f0b429;
+    color: #111;
+    font-size: .7rem;
+}
+
+#customerPage .customer-order-stage {
+    display: flex;
+    min-width: 0;
+    grid-area: stage;
+    flex-direction: column;
+    gap: 2px;
+}
+
+#customerPage .customer-order-stage .production-stage-label {
+    color: var(--admin-gold);
+    font-size: .92rem;
+    font-weight: 700;
+}
+
+#customerPage .customer-order-stage .production-stage-label.is-on-hold {
+    color: var(--admin-warn);
+}
+
+#customerPage .customer-order-stage .production-progress-track {
+    margin: 3px 0 1px;
+    background: var(--admin-border);
+}
+
+#customerPage .customer-order-pay {
+    display: flex;
+    min-width: 0;
+    grid-area: pay;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+}
+
+#customerPage .customer-order-pay .payment-badge {
+    white-space: normal;
+}
+
+#customerPage .customer-order-total {
+    grid-area: total;
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+    text-align: right;
+    white-space: nowrap;
+}
+
+#customerPage .customer-order-total small {
+    display: block;
+    color: var(--admin-muted);
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+#customerPage .customer-order-chevron {
+    grid-area: chevron;
+    justify-self: end;
+    color: var(--admin-muted);
+}
+
+#customerPage .customer-order-chevron::before {
+    display: block;
+    width: 9px;
+    height: 9px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    content: "";
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform .15s ease;
+}
+
+#customerPage .customer-order-card.is-open .customer-order-chevron::before {
+    transform: translateY(2px) rotate(-135deg);
+}
+
+.order-state-badge {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 3px 10px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.order-state-badge.state-completed { border-color: rgba(76, 175, 80, .45); background: rgba(76, 175, 80, .14); color: var(--admin-ok); }
+.order-state-badge.state-cancelled { border-color: rgba(160, 160, 160, .4); background: rgba(160, 160, 160, .12); color: var(--admin-muted); }
+
+/* The details under a card. */
+#customerPage .customer-order-body {
+    padding: 0 16px 18px;
+    border-top: 1px solid var(--admin-border);
+}
+
+#customerPage .customer-order-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: 14px;
+    align-items: start;
+    margin-top: 14px;
+}
+
+#customerPage .customer-order-column {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 14px;
+}
+
+#customerPage .customer-order-column > *,
+#customerPage .customer-order-body > .production-tracking-panel {
+    margin: 0;
+}
+
+#customerPage .customer-order-body .customer-order-section,
+#customerPage .customer-order-body .production-tracking-panel,
+#customerPage .customer-order-body .purchase-history-products {
+    border-color: var(--admin-border);
+    border-radius: 10px;
+    background: var(--admin-surface-2);
+}
+
+#customerPage .customer-order-body .production-tracking-panel {
+    margin-top: 14px;
+}
+
+#customerPage .customer-order-design-gallery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#customerPage .customer-order-design-image {
+    max-width: 180px;
+    max-height: 140px;
+    border: 1px solid var(--admin-border);
+    border-radius: 6px;
+    object-fit: contain;
+}
+
+#customerPage .customer-order-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--admin-border);
+}
+
+#customerPage .customer-order-footer .order-total {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+#customerPage .customer-order-footer .view-receipt-button {
+    width: auto;
+    margin: 0;
+}
+
+#customerPage .customer-order-body .order-actions {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--admin-border);
+}
+
+#customerPage .customer-order-body .order-actions > strong {
+    color: var(--admin-muted);
+    font-size: .9rem;
+    font-weight: 600;
+}
+
+/* Cancel and refund are rare: outlined, so the gold buttons stay for the next step. */
+body #customerPage .customer-order-body .order-action-button,
+body.light-mode #customerPage .customer-order-body .order-action-button {
+    border: 1px solid var(--admin-border) !important;
+    background: transparent !important;
+    color: var(--admin-text) !important;
+}
+
+body #customerPage .customer-order-body .order-action-button:hover,
+body #customerPage .customer-order-body .order-action-button:focus-visible,
+body.light-mode #customerPage .customer-order-body .order-action-button:hover,
+body.light-mode #customerPage .customer-order-body .order-action-button:focus-visible {
+    border-color: var(--admin-danger) !important;
+    background: transparent !important;
+    color: var(--admin-danger) !important;
+}
+
+@media (max-width: 1000px) {
+    #customerPage .customer-order-summary {
+        grid-template-columns: 48px minmax(0, 1fr) auto 18px;
+        grid-template-areas:
+            "thumb main main chevron"
+            "stage stage stage stage"
+            "pay pay total total";
+        gap: 10px 12px;
+        padding: 12px;
+    }
+
+    #customerPage .customer-order-thumb {
+        width: 48px;
+        height: 48px;
+    }
+
+    #customerPage .customer-order-pay {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+    }
+
+    #customerPage .customer-order-columns {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #customerPage .customer-order-body {
+        padding: 0 12px 14px;
+    }
+}
+
+/* ---------- Notifications ---------- */
+#customerPage #notificationsList {
+    display: grid;
+    gap: 8px;
+}
+
+#customerPage #notificationsList .notification-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 0;
+    padding: 12px 16px;
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    background: var(--admin-surface);
+    color: var(--admin-text);
+    cursor: default;
+}
+
+#customerPage #notificationsList .notification-item.has-order {
+    cursor: pointer;
+}
+
+#customerPage #notificationsList .notification-item.has-order:hover {
+    border-color: rgba(212, 175, 55, .55);
+    background: var(--admin-row-hover);
+}
+
+#customerPage .notification-dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    margin-top: 8px;
+    border-radius: 50%;
+    background: var(--admin-gold);
+    opacity: .7;
+}
+
+#customerPage .notification-item.unread .notification-dot {
+    background: #ff8a80;
+    opacity: 1;
+}
+
+#customerPage .notification-copy {
+    min-width: 0;
+    flex: 1;
+}
+
+#customerPage .notification-copy p {
+    margin: 0;
+}
+
+#customerPage .notification-copy strong {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+#customerPage #notificationsList .notification-timestamp {
+    margin-top: 4px;
+    color: var(--admin-muted);
+    font-size: .82rem;
+}
+
+#customerPage .notification-open {
+    flex: 0 0 auto;
+    align-self: center;
+    color: var(--admin-gold);
+    font-size: .85rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* ---------- Settings and Support forms ---------- */
+#customerPage .customer-panel {
+    max-width: 920px;
+    margin: 0;
+    padding: clamp(16px, 2vw, 24px);
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    background: var(--admin-surface-2);
+}
+
+#customerPage .customer-panel-title {
+    margin: 0 0 12px;
+    color: var(--admin-gold);
+    font-size: .78rem;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+}
+
+#customerPage .customer-panel-title:not(:first-child) {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--admin-border);
+}
+
+#customerPage .customer-panel label {
+    color: var(--admin-text);
+}
+
+#customerPage .customer-panel .settings-email-hint {
+    margin: 0 0 14px;
+    color: var(--admin-muted);
+    font-size: .88rem;
+}
+
+#customerPage .customer-form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+#customerPage .customer-form-actions .btn {
+    width: auto;
+    min-width: 220px;
+    margin: 0;
+}
+
+/* ---------- Cart ---------- */
+#customerPage .customer-cart-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 18px;
+    align-items: start;
+}
+
+#customerPage #cartSection.is-empty .customer-cart-layout {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+#customerPage #cartSection.is-empty .cart-summary {
+    display: none;
+}
+
+#customerPage #cartSection .cart-items {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+}
+
+/* Photo | name and options | quantity | line total, with Edit and Remove under the total. */
+#customerPage #cartSection .cart-item {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr) auto minmax(96px, auto);
+    grid-template-areas:
+        "media info qty total"
+        "media info actions actions";
+    align-items: center;
+    gap: 8px 16px;
+    margin: 0;
+    padding: 14px 16px;
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    background: var(--admin-surface);
+    color: var(--admin-text);
+}
+
+#customerPage #cartSection .cart-item-media { grid-area: media; align-self: start; }
+#customerPage #cartSection .cart-item-info { grid-area: info; align-self: start; }
+#customerPage #cartSection .cart-item-quantity { grid-area: qty; gap: 6px; }
+#customerPage #cartSection .cart-item-actions { grid-area: actions; justify-content: flex-end; align-self: end; }
+
+#customerPage #cartSection .cart-item-name {
+    margin: 0 0 6px;
+    color: var(--admin-text);
+    font-size: 1.02rem;
+    font-weight: 700;
+}
+
+#customerPage #cartSection .cart-customization {
+    gap: 6px 14px;
+    margin: 0 0 6px;
+    padding: 0;
+    border: 0;
+    color: var(--admin-muted);
+    font-size: .86rem;
+}
+
+#customerPage #cartSection .cart-customization strong {
+    color: var(--admin-text);
+}
+
+#customerPage #cartSection .cart-item-price {
+    color: var(--admin-muted);
+    font-size: .86rem;
+}
+
+#customerPage #cartSection .cart-item-total {
+    grid-area: total;
+    color: var(--admin-gold);
+    font-size: 1.1rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+#customerPage #cartSection .cart-item-quantity .btn {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    background: var(--admin-surface-2);
+    color: var(--admin-text);
+}
+
+#customerPage #cartSection .cart-item-quantity input {
+    width: 52px;
+    height: 34px;
+    border-color: var(--admin-border);
+    border-radius: 8px;
+    background: var(--admin-surface-2);
+    color: var(--admin-text);
+    text-align: center;
+}
+
+#customerPage #cartSection .cart-item-edit,
+#customerPage #cartSection .cart-item-remove {
+    margin: 0;
+    padding: 6px 12px;
+    border: 1px solid;
+    border-radius: 7px;
+    background: transparent;
+    font-size: .82rem;
+    font-weight: 700;
+}
+
+#customerPage #cartSection .cart-item-edit { border-color: rgba(100, 181, 246, .5); color: var(--admin-info); }
+#customerPage #cartSection .cart-item-remove { border-color: rgba(255, 107, 107, .5); color: var(--admin-danger); }
+#customerPage #cartSection .cart-item-edit:hover,
+#customerPage #cartSection .cart-item-remove:hover { filter: brightness(1.2); }
+
+@media (max-width: 760px) {
+    #customerPage #cartSection .cart-item {
+        grid-template-columns: 68px minmax(0, 1fr) auto;
+        grid-template-areas:
+            "media info info"
+            "media qty total"
+            "actions actions actions";
+        padding: 12px;
+    }
+
+    #customerPage #cartSection .cart-item-image {
+        width: 68px;
+        height: 68px;
+    }
+}
+
+#customerPage #cartSection .cart-summary {
+    position: sticky;
+    top: calc(var(--customer-topbar-height) + 16px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 18px;
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    background: var(--admin-surface-2);
+    text-align: left;
+}
+
+#customerPage #cartSection .cart-summary h3 {
+    margin: 0;
+    color: var(--admin-gold);
+    font-size: .78rem;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+}
+
+#customerPage #cartSection .cart-summary p {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0;
+    color: var(--admin-text);
+    font-size: 1.05rem;
+}
+
+#customerPage #cartSection .cart-summary p strong {
+    font-size: 1.35rem;
+    font-variant-numeric: tabular-nums;
+}
+
+#customerPage .cart-summary-note {
+    color: var(--admin-muted);
+    font-size: .82rem;
+}
+
+#customerPage #cartSection .cart-summary .btn {
+    width: 100%;
+    margin: 0;
+}
+
+@media (max-width: 900px) {
+    #customerPage .customer-cart-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #customerPage #cartSection .cart-summary {
+        position: static;
+    }
+}
+
+/* ---------- Empty states ---------- */
+#customerPage .customer-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 40px 18px;
+    border: 1px dashed var(--admin-border);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--admin-muted);
+    text-align: center;
+}
+
+#customerPage .customer-empty-state strong {
+    color: var(--admin-text);
+    font-size: 1.05rem;
+}
+
+#customerPage .customer-empty-state .btn {
+    width: auto;
+    margin: 8px 0 0;
+}
+
+#customerPage .customer-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 700px) {
+    #customerPage.is-account-view .customer-container > :is(#designSection, #cartSection, #ordersSection, #purchaseHistorySection, #notificationsSection, #customerSettingsSection, #customerServiceSection, #checkoutSection) {
+        padding: 14px 12px;
+        border-radius: 12px;
+    }
+
+    #customerPage .customer-page-head {
+        align-items: flex-start;
+    }
+
+    #customerPage .customer-page-head .btn {
+        width: 100%;
+    }
+
+    #customerPage .customer-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    #customerPage .customer-metric {
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 2px;
+        min-height: 0;
+        padding: 9px 11px;
+    }
+
+    #customerPage .customer-metric span {
+        font-size: .78rem;
+    }
+
+    #customerPage .customer-metric strong {
+        font-size: 1.15rem;
+    }
+
+    #customerPage .customer-list-filters {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+    }
+
+    #customerPage .customer-list-filters .filter-chip {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    #customerPage .customer-form-actions .btn {
+        width: 100%;
+        min-width: 0;
+    }
+
+    #customerPage #notificationsList .notification-item {
+        flex-wrap: wrap;
+        padding: 12px;
+    }
+
+    #customerPage .notification-open {
+        margin-left: 20px;
+    }
+}
+
+/* ---------- Balance payment (after the downpayment is verified) ---------- */
+#customerPage .customer-balance-proof {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--admin-border);
+}
+
+#customerPage .customer-balance-proof h4 {
+    margin: 0 0 8px;
+}

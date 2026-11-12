@@ -1,4 +1,5 @@
 ﻿const { getStore } = require('@netlify/blobs');
+const { getPaymentSummary } = require('../../../js/payment-summary');
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
@@ -47,7 +48,10 @@ async function renderOrderUpdateEmail(order, productionEvent, siteUrl) {
     const total = money(order.totalAmount);
     const downpayment = Number(order.gcashDownpaymentAmount);
     const verifiedDownpayment = String(order.paymentMethod || '').toLowerCase() === 'gcash' && order.paymentStatus === 'verified' && Number.isFinite(downpayment) && downpayment >= 0;
-    const downpaymentHtml = verifiedDownpayment ? `<p><strong>Verified downpayment:</strong> ${money(downpayment)}</p>${Number.isFinite(Number(order.totalAmount)) && downpayment <= Number(order.totalAmount) ? `<p><strong>Estimated remaining balance:</strong> ${money(Number(order.totalAmount) - downpayment)}</p>` : ''}` : String(order.paymentMethod || '').toLowerCase() === 'gcash' && order.paymentStatus === 'downpayment-received' ? '<p>Your GCash proof is awaiting verification; the downpayment is not yet confirmed.</p>' : '';
+    const recorded = Array.isArray(order.payments) && order.payments.length ? getPaymentSummary(order) : null;
+    const downpaymentHtml = recorded
+        ? `<p><strong>Amount paid:</strong> ${money(recorded.amountPaid)}</p><p><strong>Remaining balance:</strong> ${recorded.balance > 0 ? money(recorded.balance) : 'None - fully paid'}</p>`
+        : verifiedDownpayment ? `<p><strong>Verified downpayment:</strong> ${money(downpayment)}</p>${Number.isFinite(Number(order.totalAmount)) && downpayment <= Number(order.totalAmount) ? `<p><strong>Estimated remaining balance:</strong> ${money(Number(order.totalAmount) - downpayment)}</p>` : ''}` : String(order.paymentMethod || '').toLowerCase() === 'gcash' && order.paymentStatus === 'downpayment-received' ? '<p>Your GCash proof is awaiting verification; the downpayment is not yet confirmed.</p>' : '';
     const label = escapeHtml(productionEvent.statusLabel || productionEvent.status || productionEvent.message || 'Updated');
     const remarks = productionEvent.remarks ? `<p>${escapeHtml(productionEvent.remarks)}</p>` : '';
     const date = order.estimatedCompletionDate ? escapeHtml(order.estimatedCompletionDate) : 'Not set by the shop yet';
