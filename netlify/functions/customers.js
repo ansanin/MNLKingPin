@@ -2,6 +2,7 @@ const { connectLambda, getStore } = require('@netlify/blobs');
 const { accountKey, authenticateEvent } = require('./lib/auth');
 const { deleteAccount, isValidEmail, normalizeEmail } = require('./lib/customer-data');
 const { summarizeCustomerPayments } = require('../../js/payment-summary');
+const { listOrderIds } = require('./lib/order-ids');
 
 // Admin edits in the customer list are labels for the admin only. They are
 // kept apart from the customer's account, so the customer's login, profile
@@ -31,7 +32,7 @@ async function listCustomers() {
         records.push(...await Promise.all((page.blobs || []).map(item => accounts.get(item.key, { type: 'json' }))));
         cursor = page.cursor;
     } while (cursor);
-    const ids = await index.get('all-order-ids', { type: 'json' }) || [];
+    const ids = await listOrderIds(index);
     const orders = [
         ...await legacy.get('orders', { type: 'json' }) || [],
         ...await legacy.get('orders-v2', { type: 'json' }) || [],

@@ -19,8 +19,13 @@ const response = (status, body) => ({ status, ok: status >= 200 && status < 300,
   await assert.rejects(() => context.saveOrderToSharedServer({}, 'create'), /Check My Orders/);
   assert.strictEqual(calls, 1);
   calls = 0;
-  fetchImpl = async () => calls === 1 ? response(404, {}) : response(201, { ok: true, order: { id: 12 } });
+  // Orders go only to the Netlify function (the old PHP API was removed).
+  fetchImpl = async () => response(201, { ok: true, order: { id: 12 } });
   assert.strictEqual((await context.saveOrderToSharedServer({}, 'create')).id, 12);
-  assert.strictEqual(calls, 2);
+  assert.strictEqual(calls, 1);
+  calls = 0;
+  fetchImpl = async () => response(404, {});
+  await assert.rejects(() => context.saveOrderToSharedServer({}, 'create'), /Shared order API unavailable/);
+  assert.strictEqual(calls, 1);
   console.log('Order submission tests passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

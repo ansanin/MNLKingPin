@@ -712,8 +712,48 @@ body.light-mode #customerPage.storefront .customer-container {
     background: transparent;
 }
 
+/* Light header: the same paper colour as the page, gold accents, dark text. */
 body.light-mode #customerPage.storefront .navbar {
-    background: rgba(17, 20, 22, .98);
+    border-bottom-color: #e2d3a6;
+    background: rgba(255, 254, 250, .97);
+    box-shadow: 0 6px 18px rgba(42, 52, 60, .08);
+}
+
+body.light-mode #customerPage.storefront #customerDisplayName {
+    color: #263238 !important;
+}
+
+body.light-mode #customerPage.storefront .storefront-desktop-nav button {
+    color: #3a4248;
+}
+
+body.light-mode #customerPage.storefront .storefront-desktop-nav button:hover,
+body.light-mode #customerPage.storefront .storefront-desktop-nav button.active {
+    border-bottom-color: #b8860b;
+    color: #8a6500;
+}
+
+body.light-mode #customerPage.storefront .navbar-right .btn,
+body.light-mode #customerPage.storefront .nav-menu-toggle {
+    border-color: #d9cfb4 !important;
+    background: #ffffff !important;
+    color: #263238 !important;
+}
+
+body.light-mode #customerPage.storefront .navbar-right .btn:hover,
+body.light-mode #customerPage.storefront .nav-menu-toggle:hover {
+    border-color: #b8860b !important;
+    background: #fbf6e6 !important;
+}
+
+body.light-mode #customerPage.storefront .nav-menu-items {
+    border-color: #d9cfb4;
+    background: #ffffff;
+    box-shadow: 0 14px 30px rgba(42, 52, 60, .14);
+}
+
+body.light-mode #customerPage.storefront .product-image {
+    background: #f2f0e9;
 }
 
 body.light-mode #customerPage.storefront .catalog-toolbar h2 {
@@ -1026,7 +1066,22 @@ body.light-mode #customerPage.storefront .shop-site-footer {
 }
 
 body.light-mode #customerPage.storefront .storefront-bottom-nav:not([hidden]) {
-    background: rgba(17, 20, 22, .98);
+    border-top-color: #e2d3a6;
+    background: rgba(255, 254, 250, .98);
+    box-shadow: 0 -6px 18px rgba(42, 52, 60, .08);
+}
+
+body.light-mode #customerPage.storefront .storefront-bottom-nav button {
+    color: #3a4248;
+}
+
+body.light-mode #customerPage.storefront .storefront-bottom-nav button span {
+    color: #a07800;
+}
+
+body.light-mode #customerPage.storefront .storefront-bottom-nav button.active {
+    color: #8a6500;
+    font-weight: 700;
 }
 
 #customerPage.storefront .customer-service-footer[hidden],

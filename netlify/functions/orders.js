@@ -3,6 +3,7 @@ const { authenticateEvent, signAccessToken } = require('./lib/auth');
 const { PRODUCTION_STAGES, normalizeProductionStatus, validateProductionTransition } = require('../../js/production-tracking');
 const { MIN_TEAM_PLAYERS, isValidTeamPlayerCount, areTeamPlayerDetailsComplete, normalizeTeamOrderInput } = require('../../js/team-order');
 const { getPaymentSummary, round2 } = require('../../js/payment-summary');
+const { listOrderIds } = require('./lib/order-ids');
 
 const PROOF_DATA_URL = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i;
 const PAYMENT_METHODS = ['cash', 'gcash', 'bank-transfer'];
@@ -150,6 +151,126 @@ function ensurePaymentLedger(order) {
     }
 }
 
+// ----- Shop stock -----
+// Orders take their pieces out of the product catalog when they are placed,
+// and a cancelled order puts them back. The browser never changes stock.
+const PRODUCT_CATALOG_KEY = 'catalog';
+const ADMIN_NOTIFICATION_STATE_KEY = 'admin-notification-state';
+
+// Pieces of each catalog product in an order. A team order needs one piece per player.
+function getOrderStockNeeds(order, catalog) {
+    const players = order.teamOrder?.isTeamOrder ? Math.max(1, Number(order.teamOrder.totalPlayers) || 1) : 1;
+    const needs = new Map();
+    for (const item of Array.isArray(order.items) ? order.items : []) {
+        if (!item || item.type === 'custom-design' || item.id === undefined || item.id === null || item.id === '') continue;
+        const product = catalog.find(entry => String(entry?.id) === String(item.id));
+        if (!product) continue;
+        const pieces = Math.max(1, Math.floor(Number(item.quantity) || 1)) * players;
+        needs.set(String(product.id), (needs.get(String(product.id)) || 0) + pieces);
+    }
+    return needs;
+}
+
+// Reads the catalog, lets `change` edit it, and saves it only if nobody saved
+// it in between (tried again a few times), so two orders cannot both take the
+// last piece. `change` returns { ok, changed, ... }.
+async function updateCatalog(change) {
+    const productStore = getStore('kingpin-products');
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        let catalog;
+        let etag = '';
+        if (typeof productStore.getWithMetadata === 'function') {
+            const entry = await productStore.getWithMetadata(PRODUCT_CATALOG_KEY, { type: 'json' });
+            catalog = entry?.data;
+            etag = entry?.etag || '';
+        } else {
+            catalog = await productStore.get(PRODUCT_CATALOG_KEY, { type: 'json' });
+        }
+        if (!Array.isArray(catalog)) return { ok: true, changed: false };
+        const result = change(catalog);
+        if (!result.ok || !result.changed) return result;
+        const saved = etag
+            ? await productStore.setJSON(PRODUCT_CATALOG_KEY, catalog, { onlyIfMatch: etag })
+            : await productStore.setJSON(PRODUCT_CATALOG_KEY, catalog);
+        if (!etag || saved?.modified !== false) return result;
+    }
+    return { ok: false, error: 'The shop stock is being updated right now. Please try again.' };
+}
+
+function wholeStock(value) {
+    return Math.max(0, Math.floor(Number(value) || 0));
+}
+
+async function reserveOrderStock(order) {
+    return updateCatalog(catalog => {
+        const needs = getOrderStockNeeds(order, catalog);
+        if (!needs.size) return { ok: true, changed: false, deductions: [] };
+        for (const [id, pieces] of needs) {
+            const product = catalog.find(entry => String(entry?.id) === id);
+            const stock = wholeStock(product.stock);
+            if (pieces > stock) {
+                return {
+                    ok: false,
+                    error: stock > 0
+                        ? `Only ${stock} left of ${product.name}. Your order needs ${pieces}. Please lower the quantity.`
+                        : `${product.name} is out of stock. Please remove it from your cart.`
+                };
+            }
+        }
+        const deductions = [];
+        for (const [id, pieces] of needs) {
+            const product = catalog.find(entry => String(entry?.id) === id);
+            product.stock = wholeStock(product.stock) - pieces;
+            deductions.push({ productId: product.id, name: String(product.name || '').slice(0, 120), quantity: pieces });
+        }
+        return { ok: true, changed: true, deductions };
+    });
+}
+
+// Puts a cancelled order's pieces back, once.
+async function restoreOrderStock(order) {
+    const deductions = Array.isArray(order.stockDeductions) ? order.stockDeductions : [];
+    if (!deductions.length || order.stockRestoredAt) return;
+    const result = await updateCatalog(catalog => {
+        let changed = false;
+        for (const deduction of deductions) {
+            const product = catalog.find(entry => String(entry?.id) === String(deduction.productId));
+            if (!product) continue;
+            product.stock = wholeStock(product.stock) + wholeStock(deduction.quantity);
+            changed = true;
+        }
+        return { ok: true, changed };
+    });
+    if (result.ok) order.stockRestoredAt = new Date().toISOString();
+}
+
+// Players in a team order (each gets one of every item), or 1.
+function orderPlayerCount(order) {
+    return order?.teamOrder?.isTeamOrder ? Math.max(1, Math.floor(Number(order.teamOrder.totalPlayers) || 1)) : 1;
+}
+
+function computeOrderTotal(order) {
+    const players = orderPlayerCount(order);
+    return round2((Array.isArray(order.items) ? order.items : []).reduce((sum, item) => {
+        const unitPrice = Number(item?.price);
+        const quantity = Math.max(1, Math.floor(Number(item?.quantity) || 1));
+        return sum + (Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice * quantity * players : 0);
+    }, 0));
+}
+
+// After the total of an order changes, the downpayment is 50% of the new
+// total. When the downpayment was already verified, the customer is not asked
+// for more downpayment: what they paid stays the downpayment and the rest is balance.
+function resetDownpaymentForTotal(order) {
+    let downpayment = round2(round2(order.totalAmount) / 2);
+    if (String(order.paymentStatus || '').toLowerCase() === 'verified') {
+        const paid = getPaymentSummary(order).amountPaid;
+        if (paid > 0) downpayment = Math.min(downpayment, paid);
+    }
+    order.downpaymentAmount = round2(downpayment);
+    if (String(order.paymentMethod || '').toLowerCase() === 'gcash') order.gcashDownpaymentAmount = order.downpaymentAmount;
+}
+
 function parsePaymentAmount(value) {
     if (value === undefined || value === null || value === '') return null;
     const amount = Number(value);
@@ -167,6 +288,7 @@ async function removeInlineDesignFiles(order, designStore) {
     let changed = false;
 
     for (const [itemIndex, item] of (normalized.items || []).entries()) {
+        if (!item || typeof item !== 'object') continue;
         for (const imageField of ['image', 'productImage', 'sizeChartImage']) {
             if (typeof item[imageField] === 'string' && item[imageField].startsWith('data:')) {
                 delete item[imageField];
@@ -181,31 +303,38 @@ async function removeInlineDesignFiles(order, designStore) {
             }
         }
 
-        if (item.designType !== 'uploaded' || !item.details) continue;
-
-        if (Array.isArray(item.details.uploadedFiles) && item.details.uploadedFiles.length) {
+        // Uploaded designs and the front/back photos of a customized design are
+        // both kept in details.uploadedFiles. Each photo is saved apart from the
+        // order record; the record keeps its label and a link to it.
+        if (!item.details || typeof item.details !== 'object') continue;
+        if (Array.isArray(item.details.uploadedFiles) && item.details.uploadedFiles.some(file => String(file?.uploadedFile || '').startsWith('data:'))) {
             const uploadedFiles = [];
             for (const [fileIndex, file] of item.details.uploadedFiles.entries()) {
-                const uploadedFile = String(file.uploadedFile || '');
+                const uploadedFile = String(file?.uploadedFile || '');
                 const match = uploadedFile.match(/^data:(image\/(?:png|jpeg|gif|webp)|application\/pdf);base64,([a-z0-9+/=]+)$/i);
                 if (!match) continue;
-                const designKey = uploadedDesignFileKey(normalized.id, itemIndex, fileIndex);
+                const savedIndex = uploadedFiles.length;
+                const designKey = uploadedDesignFileKey(normalized.id, itemIndex, savedIndex);
                 if (!await designStore.get(designKey, { type: 'text' })) await designStore.set(designKey, uploadedFile);
                 uploadedFiles.push({
-                    fileName: String(file.fileName || 'customer-design'),
+                    fileName: String(file.fileName || 'customer-design').slice(0, 160),
                     fileType: String(file.fileType || match[1]),
-                    uploadedFileUrl: `/.netlify/functions/order-design?orderId=${encodeURIComponent(normalized.id)}&itemIndex=${itemIndex}&fileIndex=${fileIndex}`
+                    ...(file.label ? { label: String(file.label).slice(0, 40) } : {}),
+                    ...(file.part ? { part: String(file.part).slice(0, 10) } : {}),
+                    ...(file.side ? { side: String(file.side).slice(0, 10) } : {}),
+                    uploadedFileUrl: `/.netlify/functions/order-design?orderId=${encodeURIComponent(normalized.id)}&itemIndex=${itemIndex}&fileIndex=${savedIndex}`
                 });
             }
+            item.details.uploadedFiles = uploadedFiles;
             if (uploadedFiles.length) {
-                item.details.uploadedFiles = uploadedFiles;
                 item.details.uploadedFileUrl = uploadedFiles[0].uploadedFileUrl;
                 item.details.fileName = uploadedFiles.map(file => file.fileName).join(', ');
-                delete item.details.uploadedFile;
-                changed = true;
-                continue;
             }
+            delete item.details.uploadedFile;
+            changed = true;
+            continue;
         }
+        if (item.designType !== 'uploaded') continue;
 
         const uploadedFile = String(item.details.uploadedFile || '');
         const match = uploadedFile.match(/^data:(image\/(?:png|jpeg|gif|webp)|application\/pdf);base64,([a-z0-9+/=]+)$/i);
@@ -299,7 +428,7 @@ async function readAllOrders(legacyStore, indexStore) {
     const legacyOrders = (await legacyStore.get('orders', { type: 'json' })) || [];
     const priorOrders = (await legacyStore.get('orders-v2', { type: 'json' })) || [];
     const priorArray = (await indexStore.get('orders', { type: 'json' })) || [];
-    const ids = (await indexStore.get('all-order-ids', { type: 'json' })) || [];
+    const ids = await listOrderIds(indexStore);
     const indexed = await readOrderRecords(indexStore, ids);
     const byId = new Map();
     [...legacyOrders, ...priorOrders, ...priorArray, ...indexed].forEach(order => {
@@ -322,7 +451,7 @@ function recomputeOrderPrices(orders, catalog) {
     for (const order of orders) {
         const before = Number(order.totalAmount) || 0;
         totalBefore += before;
-        const multiplier = order.teamOrder?.isTeamOrder ? (Number(order.teamOrder.totalPlayers) || 0) : 1;
+        const multiplier = orderPlayerCount(order);
         const itemChanges = [];
         let delta = 0;
         (order.items || []).forEach((item, index) => {
@@ -355,6 +484,7 @@ function applyPriceChange(order, change, appliedAt) {
         if (updated.items?.[itemChange.index]) updated.items[itemChange.index].price = itemChange.newPrice;
     });
     updated.totalAmount = change.totalAfter;
+    resetDownpaymentForTotal(updated);
     updated.priceAdjustments = [...(Array.isArray(updated.priceAdjustments) ? updated.priceAdjustments : []), {
         at: appliedAt,
         totalBefore: change.totalBefore,
@@ -366,6 +496,8 @@ function applyPriceChange(order, change, appliedAt) {
 
 async function persistOrder(indexStore, designStore, order) {
     const normalized = (await removeInlineDesignFiles(order, designStore)).order;
+    // Lets a screen that already shows a newer copy of the order keep it.
+    normalized.updatedAt = new Date().toISOString();
     await writeOrderRecord(indexStore, normalized);
     return normalized;
 }
@@ -444,7 +576,15 @@ exports.handler = async function handler(event) {
         if (event.httpMethod === 'GET') {
             const activeOnly = event.queryStringParameters?.scope === 'active';
             const allOrders = await readAllOrders(store, orderIndexStore);
-            const normalizedOrders = await Promise.all(allOrders.map(order => removeInlineDesignFiles(normalizeStoredOrder(order), designStore)));
+            // One damaged order record must not hide every other order from the list.
+            const normalizedOrders = (await Promise.all(allOrders.map(async order => {
+                try {
+                    return await removeInlineDesignFiles(normalizeStoredOrder(order), designStore);
+                } catch (error) {
+                    console.error(`Order ${order?.id} could not be prepared; sending it as saved.`, error);
+                    return { order, changed: false };
+                }
+            })));
             const allResponseOrders = normalizedOrders.map(result => result.order);
             if (claims.role === 'admin') {
                 // Save only orders whose attachments were just moved out of the
@@ -452,9 +592,13 @@ exports.handler = async function handler(event) {
                 // a payment or proof saved at the same moment by someone else.
                 const savedIds = (await orderIndexStore.get('all-order-ids', { type: 'json' })) || [];
                 const savedIdSet = new Set(savedIds.map(String));
-                await Promise.all(normalizedOrders
-                    .filter(result => result.changed || !savedIdSet.has(String(result.order.id)))
-                    .map(result => orderIndexStore.setJSON(orderRecordKey(result.order.id), result.order)));
+                // Orders found only in the old order lists get their own record once.
+                await Promise.all(normalizedOrders.map(async result => {
+                    const key = orderRecordKey(result.order.id);
+                    if (result.changed || (!savedIdSet.has(String(result.order.id)) && !await orderIndexStore.get(key, { type: 'json' }))) {
+                        await orderIndexStore.setJSON(key, result.order);
+                    }
+                }));
                 const allIds = allResponseOrders.map(order => order.id);
                 if (allIds.length !== savedIds.length || allIds.some(id => !savedIdSet.has(String(id)))) {
                     await orderIndexStore.setJSON('all-order-ids', allIds);
@@ -465,7 +609,10 @@ exports.handler = async function handler(event) {
                 ? allResponseOrders
                 : allResponseOrders.filter(order => String(order.customerEmail || '').toLowerCase() === String(claims.sub).toLowerCase());
             if (activeOnly) responseOrders = responseOrders.filter(isActiveOrder);
-            return jsonResponse(200, { orders: responseOrders.map(order => decorateOrderMedia(order, claims)) });
+            const body = { orders: responseOrders.map(order => decorateOrderMedia(order, claims)) };
+            // The admin's notifications up to this time are read, on every device.
+            if (claims.role === 'admin') body.adminNotificationsReadAt = (await orderIndexStore.get(ADMIN_NOTIFICATION_STATE_KEY, { type: 'json' }))?.readAt || '';
+            return jsonResponse(200, body);
         }
         if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'Method not allowed' });
 
@@ -492,12 +639,10 @@ exports.handler = async function handler(event) {
                     return jsonResponse(400, { error: 'Surname, jersey number, upper size, and lower size for every player are required.' });
                 }
                 order.teamOrder = teamOrder;
-                order.totalAmount = (order.items || []).reduce((sum, item) => {
-                    const unitPrice = Number(item.price);
-                    const quantity = Number(item.quantity) || 1;
-                    return sum + (Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice * quantity * teamOrder.totalPlayers : 0);
-                }, 0);
             }
+            // The total comes from the items: price × quantity, and × players for a team order.
+            const itemsTotal = computeOrderTotal(order);
+            if (itemsTotal > 0) order.totalAmount = itemsTotal;
             if (await orderIndexStore.get(orderRecordKey(order.id), { type: 'json' })) return jsonResponse(409, { error: 'This order already exists.' });
             order.customerEmail = claims.sub;
             order.customerUsername = claims.sub;
@@ -533,7 +678,19 @@ exports.handler = async function handler(event) {
             order.estimatedCompletionDate = '';
             order.productionRemarks = '';
             addProductionHistory(order, 'stage-change', 'order-placed', 'customer', 'Order placed.');
-            const savedOrder = await persistOrder(orderIndexStore, designStore, order);
+            // Take the pieces out of stock last, so a refused order never holds stock.
+            delete order.stockDeductions;
+            delete order.stockRestoredAt;
+            const stock = await reserveOrderStock(order);
+            if (!stock.ok) return jsonResponse(409, { error: stock.error });
+            order.stockDeductions = stock.deductions || [];
+            let savedOrder;
+            try {
+                savedOrder = await persistOrder(orderIndexStore, designStore, order);
+            } catch (error) {
+                await restoreOrderStock(order).catch(restoreError => console.error('Unable to return stock for an unsaved order:', restoreError));
+                throw error;
+            }
             return jsonResponse(201, { ok: true, order: decorateOrderMedia(savedOrder, claims) });
         }
 
@@ -623,6 +780,7 @@ exports.handler = async function handler(event) {
                 if (['completed', 'delivered', 'cancelled'].includes(order.status)) return jsonResponse(409, { error: 'This order can no longer be cancelled.' });
                 order.status = 'cancelled';
                 order.productionStatus = 'cancelled';
+                await restoreOrderStock(order);
                 order.requestType = 'cancel';
                 order.requestReason = String(incoming.requestReason || '').trim().slice(0, 500);
                 order.requestDate = new Date().toISOString();
@@ -648,6 +806,19 @@ exports.handler = async function handler(event) {
             const savedOrder = await persistOrder(orderIndexStore, designStore, order);
             if (emailEventId) await enqueueProductionEmail(event, savedOrder.id, emailEventId);
             return jsonResponse(200, { ok: true, order: decorateOrderMedia(savedOrder, claims) });
+        }
+
+        if (action === 'admin-notifications-read') {
+            // Marks the admin's order notifications read up to the newest one the
+            // admin has seen (never later than now), for every admin device.
+            if (claims.role !== 'admin') return jsonResponse(403, { error: 'Admin access required.' });
+            const upTo = new Date(String(payload.upTo || ''));
+            if (Number.isNaN(upTo.getTime())) return jsonResponse(400, { error: 'A valid time is required.' });
+            const saved = (await orderIndexStore.get(ADMIN_NOTIFICATION_STATE_KEY, { type: 'json' })) || {};
+            const capped = Math.min(upTo.getTime(), Date.now());
+            const readAt = saved.readAt && new Date(saved.readAt).getTime() >= capped ? saved.readAt : new Date(capped).toISOString();
+            if (readAt !== saved.readAt) await orderIndexStore.setJSON(ADMIN_NOTIFICATION_STATE_KEY, { readAt, updatedAt: new Date().toISOString(), updatedBy: claims.sub });
+            return jsonResponse(200, { ok: true, adminNotificationsReadAt: readAt });
         }
 
         if (action !== 'admin-update' && action !== 'admin-migrate' && action !== 'recompute-prices') return jsonResponse(400, { error: 'Unknown order action.' });
@@ -898,6 +1069,7 @@ exports.handler = async function handler(event) {
             if (payload.estimatedCompletionDate !== undefined) order.estimatedCompletionDate = String(payload.estimatedCompletionDate || '');
             addProductionHistory(order, 'stage-change', nextStatus, 'admin', notifyRemarks);
             if (nextStatus === 'completed') order.completedAt = new Date().toISOString();
+            if (nextStatus === 'cancelled') await restoreOrderStock(order);
             order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
             emailEventId = require('crypto').randomUUID();
             order.productionNotifications.push({
@@ -933,6 +1105,53 @@ exports.handler = async function handler(event) {
             order.finalDesignName = String(payload.fileName || 'final-design').slice(0, 160);
             order.designApproval = { status: 'pending', updatedAt: new Date().toISOString(), remarks: String(payload.remarks || '').trim().slice(0, 1000) };
             addProductionHistory(order, 'design-uploaded', order.productionStatus, 'admin', order.designApproval.remarks || 'Final design uploaded for customer review.');
+        } else if (operation === 'adjust-price') {
+            // A new price agreed with the customer, e.g. a team discount or a quote
+            // for a custom design. For a team order the admin can enter the price
+            // per player; the total is that price times the players.
+            if (order.status === 'cancelled' || order.productionStatus === 'cancelled') return jsonResponse(409, { error: 'The price of a cancelled order cannot be changed.' });
+            if (order.productionStatus === 'completed') return jsonResponse(409, { error: 'The price of a completed order cannot be changed.' });
+            const reason = String(payload.reason || '').trim().slice(0, 500);
+            if (!reason) return jsonResponse(400, { error: 'Enter the reason for the new price (for example, team discount).' });
+            const players = orderPlayerCount(order);
+            const perPlayer = parsePaymentAmount(payload.pricePerPlayer);
+            const requestedTotal = perPlayer !== null && players > 1 ? round2(perPlayer * players) : parsePaymentAmount(payload.totalAmount);
+            if (requestedTotal === null || Number.isNaN(requestedTotal) || requestedTotal <= 0) return jsonResponse(400, { error: 'Enter a new price greater than zero.' });
+            if (requestedTotal > 10000000) return jsonResponse(400, { error: 'The new price is too large.' });
+            ensurePaymentLedger(order);
+            const before = getPaymentSummary(order);
+            if (requestedTotal + 0.001 < before.amountPaid) return jsonResponse(400, { error: `The new total cannot be less than the ${formatPeso(before.amountPaid)} already paid.` });
+            if (Math.abs(requestedTotal - before.total) < 0.005) return jsonResponse(409, { error: 'The new price is the same as the current total.' });
+            order.totalAmount = requestedTotal;
+            resetDownpaymentForTotal(order);
+            order.priceAdjustments = [...(Array.isArray(order.priceAdjustments) ? order.priceAdjustments : []), {
+                at: new Date().toISOString(),
+                by: claims.sub,
+                type: 'manual',
+                totalBefore: before.total,
+                totalAfter: requestedTotal,
+                players,
+                pricePerPlayer: players > 1 ? round2(requestedTotal / players) : null,
+                reason
+            }];
+            const after = getPaymentSummary(order);
+            const priceText = players > 1
+                ? `${formatPeso(requestedTotal / players)} per player × ${players} players = ${formatPeso(requestedTotal)}`
+                : formatPeso(requestedTotal);
+            notifyRemarks = `New order total: ${priceText} (was ${formatPeso(before.total)}). Reason: ${reason}. ${after.downpaymentDue > 0 ? `Downpayment due: ${formatPeso(after.downpaymentDue)}.` : `Remaining balance: ${formatPeso(after.balance)}.`}`;
+            addProductionHistory(order, 'price-adjusted', order.productionStatus, 'admin', notifyRemarks);
+            order.productionNotifications = Array.isArray(order.productionNotifications) ? order.productionNotifications : [];
+            emailEventId = require('crypto').randomUUID();
+            order.productionNotifications.push({
+                id: emailEventId,
+                type: 'stage-update',
+                status: order.productionStatus,
+                statusLabel: stageLabel(order.productionStatus),
+                remarks: notifyRemarks,
+                message: `The shop updated the price of your order. ${notifyRemarks}`,
+                timestamp: new Date().toISOString(),
+                read: false
+            });
         } else {
             return jsonResponse(400, { error: 'Unknown admin order operation.' });
         }

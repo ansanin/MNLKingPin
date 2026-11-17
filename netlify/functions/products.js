@@ -61,6 +61,24 @@ function validateChangedProductSizes(products, existingProducts) {
     return '';
 }
 
+// Orders take stock on the server. The admin page sends `stockBase`, the stock
+// it loaded. A product whose stock the admin did not change (stock still equals
+// stockBase) keeps the server's current stock, so a page opened before an order
+// cannot put sold pieces back. A changed stock (edit, restock, out of stock) is saved.
+function keepServerStock(products, stockBases, currentProducts) {
+    const currentById = new Map((currentProducts || []).map(product => [String(product?.id), product]));
+    return products.map(product => {
+        if (!product || typeof product !== 'object' || Array.isArray(product)) return product;
+        const { stockBase: ignored, ...rest } = product;
+        const base = stockBases.get(String(rest.id));
+        const current = currentById.get(String(rest.id));
+        if (current && base !== undefined && base !== null && base !== '' && Number(rest.stock) === Number(base)) {
+            rest.stock = current.stock;
+        }
+        return rest;
+    });
+}
+
 async function loadAndMigrateCatalog(store) {
     let products = await store.get(productKey, { type: 'json' });
     if (!Array.isArray(products)) {
@@ -123,12 +141,29 @@ exports.handler = async function handler(event) {
         }
 
         const store = getProductsStore();
-    const existingProducts = await loadAndMigrateCatalog(store);
-    const preparedProducts = await migrateProductImages(payload.products);
-    const sizeError = validateChangedProductSizes(preparedProducts, existingProducts);
-    if (sizeError) return jsonResponse(400, { error: sizeError });
-    await store.setJSON(productKey, preparedProducts);
-        return jsonResponse(200, { ok: true });
+        await loadAndMigrateCatalog(store);
+        const stockBases = new Map(payload.products.map(product => [String(product?.id), product?.stockBase]));
+        const migratedProducts = await migrateProductImages(payload.products);
+        // Saved only if no order changed the stock in between; otherwise merged again.
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+            let currentProducts;
+            let etag = '';
+            if (typeof store.getWithMetadata === 'function') {
+                const entry = await store.getWithMetadata(productKey, { type: 'json' });
+                currentProducts = entry?.data;
+                etag = entry?.etag || '';
+            } else {
+                currentProducts = await store.get(productKey, { type: 'json' });
+            }
+            const preparedProducts = keepServerStock(migratedProducts, stockBases, currentProducts);
+            const sizeError = validateChangedProductSizes(preparedProducts, currentProducts);
+            if (sizeError) return jsonResponse(400, { error: sizeError });
+            const saved = etag
+                ? await store.setJSON(productKey, preparedProducts, { onlyIfMatch: etag })
+                : await store.setJSON(productKey, preparedProducts);
+            if (!etag || saved?.modified !== false) return jsonResponse(200, { ok: true });
+        }
+        return jsonResponse(409, { error: 'The catalog changed while saving. Please try again.' });
     } catch (error) {
         console.error('Netlify products function error:', error);
         return jsonResponse(500, { error: 'Unable to access shared products' });

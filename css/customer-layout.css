@@ -547,20 +547,6 @@ body.light-mode #customerPage .customer-container .customer-page-head h2 {
     margin-top: 14px;
 }
 
-#customerPage .customer-order-design-gallery {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-#customerPage .customer-order-design-image {
-    max-width: 180px;
-    max-height: 140px;
-    border: 1px solid var(--admin-border);
-    border-radius: 6px;
-    object-fit: contain;
-}
-
 #customerPage .customer-order-footer {
     display: flex;
     flex-wrap: wrap;

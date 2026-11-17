@@ -40,7 +40,7 @@
     }
 
     function getUploadedDesignImageSource(item, orderId, itemIndex) {
-        if (item?.designType !== 'uploaded' || !item.details) return '';
+        if (!item?.details) return '';
 
         const dataUrl = String(item.details.uploadedFile || '');
         if (IMAGE_DATA_URL.test(dataUrl)) return dataUrl;
@@ -48,21 +48,38 @@
         return getAuthorizedMediaUrl(item.details.uploadedFileUrl, orderId, '', itemIndex);
     }
 
-    function getUploadedDesignImageSources(item, orderId, itemIndex) {
-        if (item?.designType !== 'uploaded' || !item.details) return [];
+    // Every design file of a cart or order item (uploaded designs and the front/back
+    // photos of a customized design), in order, with its label and a safe source:
+    // the photo itself while it is in the cart, or the order's signed link.
+    function getDesignFileSources(item, orderId, itemIndex) {
+        if (!item?.details) return [];
         const files = Array.isArray(item.details.uploadedFiles) ? item.details.uploadedFiles : [];
         if (!files.length) {
             const image = getUploadedDesignImageSource(item, orderId, itemIndex);
-            return image ? [image] : [];
+            return image ? [{ src: image, isImage: true, isPdf: false, label: '', fileName: String(item.details.fileName || '') }] : [];
         }
         return files.map((file, fileIndex) => {
-            const dataUrl = String(file.uploadedFile || '');
-            if (IMAGE_DATA_URL.test(dataUrl)) return dataUrl;
-            return getAuthorizedMediaUrl(file.uploadedFileUrl, orderId, '', itemIndex, fileIndex);
-        }).filter(Boolean);
+            const dataUrl = String(file?.uploadedFile || '');
+            const fileType = String(file?.fileType || '');
+            let src = '';
+            if (IMAGE_DATA_URL.test(dataUrl) || /^data:application\/pdf;base64,[a-z0-9+/=]+$/i.test(dataUrl)) src = dataUrl;
+            else src = getAuthorizedMediaUrl(file?.uploadedFileUrl, orderId, '', itemIndex, fileIndex);
+            const isPdf = fileType === 'application/pdf' || dataUrl.startsWith('data:application/pdf');
+            return {
+                src,
+                isImage: Boolean(src) && !isPdf,
+                isPdf,
+                label: String(file?.label || ''),
+                fileName: String(file?.fileName || 'customer-design')
+            };
+        }).filter(file => file.src);
     }
 
-    const api = { getOrderMediaSource, getUploadedDesignImageSource, getUploadedDesignImageSources };
+    function getUploadedDesignImageSources(item, orderId, itemIndex) {
+        return getDesignFileSources(item, orderId, itemIndex).filter(file => file.isImage).map(file => file.src);
+    }
+
+    const api = { getOrderMediaSource, getUploadedDesignImageSource, getUploadedDesignImageSources, getDesignFileSources };
     global.KingPinOrderMedia = api;
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);

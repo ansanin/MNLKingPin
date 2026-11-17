@@ -36,6 +36,33 @@ body.light-mode {
     --admin-info: #1565c0;
 }
 
+/* ---------- Highlights in both themes ---------- */
+/* Phones draw their own grey/black flash on every tap; the page's own
+   hover and focus colours are enough. */
+html {
+    -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+    background: rgba(212, 175, 55, .38);
+    color: inherit;
+}
+
+body.light-mode ::selection {
+    background: #f3dc8f;
+    color: #1d262c;
+}
+
+body.light-mode :is(button, a, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+    outline: 3px solid rgba(184, 134, 11, .55);
+    outline-offset: 2px;
+}
+
+body.light-mode .navbar-emblem-container {
+    border-color: #e2d3a6 !important;
+    background: #ffffff !important;
+}
+
 #adminPage [hidden],
 .table-pager[hidden],
 .session-restore-notice[hidden] {

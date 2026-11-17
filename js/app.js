@@ -128,7 +128,6 @@ let customerCartRefreshTimer = null;
 let customerCartRefreshRequest = null;
 let customerServiceRefreshTimer = null;
 let customerServiceRefreshRequest = null;
-let selectedAdminMessageId = null;
 let customerProfileRefreshTimer = null;
 let customerProfileRefreshRequest = null;
 let shopBrandingRefreshTimer = null;
@@ -137,6 +136,7 @@ let shopBrandingRefreshRequest = null;
 function applyTheme(theme) {
     const isLight = theme === 'light';
     document.body.classList.toggle('light-mode', isLight);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isLight ? '#f5f3ee' : '#111416');
     document.querySelectorAll('.theme-toggle').forEach(button => {
         button.setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Switch to light mode');
         const icon = button.querySelector('.theme-toggle-icon');
@@ -353,16 +353,13 @@ async function callAuthApi(payload) {
 
 async function fetchSharedOrders({ activeOnly = false } = {}) {
     const scope = activeOnly ? 'active' : 'all';
-    const query = `?scope=${scope}`;
-    const isLocalServer = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-    const endpoints = isLocalServer
-        ? [`api/orders.php${query}`, `api/orders${query}`, '/.netlify/functions/orders' + query]
-        : [`api/orders${query}`, '/.netlify/functions/orders' + query, `api/orders.php${query}`];
+    const endpoints = [`/.netlify/functions/orders?scope=${scope}`];
     for (const endpoint of endpoints) {
         try {
             const response = await fetch(endpoint, { cache: 'no-store', headers: getAuthenticatedHeaders() });
             if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) continue;
             const result = await response.json();
+            if (typeof result.adminNotificationsReadAt === 'string') appData.adminNotificationsReadAt = result.adminNotificationsReadAt;
             if (Array.isArray(result.orders)) return result.orders;
         } catch (error) {
             console.warn(`Unable to load shared orders from ${endpoint}:`, error);
@@ -372,10 +369,7 @@ async function fetchSharedOrders({ activeOnly = false } = {}) {
 }
 
 async function saveOrderToSharedServer(order, action = 'customer-update') {
-    const isLocalServer = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-    const endpoints = isLocalServer
-        ? ['api/orders.php', 'api/orders', '/.netlify/functions/orders']
-        : ['api/orders', '/.netlify/functions/orders', 'api/orders.php'];
+    const endpoints = ['/.netlify/functions/orders'];
     for (const endpoint of endpoints) {
         let response;
         try {
@@ -861,15 +855,26 @@ function initializeData() {
     loadGCashQRCode();
 }
 
+// The stock each product had when the catalog was last loaded. Sent with an
+// admin save as `stockBase`: a stock the admin did not change keeps the
+// server's current stock, which orders may have lowered since.
+const productStockBase = new Map();
+let lastProductsFetchAt = 0;
+
+function rememberProductStockBase(products) {
+    productStockBase.clear();
+    (products || []).forEach(product => {
+        if (product && product.id !== undefined) productStockBase.set(String(product.id), product.stock);
+    });
+    lastProductsFetchAt = Date.now();
+}
+
 // Load products from localStorage
 function fetchSharedProducts({ full = appData.currentRole === 'admin' } = {}) {
     if (sharedProductsRequest) return sharedProductsRequest;
 
-    const isLocalServer = ['localhost', '127.0.0.1'].includes(window.location.hostname);
     const query = full ? '?view=admin' : '';
-    const endpoints = isLocalServer
-        ? [`api/products.php${query}`, `api/products${query}`]
-        : [`api/products${query}`, `/.netlify/functions/products${query}`];
+    const endpoints = [`/.netlify/functions/products${query}`];
 
     const request = (async () => {
         let lastError = new Error('Product API is not available on this host');
@@ -887,7 +892,10 @@ function fetchSharedProducts({ full = appData.currentRole === 'admin' } = {}) {
                 }
 
                 const data = await response.json();
-                if (Array.isArray(data.products)) return data.products;
+                if (Array.isArray(data.products)) {
+                    rememberProductStockBase(data.products);
+                    return data.products;
+                }
                 lastError = new Error('Product API returned invalid product data');
             } catch (error) {
                 lastError = error;
@@ -908,12 +916,7 @@ function fetchSharedProducts({ full = appData.currentRole === 'admin' } = {}) {
 
 async function fetchProductDetails(productId) {
     const id = encodeURIComponent(productId);
-    // On localhost, `netlify dev` answers from the Netlify function and returns PHP files as plain text,
-    // while XAMPP (Apache + PHP) only has api/product-detail.php. Try the function first, then the PHP file.
-    const isLocalServer = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-    const endpoints = isLocalServer
-        ? [`/.netlify/functions/product-detail?id=${id}`, `api/product-detail.php?id=${id}`]
-        : [`/.netlify/functions/product-detail?id=${id}`];
+    const endpoints = [`/.netlify/functions/product-detail?id=${id}`];
     let lastError = new Error('Unable to load product details.');
     for (const endpoint of endpoints) {
         try {
@@ -1123,7 +1126,7 @@ async function loadShopFooterSettings() {
     }
     updateShopFooter();
 
-    for (const endpoint of ['/.netlify/functions/shop-footer', 'api/shop-footer.php', 'api/shop-footer']) {
+    for (const endpoint of ['/.netlify/functions/shop-footer']) {
         try {
             const response = await fetch(endpoint, { cache: 'no-store' });
             if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) continue;
@@ -1176,7 +1179,7 @@ async function saveShopFooterSettings(event) {
 
     let sharedSaveSucceeded = false;
     const payload = JSON.stringify(appData.footerSettings);
-    for (const endpoint of ['/.netlify/functions/shop-footer', 'api/shop-footer.php', 'api/shop-footer']) {
+    for (const endpoint of ['/.netlify/functions/shop-footer']) {
         try {
             const response = await fetch(endpoint, {
                 method: 'POST',
@@ -2065,7 +2068,7 @@ function saveGCashQRCode() {
 async function saveSharedGcashQRCode() {
     try {
         const payload = JSON.stringify({ gcashQRCode: appData.gcashQRCode });
-        for (const endpoint of ['/.netlify/functions/gcash-qr', 'api/gcash-qr.php', 'api/gcash-qr']) {
+        for (const endpoint of ['/.netlify/functions/gcash-qr']) {
             try {
                 const response = await fetch(endpoint, {
                     method: 'POST',
@@ -2208,7 +2211,7 @@ function updatePaymentMethodUI() {
     const proofContainer = proofInput ? proofInput.closest('.form-group') : null;
     const isGcash = !paymentMethod || paymentMethod.value === 'gcash';
     document.getElementById('checkoutPickupInstruction').hidden = isGcash;
-    document.getElementById('checkoutDownpayment').textContent = `PHP ${(getCartTotal() / 2).toFixed(2)}`;
+    updateCheckoutTotals();
     document.getElementById('placeCustomerOrderButton').textContent = isGcash ? 'Confirm GCash Order' : 'Confirm Pickup Order';
     document.querySelectorAll('[data-payment-option]').forEach(button => {
         button.setAttribute('aria-pressed', String(button.dataset.paymentOption === (isGcash ? 'gcash' : 'pickup')));
@@ -2313,6 +2316,7 @@ function showAdminTab(tabName) {
     document.getElementById('historyTab').style.display = tabName === 'history' ? 'block' : 'none';
     document.getElementById('reportsTab').style.display = tabName === 'reports' ? 'block' : 'none';
     document.getElementById('settingsTab').style.display = tabName === 'settings' ? 'block' : 'none';
+    document.getElementById('fabricsTab').style.display = tabName === 'fabrics' ? 'block' : 'none';
     saveNavigationState('admin', tabName);
     document.querySelectorAll('#adminNavMenu [data-admin-tab]').forEach(button => {
         const active = button.dataset.adminTab === tabName;
@@ -2335,11 +2339,15 @@ function showAdminTab(tabName) {
     if (tabName === 'products') {
 
         loadAdminInventoryProducts();
+        // Orders change stock on the server: show (and later save) the current stock.
+        refreshAdminProductsIfStale();
     } else if (tabName === 'orders') {
         loadNotifications();
         // Opening Orders clears its badge, like My Orders does for customers.
         markAdminOrderNotificationsRead();
         loadAdminOrders();
+    } else if (tabName === 'fabrics') {
+        loadAdminFabrics();
     } else if (tabName === 'messages') {
         loadAdminMessages();
     } else if (tabName === 'customers') {
@@ -2369,146 +2377,13 @@ async function refreshCustomerServiceMessages() {
         .then(result => {
             appData.customerServiceMessages = Array.isArray(result.messages) ? result.messages : [];
             updateNotificationBadges();
-            if (appData.currentRole === 'admin' && document.getElementById('messagesTab')?.style.display === 'block') {
-                renderAdminMessagesList();
-            }
+            if (typeof onCustomerServiceMessagesUpdated === 'function') onCustomerServiceMessagesUpdated();
             return appData.customerServiceMessages;
         })
         .finally(() => {
             customerServiceRefreshRequest = null;
         });
     return customerServiceRefreshRequest;
-}
-
-async function loadAdminMessages() {
-    const messageList = document.getElementById('adminMessagesList');
-    if (!messageList) return;
-
-    messageList.innerHTML = '<p style="text-align: center; padding: 40px; color: #a0a0a0;">Loading customer messages...</p>';
-    try {
-        await refreshCustomerServiceMessages();
-        renderAdminMessagesList();
-    } catch (error) {
-        console.error('Unable to load shared customer-service messages:', error);
-        messageList.innerHTML = '<p style="text-align: center; padding: 40px; color: #f88;">Unable to load customer messages. Please try again.</p>';
-    }
-}
-
-function escapeCustomerServiceHtml(value) {
-    return String(value || '').replace(/[&<>"']/g, character => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-    })[character]);
-}
-
-function renderAdminMessagesList() {
-    const messageList = document.getElementById('adminMessagesList');
-    if (!messageList) return;
-
-    const serviceMessages = appData.customerServiceMessages;
-    messageList.innerHTML = '';
-
-    if (serviceMessages.length === 0) {
-        messageList.innerHTML = '<p style="text-align: center; padding: 40px; color: #a0a0a0;">No customer messages</p>';
-        return;
-    }
-
-    serviceMessages.slice().reverse().forEach(serviceMessage => {
-        const messageItem = document.createElement('div');
-        messageItem.className = `admin-message-item ${serviceMessage.read ? 'read' : 'unread'}`;
-        messageItem.innerHTML = `
-            <div class="admin-message-item-top"><strong>${escapeCustomerServiceHtml(serviceMessage.customerUsername || serviceMessage.customerName || 'Unknown customer')}</strong><span>${escapeCustomerServiceHtml(serviceMessage.date)}</span></div>
-            <div class="admin-message-subject">${escapeCustomerServiceHtml(serviceMessage.subject || 'Customer concern')}</div>
-            <div class="admin-message-preview">${escapeCustomerServiceHtml(serviceMessage.message)}</div>
-        `;
-        messageItem.onclick = () => selectAdminMessage(String(serviceMessage.id));
-        messageList.appendChild(messageItem);
-    });
-}
-
-function renderAdminMessageDetails(messageId) {
-    const message = appData.customerServiceMessages.find(serviceMessage => String(serviceMessage.id) === String(messageId));
-    if (!message) return;
-
-    const details = document.getElementById('adminMessageDetails');
-    details.innerHTML = `
-        <div class="admin-message-details-header">
-            <div>
-                <h3>${escapeCustomerServiceHtml(message.subject || 'Customer concern')}</h3>
-                <p>From ${escapeCustomerServiceHtml(message.customerUsername || message.customerName || 'Unknown customer')}</p>
-            </div>
-            <span class="message-status">${escapeCustomerServiceHtml(message.status || 'open')}</span>
-        </div>
-        <div class="admin-message-meta">
-            <span>${escapeCustomerServiceHtml(message.customerEmail || 'No email')}</span>
-            <span>${message.orderId ? `Order #${escapeCustomerServiceHtml(message.orderId)}` : 'General concern'}</span>
-            <span>${escapeCustomerServiceHtml(message.date)}</span>
-        </div>
-        <div class="admin-message-body">${escapeCustomerServiceHtml(message.message)}</div>
-        <div class="admin-message-replies">${(message.replies || []).map(reply => `
-            <div class="admin-message-reply">
-                <strong>${reply.sender === 'admin' ? 'You' : escapeCustomerServiceHtml(message.customerUsername || 'Customer')}</strong>
-                <span>${escapeCustomerServiceHtml(reply.date)}</span>
-                <p>${escapeCustomerServiceHtml(reply.message)}</p>
-            </div>
-        `).join('')}</div>
-        <button type="button" class="btn btn-primary" onclick="toggleAdminReplyBox()">Reply</button>
-        <div id="adminReplyBox" class="admin-reply-box" style="display: none;">
-            <textarea id="adminReplyInput" rows="4" placeholder="Write a reply to the customer..."></textarea>
-            <button type="button" class="btn btn-primary" onclick="sendAdminMessageReply('${escapeCustomerServiceHtml(message.id)}')">Send Reply</button>
-        </div>
-    `;
-}
-
-function selectAdminMessage(messageId) {
-    selectedAdminMessageId = String(messageId);
-    renderAdminMessageDetails(selectedAdminMessageId);
-    const message = appData.customerServiceMessages.find(serviceMessage => String(serviceMessage.id) === selectedAdminMessageId);
-    if (message && !message.read) {
-        markCustomerMessageAsRead(selectedAdminMessageId).catch(error => {
-            console.error('Unable to mark customer message as read:', error);
-        });
-    }
-}
-
-function toggleAdminReplyBox() {
-    const replyBox = document.getElementById('adminReplyBox');
-    if (!replyBox) return;
-    replyBox.style.display = replyBox.style.display === 'none' ? 'block' : 'none';
-    if (replyBox.style.display === 'block') document.getElementById('adminReplyInput').focus();
-}
-
-async function sendAdminMessageReply(messageId) {
-    const replyInput = document.getElementById('adminReplyInput');
-    const replyText = replyInput ? replyInput.value.trim() : '';
-    if (!replyText) return;
-
-    try {
-        const result = await callCustomerServiceApi({ action: 'reply', messageId, message: replyText });
-        const index = appData.customerServiceMessages.findIndex(item => String(item.id) === String(messageId));
-        if (index >= 0) appData.customerServiceMessages[index] = result.message;
-        renderAdminMessagesList();
-        renderAdminMessageDetails(messageId);
-        updateNotificationBadges();
-    } catch (error) {
-        console.error('Unable to send customer-service reply:', error);
-        const details = document.getElementById('adminMessageDetails');
-        const errorMessage = document.createElement('p');
-        errorMessage.className = 'status-message error';
-        errorMessage.textContent = `Reply was not sent: ${error.message}`;
-        details?.appendChild(errorMessage);
-    }
-}
-
-async function markCustomerMessageAsRead(messageId) {
-    const result = await callCustomerServiceApi({ action: 'read', messageId });
-    const index = appData.customerServiceMessages.findIndex(item => String(item.id) === String(messageId));
-    if (index >= 0) appData.customerServiceMessages[index] = result.message;
-    renderAdminMessagesList();
-    updateNotificationBadges();
 }
 
 function toggleCart() {
@@ -2539,6 +2414,26 @@ async function refreshCustomerOrdersFromServer(activeOnly = false) {
 // Order events meant for the admin; every other event is for the customer.
 const ADMIN_ORDER_EVENT_TYPES = ['new-order', 'design-response', 'customer-cancel', 'refund-requested', 'payment-proof'];
 
+// True when an admin event is at or before the time the admin last read
+// notifications (saved on the server, so it is the same on every device).
+function isAdminEventRead(eventTime) {
+    const readAt = Date.parse(appData.adminNotificationsReadAt || '');
+    const time = Date.parse(eventTime || '');
+    return Number.isFinite(readAt) && Number.isFinite(time) && time <= readAt;
+}
+
+// Marks admin notifications read that another device already read. Never marks one unread again.
+function applyAdminReadState() {
+    let changed = false;
+    appData.notifications.forEach(notification => {
+        if (notification.type === 'admin' && !notification.read && notification.eventTime && isAdminEventRead(notification.eventTime)) {
+            notification.read = true;
+            changed = true;
+        }
+    });
+    if (changed) saveNotifications();
+}
+
 // Copies new order events into this browser's notifications and returns the ones added.
 function syncProductionNotifications(orders, recipientRole) {
     const notificationType = recipientRole === 'admin' ? 'admin' : 'customer';
@@ -2553,10 +2448,12 @@ function syncProductionNotifications(orders, recipientRole) {
                 id: event.id,
                 productionEventId: event.id,
                 eventType: event.type,
+                eventTime: event.timestamp,
                 type: targetType,
                 message: `Order #${order.id}: ${event.message}`,
                 orderId: order.id,
-                read: false,
+                // The admin's read state is kept on the server for every device.
+                read: targetType === 'admin' && isAdminEventRead(event.timestamp),
                 timestamp: new Date(event.timestamp).toLocaleString()
             };
             appData.notifications.push(notification);
@@ -2570,6 +2467,20 @@ function syncProductionNotifications(orders, recipientRole) {
     return added;
 }
 
+// True while the customer is in the middle of something on My Orders or
+// Purchase History: a field has focus, a review has text or stars, a
+// cancel/refund reason list is open, or a proof is uploading.
+function isCustomerEditingOrders() {
+    const lists = '#ordersList, #purchaseHistoryList';
+    const active = document.activeElement;
+    if (active?.closest?.(lists) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return true;
+    return Array.from(document.querySelectorAll(`${lists.split(', ').map(list => `${list} .review-comment`).join(', ')}`)).some(field => field.value.trim())
+        || Array.from(document.querySelectorAll('#ordersList input[type="hidden"], #purchaseHistoryList input[type="hidden"]'))
+            .some(field => /^review-rating-/.test(field.className) && Number(field.value) > 0)
+        || Array.from(document.querySelectorAll('#ordersList .order-reason-options')).some(options => options.children.length > 0)
+        || Boolean(document.querySelector('#ordersList .proof-upload.is-uploading'));
+}
+
 function startCustomerOrderRefresh() {
     if (window.kingPinCustomerOrderRefreshTimer) return;
     window.kingPinCustomerOrderRefreshTimer = setInterval(async () => {
@@ -2579,6 +2490,8 @@ function startCustomerOrderRefresh() {
         if (ordersSection?.style.display !== 'block' && historySection?.style.display !== 'block') return;
         try {
             await refreshCustomerOrdersFromServer(false);
+            // Redraw later if the customer is typing, choosing or uploading, so nothing is lost.
+            if (isCustomerEditingOrders()) return;
             if (ordersSection?.style.display === 'block') loadCustomerOrders();
             if (historySection?.style.display === 'block') loadPurchaseHistory();
         } catch (error) {
@@ -2652,58 +2565,6 @@ function viewCustomerNotifications() {
     loadCustomerNotifications();
     updateNotificationBadges();
     updateFloatingBackButton();
-}
-
-function viewCustomerService() {
-    if (requireCustomerLogin('support')) return;
-    setCustomerActiveView('customerServiceSection');
-    saveNavigationState('customer', 'viewCustomerService');
-    updateFloatingBackButton();
-
-    const orderSelect = document.getElementById('serviceOrderId');
-    orderSelect.innerHTML = '<option value="">General concern</option>';
-    appData.orders
-        .filter(order => order.customerUsername === appData.currentUser)
-        .sort((firstOrder, secondOrder) => Number(secondOrder.id) - Number(firstOrder.id))
-        .forEach(order => {
-            orderSelect.insertAdjacentHTML('beforeend', `<option value="${order.id}">Order #${order.id}</option>`);
-        });
-    document.getElementById('customerServiceStatus').textContent = '';
-}
-
-async function sendCustomerServiceMessage(event) {
-    event.preventDefault();
-    const subject = document.getElementById('serviceSubject').value;
-    const message = document.getElementById('serviceMessage').value.trim();
-    const orderId = document.getElementById('serviceOrderId').value || null;
-    if (!subject || !message) return;
-
-    const status = document.getElementById('customerServiceStatus');
-    status.className = 'status-message';
-    status.textContent = 'Sending your message...';
-    const submitButton = document.querySelector('#customerServiceForm button[type="submit"]');
-    if (submitButton) submitButton.disabled = true;
-    try {
-        await callCustomerServiceApi({
-            action: 'create',
-            customerName: appData.currentUserProfile?.fullName || appData.currentUserProfile?.username || appData.currentUser,
-            orderId,
-            subject,
-            message
-        });
-        addNotification('customer', `✓ Your message to Customer Service was sent: ${subject}.`, orderId);
-        saveNotifications();
-        status.className = 'status-message success';
-        status.textContent = 'Message sent to the seller successfully.';
-        updateNotificationBadges();
-        document.getElementById('customerServiceForm').reset();
-    } catch (error) {
-        console.error('Unable to send customer-service message:', error);
-        status.className = 'status-message error';
-        status.textContent = `Message was not sent: ${error.message}`;
-    } finally {
-        if (submitButton) submitButton.disabled = false;
-    }
 }
 
 function viewCustomerSettings() {
@@ -3047,8 +2908,12 @@ function renderImagePreview(container, images) {
 
 // Save products to the shared catalog and keep a lightweight local cache.
 async function saveProducts() {
-    const payload = JSON.stringify({ products: appData.products });
-    const endpoints = ['api/products', 'api/products.php', '/.netlify/functions/products'];
+    const payload = JSON.stringify({
+        products: appData.products.map(product => productStockBase.has(String(product.id))
+            ? { ...product, stockBase: productStockBase.get(String(product.id)) }
+            : product)
+    });
+    const endpoints = ['/.netlify/functions/products'];
 
     for (const endpoint of endpoints) {
         try {
@@ -3064,6 +2929,9 @@ async function saveProducts() {
 
                 sharedProductsRequest = null;
                 cacheProductsLocally(appData.products);
+                // Load what the server saved: stock the admin did not change may
+                // be lower than this page showed, because of orders placed since.
+                loadProductsFromStorage();
                 return true;
             }
         } catch (error) {
@@ -3850,21 +3718,104 @@ function getUploadedDesignImageSources(item, orderId, itemIndex) {
     return window.KingPinOrderMedia.getUploadedDesignImageSources(item, orderId, itemIndex);
 }
 
-function renderUploadedDesignPreviews(item) {
-    const images = getUploadedDesignImageSources(item);
-    const files = Array.isArray(item?.details?.uploadedFiles) && item.details.uploadedFiles.length
-        ? item.details.uploadedFiles
-        : [{ fileType: item?.details?.fileType }];
-    const pdfCount = files.filter(file => file.fileType === 'application/pdf').length;
-    if (!images.length && !pdfCount) return '';
+function getDesignFileSources(item, orderId, itemIndex) {
+    return window.KingPinOrderMedia.getDesignFileSources(item, orderId, itemIndex);
+}
 
-    const previews = images.map((image, imageIndex) =>
-        `<img src="${image}" alt="Uploaded design ${imageIndex + 1}">`
-    );
-    for (let index = 0; index < pdfCount; index += 1) {
-        previews.push('<span class="uploaded-design-pdf-preview" aria-label="PDF attachment">PDF</span>');
+// The parts of a customized design. Orders saved before sets existed have one
+// part with flat fields and text descriptions of the front and back design.
+function getCustomDesignParts(item) {
+    const details = item?.details || {};
+    if (Array.isArray(details.parts) && details.parts.length) return details.parts;
+    if (item?.designType !== 'custom') return [];
+    const isBottom = details.clothingType === 'bottoms';
+    const clean = value => (value && value !== 'None' ? String(value) : '');
+    return [{
+        part: isBottom ? 'bottom' : 'top',
+        label: isBottom ? 'Bottom' : 'Top',
+        baseColor: clean(details.baseColor),
+        accentColor: clean(details.accentColor),
+        fabricType: clean(details.fabricType),
+        sideStripe: clean(details.sideStripe),
+        frontText: clean(details.frontDesign || details.design),
+        backText: clean(details.backDesign)
+    }];
+}
+
+function getDesignItemTypeLabel(item) {
+    if (item?.designType === 'uploaded') return 'Uploaded design';
+    const type = item?.details?.clothingType;
+    return type === 'set' ? 'Custom set (top & bottom)' : type === 'bottoms' ? 'Custom bottom' : 'Custom top';
+}
+
+// Everything the customer chose for a Design Studio item: colors, fabric (with
+// its photo), sizes, notes and the design photos. The cart, checkout, receipt,
+// the customer's orders and the admin's order details all use this, so the admin
+// sees exactly what the customer sent.
+function renderDesignDetailsHtml(item, { orderId, itemIndex, compact = false } = {}) {
+    if (!item || (item.type !== 'custom-design' && !item.designType)) return '';
+    const esc = escapeProductionHtml;
+    const details = item.details || {};
+    const row = (label, value, extra = '') => value ? `<div><dt>${esc(label)}</dt><dd>${extra}${esc(value)}</dd></div>` : '';
+    const safeFabricImage = url => /^\/\.netlify\/functions\/fabrics\?image=[a-z0-9-]+(?:&v=\d+)?$/i.test(String(url || '')) ? url : '';
+    let partsHtml = '';
+    if (item.designType === 'uploaded') {
+        partsHtml = `<div class="design-spec-part"><dl>
+            ${row('Item', details.itemDescription || '—')}
+            ${row('Type', getUploadedDesignTypeLabel(details.clothingType))}
+        </dl></div>`;
+    } else if (item.designType === 'preset') {
+        partsHtml = `<div class="design-spec-part"><dl>${row('Template', details.name)}${row('Color', details.color)}${row('Category', details.category)}</dl></div>`;
+    } else {
+        const parts = getCustomDesignParts(item);
+        partsHtml = parts.map(part => {
+            const fabricImage = safeFabricImage(part.fabricImageUrl);
+            const fabricThumb = fabricImage ? `<img class="design-spec-fabric" src="${esc(fabricImage)}" alt="">` : '';
+            return `<div class="design-spec-part">
+                ${parts.length > 1 || !compact ? `<h5>${esc(part.label || 'Item')}</h5>` : ''}
+                <dl>
+                    ${row('Base color', part.baseColor || '—')}
+                    ${row('Accent / trim', part.accentColor)}
+                    ${row('Fabric', part.fabricType || '—', fabricThumb)}
+                    ${row('Size', part.size)}
+                    ${row('Side stripe', part.sideStripe)}
+                    ${row('Front design', part.frontText)}
+                    ${row('Back design', part.backText)}
+                </dl>
+            </div>`;
+        }).join('');
     }
-    return `<div class="cart-uploaded-design-images">${previews.join('')}</div>`;
+    const files = getDesignFileSources(item, orderId, itemIndex);
+    const filesHtml = files.length
+        ? `<div class="design-spec-photos">${files.map((file, fileIndex) => {
+            const caption = file.label || (file.isPdf ? file.fileName : `Design ${fileIndex + 1}`);
+            if (file.isPdf) {
+                return `<a class="design-spec-pdf" href="${esc(file.src)}" target="_blank" rel="noopener" download="${esc(file.fileName)}"><span>PDF</span><small>${esc(caption)}</small></a>`;
+            }
+            return `<figure><a href="${esc(file.src)}" target="_blank" rel="noopener" title="Open full size"><img src="${esc(file.src)}" alt="${esc(caption)}" loading="lazy"></a><figcaption>${esc(caption)}</figcaption></figure>`;
+        }).join('')}</div>`
+        : (compact ? '' : '<p class="design-spec-none">No design photos were added.</p>');
+    const notes = String(details.notes || '').trim();
+    return `<div class="design-spec${compact ? ' is-compact' : ''}">
+        <p class="design-spec-type">${esc(getDesignItemTypeLabel(item))}</p>
+        <div class="design-spec-parts">${partsHtml}</div>
+        ${notes ? `<div class="design-spec-notes"><strong>Notes</strong><p>${esc(notes)}</p></div>` : ''}
+        ${filesHtml}
+    </div>`;
+}
+
+// Players in a team order (each gets one of every item); 1 for an individual order.
+function getOrderPlayerCount(order) {
+    return order?.teamOrder?.isTeamOrder ? Math.max(1, Number(order.teamOrder.totalPlayers) || 1) : 1;
+}
+
+// "₱500.00 × 2" or, for a team order, "₱500.00 × 1 × 5 players".
+function describeItemPricing(item, players = 1) {
+    const unit = Number(item?.price) || 0;
+    const quantity = Math.max(1, Number(item?.quantity) || 1);
+    const parts = [`₱${unit.toFixed(2)}`, `× ${quantity}`];
+    if (players > 1) parts.push(`× ${players} players`);
+    return { text: parts.join(' '), total: unit * quantity * Math.max(1, players) };
 }
 
 function getCartSubtotal() {
@@ -3950,47 +3901,17 @@ function updateCartDisplay() {
     }
 
     cartItems.innerHTML = '';
-    let total = 0;
+    const players = getTeamPlayerMultiplier();
 
     appData.cart.forEach((item, index) => {
-        const itemTotal = item.price * item.quantity * getTeamPlayerMultiplier();
-        total += itemTotal;
+        const pricing = describeItemPricing(item, players);
+        const itemTotal = pricing.total;
 
         // Build customization display
         let customizationHTML = '';
-        
-        // Handle custom design items
+
         if (item.type === 'custom-design' && item.details) {
-            customizationHTML = '<div class="cart-customization design-details">';
-            const details = item.details;
-            
-            if (item.designType === 'custom') {
-                // Custom designed tops or bottoms
-                if (details.clothingType === 'top') {
-                    customizationHTML += `<span>👕 Type: Custom Top</span>`;
-                    customizationHTML += `<span>🎨 Base Color: <strong>${details.baseColor}</strong></span>`;
-                    customizationHTML += `<span>Accent: <strong>${details.accentColor}</strong></span>`;
-                    customizationHTML += `<span>Fabric: <strong>${details.fabricType}</strong></span>`;
-                    if (details.frontDesign) customizationHTML += `<span>Front Design: <strong>${details.frontDesign.substring(0, 30)}...</strong></span>`;
-                } else if (details.clothingType === 'bottoms') {
-                    customizationHTML += `<span>👖 Type: Custom Bottoms</span>`;
-                    customizationHTML += `<span>🎨 Base Color: <strong>${details.baseColor}</strong></span>`;
-                    customizationHTML += `<span>Fabric: <strong>${details.fabricType}</strong></span>`;
-                    customizationHTML += `<span>Side Stripe: <strong>${details.sideStripe}</strong></span>`;
-                }
-            } else if (item.designType === 'preset') {
-                // Preset design
-                customizationHTML += `<span>📋 Template: <strong>${details.name}</strong></span>`;
-                customizationHTML += `<span>🎨 Color: <strong>${details.color}</strong></span>`;
-                customizationHTML += `<span>Category: <strong>${details.category}</strong></span>`;
-            } else if (item.designType === 'uploaded') {
-                // Uploaded design
-                customizationHTML += `<span>📤 Uploaded Design</span>`;
-                customizationHTML += `<span>Type: <strong>${getUploadedDesignTypeLabel(details.clothingType)}</strong></span>`;
-                customizationHTML += `<span>Item: <strong>${details.itemDescription}</strong></span>`;
-                customizationHTML += renderUploadedDesignPreviews(item);
-            }
-            customizationHTML += '</div>';
+            customizationHTML = renderDesignDetailsHtml(item, { compact: true });
         } else if (item.customization) {
             // Standard product customization
             customizationHTML = '<div class="cart-customization">';
@@ -4005,18 +3926,18 @@ function updateCartDisplay() {
         const cartItem = document.createElement('div');
         cartItem.className = 'cart-item';
         const catalogImage = item.type === 'custom-design'
-            ? ''
+            ? getDesignFileSources(item).find(file => file.isImage)?.src || ''
             : appData.products.find(product => String(product.id) === String(item.id))?.image || '';
         const cartImage = item.image || catalogImage;
         const imageMarkup = cartImage
-            ? `<img class="cart-item-image" src="${cartImage}" alt="${item.name}">`
+            ? `<img class="cart-item-image" src="${escapeProductionHtml(cartImage)}" alt="${escapeProductionHtml(item.name)}">`
             : '<div class="cart-item-image cart-item-image-placeholder" aria-hidden="true">KP</div>';
         cartItem.innerHTML = `
             <div class="cart-item-media">${imageMarkup}</div>
             <div class="cart-item-info">
-                <div class="cart-item-name">${item.name}</div>
+                <div class="cart-item-name">${escapeProductionHtml(item.name)}</div>
                 ${customizationHTML}
-                <div class="cart-item-price">₱${item.price.toFixed(2)} each</div>
+                <div class="cart-item-price">${players > 1 ? escapeProductionHtml(pricing.text) : `₱${Number(item.price).toFixed(2)} each`}</div>
             </div>
             <div class="cart-item-quantity">
                 <button onclick="updateCartQuantity(${index}, -1)" class="btn btn-small">-</button>
@@ -4033,6 +3954,7 @@ function updateCartDisplay() {
     });
 
     cartTotal.textContent = getCartTotal().toFixed(2);
+    updateCheckoutTotals();
 }
 
 // Open Edit Customization Modal
@@ -4202,53 +4124,21 @@ function updateCheckoutDisplay() {
     }
     syncOrderSelectionFromCart();
     
-    if (!checkoutItems) {
-        document.getElementById('checkoutTotal').textContent = total.toFixed(2);
-    const desktopTotal = document.getElementById('checkoutDesktopTotal'); if (desktopTotal) desktopTotal.textContent = total.toFixed(2);
-        return;
-    }
+    updateCheckoutTotals(total);
+    if (!checkoutItems) return;
 
     checkoutItems.innerHTML = '';
-    
+    const players = getTeamPlayerMultiplier();
+
     appData.cart.forEach(item => {
-        const itemTotal = item.price * item.quantity * getTeamPlayerMultiplier();
-        
+        const pricing = describeItemPricing(item, players);
+        const itemTotal = pricing.total;
+
         // Build customization display
         let customHTML = '';
-        
-        // Handle custom design items
+
         if (item.type === 'custom-design' && item.details) {
-            customHTML = '<div style="background: #1f1f1f; padding: 10px; border-radius: 5px; margin-top: 8px; border: 1px solid #3a3a3a;">';
-            const details = item.details;
-            
-            if (item.designType === 'custom') {
-                customHTML += '<strong style="color: #d4af37;">Design Specifications:</strong><br>';
-                if (details.clothingType === 'top') {
-                    customHTML += `<span style="display: block; margin: 5px 0;">👕 <strong>Top Design</strong></span>`;
-                    customHTML += `<span style="display: block; margin: 5px 0;">🎨 Base Color: <strong>${details.baseColor}</strong></span>`;
-                    customHTML += `<span style="display: block; margin: 5px 0;">Accent Color: <strong>${details.accentColor}</strong></span>`;
-                    customHTML += `<span style="display: block; margin: 5px 0;">📦 Fabric: <strong>${details.fabricType}</strong></span>`;
-                    if (details.frontDesign) customHTML += `<span style="display: block; margin: 5px 0;">Front Design: <em>${details.frontDesign}</em></span>`;
-                    if (details.backDesign) customHTML += `<span style="display: block; margin: 5px 0;">Back Design: <em>${details.backDesign}</em></span>`;
-                } else if (details.clothingType === 'bottoms') {
-                    customHTML += `<span style="display: block; margin: 5px 0;">👖 <strong>Bottoms Design</strong></span>`;
-                    customHTML += `<span style="display: block; margin: 5px 0;">🎨 Base Color: <strong>${details.baseColor}</strong></span>`;
-                    customHTML += `<span style="display: block; margin: 5px 0;">📦 Fabric: <strong>${details.fabricType}</strong></span>`;
-                    customHTML += `<span style="display: block; margin: 5px 0;">Side Stripe: <strong>${details.sideStripe}</strong></span>`;
-                    if (details.design) customHTML += `<span style="display: block; margin: 5px 0;">Design: <em>${details.design}</em></span>`;
-                }
-            } else if (item.designType === 'preset') {
-                customHTML += '<strong style="color: #d4af37;">Preset Template:</strong><br>';
-                customHTML += `<span style="display: block; margin: 5px 0;">📋 <strong>${details.name}</strong></span>`;
-                customHTML += `<span style="display: block; margin: 5px 0;">🎨 Color: <strong>${details.color}</strong></span>`;
-                customHTML += `<span style="display: block; margin: 5px 0;">Category: <strong>${details.category}</strong></span>`;
-            } else if (item.designType === 'uploaded') {
-                customHTML += '<strong style="color: #d4af37;">Uploaded Custom Design:</strong><br>';
-                customHTML += `<span style="display: block; margin: 5px 0;">📤 <strong>${details.itemDescription}</strong></span>`;
-                customHTML += `<span style="display: block; margin: 5px 0;">Type: <strong>${getUploadedDesignTypeLabel(details.clothingType)}</strong></span>`;
-                customHTML += renderUploadedDesignPreviews(item);
-            }
-            customHTML += '</div>';
+            customHTML = renderDesignDetailsHtml(item);
         } else if (item.customization) {
             // Standard product customization
             customHTML = '<div style="color: #d4af37; font-size: 0.9em; margin-top: 5px;">';
@@ -4263,19 +4153,39 @@ function updateCheckoutDisplay() {
         const itemElement = document.createElement('div');
         itemElement.className = 'checkout-item';
         itemElement.innerHTML = `
-            <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 10px;">
-                <div style="flex: 1;">
-                    <strong>${item.name}</strong> × ${item.quantity}
+            <div class="checkout-item-row">
+                <div class="checkout-item-copy">
+                    <strong>${escapeProductionHtml(item.name)}</strong>
+                    <span class="checkout-item-pricing">${escapeProductionHtml(pricing.text)}</span>
                     ${customHTML}
                 </div>
-                <div style="text-align: right; min-width: 100px;">₱${itemTotal.toFixed(2)}</div>
+                <div class="checkout-item-total">₱${itemTotal.toFixed(2)}</div>
             </div>
         `;
         checkoutItems.appendChild(itemElement);
     });
-    
-    document.getElementById('checkoutTotal').textContent = total.toFixed(2);
-    const summaryTotal = document.getElementById('checkoutDesktopTotal'); if (summaryTotal) summaryTotal.textContent = total.toFixed(2);
+}
+
+// Total, 50% downpayment and (for a team order) the per-player breakdown,
+// everywhere checkout shows them. Runs whenever the cart, the order type or
+// the number of players changes.
+function updateCheckoutTotals(total = getCartTotal()) {
+    const players = getTeamPlayerMultiplier();
+    const isTeam = Boolean(document.getElementById('isTeamOrder')?.checked);
+    const perPlayer = getCartSubtotal();
+    const downpayment = Math.round(total * 50) / 100;
+    const setText = (id, text) => { const element = document.getElementById(id); if (element) element.textContent = text; };
+    setText('checkoutTotal', total.toFixed(2));
+    setText('checkoutDesktopTotal', total.toFixed(2));
+    setText('checkoutDownpayment', `PHP ${downpayment.toFixed(2)}`);
+    setText('checkoutDesktopDownpayment', `₱${downpayment.toFixed(2)}`);
+    const breakdown = isTeam && players > 0
+        ? `Team order: ₱${perPlayer.toFixed(2)} per player × ${players} players`
+        : '';
+    document.querySelectorAll('[data-team-breakdown]').forEach(element => {
+        element.textContent = breakdown;
+        element.hidden = !breakdown;
+    });
 }
 
 
@@ -4727,28 +4637,12 @@ async function processCustomerOrder() {
             delete orderData.gcashQRCode;
         }
 
-        // Decrease stock for each item in the order
-        appData.cart.forEach(cartItem => {
-            const quantityToReduce = Number(cartItem.quantity) || 1;
-            const productIndex = appData.products.findIndex(p => Number(p.id) === Number(cartItem.id));
-            const fallbackIndex = productIndex === -1 ? appData.products.findIndex(p => p.name === cartItem.name) : -1;
-            const targetIndex = productIndex !== -1 ? productIndex : fallbackIndex;
+        // The server took the ordered pieces out of stock when it saved the
+        // order; load the catalog again so the shop shows the new stock.
+        sharedProductsRequest = null;
+        lastCustomerProductsRefresh = 0;
+        refreshCustomerProducts();
 
-            if (targetIndex !== -1) {
-                const product = appData.products[targetIndex];
-                const currentStock = Number(product.stock) || 0;
-                const nextStock = Math.max(0, currentStock - quantityToReduce);
-
-                product.stock = nextStock;
-            } else {
-                console.warn('No matching product found for stock deduction:', cartItem);
-            }
-        });
-        
-        // Save updated products to localStorage
-
-        saveProductsWithoutBlocking();
-        
         appData.orders.push(orderData);
         saveOrders();
         saveOrderToHistory({ ...orderData }, false);
@@ -4828,18 +4722,15 @@ function showOrderReceipt(order, isPreview = false, preserveCurrentView = false)
         const numberText = customization.number ? ` #${customization.number}` : '';
         const colorText = color && color !== 'Not specified' ? ` / Color: ${color}` : '';
         const sizeText = `${customization.size ? ` / Top Size: ${customization.size}` : ''}${customization.bottomSize ? ` / Bottom Size: ${customization.bottomSize}` : ''}`;
-        const uploadedDesignImages = getUploadedDesignImageSources(item, order.id, itemIndex);
-        const uploadedDesignPreview = uploadedDesignImages.map((image, imageIndex) =>
-            `<a href="${image}" target="_blank" rel="noopener noreferrer"><img src="${image}" alt="Uploaded customer design ${imageIndex + 1}" style="display: inline-block; max-width: 220px; max-height: 180px; object-fit: contain; margin: 8px 8px 0 0; border: 1px solid #777; border-radius: 4px;"></a>`
-        ).join('');
+        const pricing = describeItemPricing(item, getOrderPlayerCount(order));
 
         return `
-            <div style="padding: 8px 0; border-bottom: 1px solid #444;">
-                <div style="display: flex; justify-content: space-between; gap: 15px;">
-                    <span>${item.name} × ${item.quantity}${sizeText}${nameText}${numberText}${colorText}</span>
-                    <strong>₱${(item.price * item.quantity * (order.teamOrder?.isTeamOrder ? Number(order.teamOrder.totalPlayers) || 0 : 1)).toFixed(2)}</strong>
+            <div class="receipt-item">
+                <div class="receipt-item-row">
+                    <span>${escapeProductionHtml(`${item.name}${sizeText}${nameText}${numberText}${colorText}`)}<small>${escapeProductionHtml(pricing.text)}</small></span>
+                    <strong>₱${pricing.total.toFixed(2)}</strong>
                 </div>
-                ${uploadedDesignPreview}
+                ${renderDesignDetailsHtml(item, { orderId: order.id, itemIndex })}
             </div>
         `;
     }).join('');
@@ -4937,7 +4828,11 @@ function isOrderInPurchaseHistory(order) {
     return isOrderCompleted(order) || String(order.status || '').trim().toLowerCase() === 'cancelled';
 }
 
-function getCustomerOrderProductImage(item) {
+function getCustomerOrderProductImage(item, orderId, itemIndex) {
+    // A Design Studio item shows its first design photo.
+    if (item?.type === 'custom-design' || item?.designType) {
+        return getDesignFileSources(item, orderId, itemIndex).find(file => file.isImage)?.src || '';
+    }
     const product = (appData.products || []).find(savedProduct =>
         (item.id && Number(savedProduct.id) === Number(item.id))
         || savedProduct.name === (item.name || item.productName)
@@ -5110,7 +5005,7 @@ function buildCustomerOrderSummaryHtml(order, { history = false } = {}) {
     const pieces = items.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
     const firstName = items[0]?.name || items[0]?.productName || order.productName || 'Jersey order';
     const extraItems = items.length > 1 ? ` +${items.length - 1} more` : '';
-    const image = items.length ? getCustomerOrderProductImage(items[0]) : '';
+    const image = items.length ? getCustomerOrderProductImage(items[0], order.id, 0) : '';
     const payment = getOrderPaymentSummary(order);
     const status = getOrderProductionStatus(order);
     const cancelled = payment.standing === 'cancelled' || status === 'cancelled';
@@ -5162,10 +5057,10 @@ function buildCustomerOrderMetaHtml(order) {
 // The full details of an active order: items, payment, production and actions.
 function buildCustomerOrderDetailsHtml(order) {
     const items = Array.isArray(order.items) ? order.items : [];
-    const itemsList = items.map(item => {
+    const itemsList = items.map((item, itemIndex) => {
         const customization = item.customization || {};
         const productName = item.name || item.productName || 'Jersey product';
-        const productImage = getCustomerOrderProductImage(item);
+        const productImage = getCustomerOrderProductImage(item, order.id, itemIndex);
         const options = [
             customization.size ? `Top: ${customization.size}` : '',
             customization.bottomSize ? `Bottom: ${customization.bottomSize}` : '',
@@ -5185,14 +5080,11 @@ function buildCustomerOrderDetailsHtml(order) {
                     <span class="customer-order-quantity">Qty ${Number(item.quantity) || 1}</span>
                 </div>
                 ${options.length ? `<div class="customer-order-product-options">${options.map(option => `<span>${escapeProductionHtml(option)}</span>`).join('')}</div>` : ''}
+                <span class="customer-order-pricing">${escapeProductionHtml(describeItemPricing(item, getOrderPlayerCount(order)).text)}</span>
+                ${renderDesignDetailsHtml(item, { orderId: order.id, itemIndex })}
             </div>
         </div>`;
     }).join('');
-    const uploadedDesignsHtml = items.map((item, itemIndex) =>
-        getUploadedDesignImageSources(item, order.id, itemIndex).map((imageSource, imageIndex) =>
-            `<img src="${imageSource}" alt="Uploaded customer design ${imageIndex + 1}" class="customer-order-design-image">`
-        ).join('')
-    ).join('');
 
     const teamOrder = normalizeTeamOrderInput(order.teamOrder);
     const teamOrderDetails = teamOrder.isTeamOrder
@@ -5238,7 +5130,6 @@ function buildCustomerOrderDetailsHtml(order) {
                     <h3>Items ordered</h3>
                     <div class="customer-order-products">${itemsList}</div>
                 </section>
-                ${uploadedDesignsHtml ? `<section class="customer-order-section customer-order-designs"><h3>Your uploaded design</h3><div class="customer-order-design-gallery">${uploadedDesignsHtml}</div></section>` : ''}
                 ${teamOrderDetails}
                 ${measurementsHtml}
                 ${buildCustomerOrderMetaHtml(order)}
@@ -5528,10 +5419,7 @@ function buildPurchaseHistoryProducts(order) {
         const quantity = Math.max(1, Number(item.quantity) || 1);
         const unitPrice = Number(item.price ?? product?.price);
         const itemTotal = Number.isFinite(unitPrice) ? `₱${(unitPrice * quantity).toFixed(2)}` : '';
-        const designImages = getUploadedDesignImageSources(item, order.id, itemIndex);
-        const designGallery = designImages.length
-            ? `<div class="order-design-gallery">${designImages.map((image, imageIndex) => `<img src="${image}" alt="Uploaded design ${imageIndex + 1}" class="order-design-thumbnail">`).join('')}</div>`
-            : '';
+        const designGallery = renderDesignDetailsHtml(item, { orderId: order.id, itemIndex, compact: true });
 
         return `<div class="purchase-history-product-row">
             ${safeImage ? `<img src="${safeImage}" alt="${escapeProductionHtml(itemName)}" class="purchase-history-product-image">` : ''}
@@ -6583,16 +6471,26 @@ function isAdminOrdersTabOpen() {
     return document.getElementById('ordersTab')?.style.display === 'block';
 }
 
-function markAdminOrderNotificationsRead() {
-    let changed = false;
-    appData.notifications.forEach(notification => {
-        if (notification.type === 'admin' && !notification.read) {
-            notification.read = true;
-            changed = true;
-        }
-    });
-    if (changed) saveNotifications();
+// Clears the Orders badge here at once, then tells the server so the admin's
+// other devices clear it too.
+async function markAdminOrderNotificationsRead() {
+    const unread = appData.notifications.filter(notification => notification.type === 'admin' && !notification.read);
+    unread.forEach(notification => { notification.read = true; });
+    if (unread.length) saveNotifications();
     updateNotificationBadges();
+    const newest = unread.reduce((latest, notification) => Math.max(latest, Date.parse(notification.eventTime || '') || 0), 0);
+    if (!newest || isAdminEventRead(new Date(newest).toISOString())) return;
+    try {
+        const response = await fetch('/.netlify/functions/orders', {
+            method: 'POST',
+            headers: getAuthenticatedHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ action: 'admin-notifications-read', upTo: new Date(newest).toISOString() })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && result.adminNotificationsReadAt) appData.adminNotificationsReadAt = result.adminNotificationsReadAt;
+    } catch (error) {
+        console.warn('Could not save on the server that the notifications were read.', error);
+    }
 }
 
 function announceAdminOrderUpdates(added) {
@@ -6612,7 +6510,36 @@ function refreshAdminOrdersInBackground() {
     if (appData.currentRole === 'admin' && document.visibilityState !== 'hidden'
         && document.getElementById('adminPage')?.style.display === 'block') {
         loadAdminOrders();
+        if (document.getElementById('productsTab')?.style.display === 'block') refreshAdminProductsIfStale();
     }
+}
+
+// Reloads the catalog on the Products tab when it is older than 15 seconds,
+// but not while a product is being edited, so no typing is lost.
+function refreshAdminProductsIfStale() {
+    if (appData.currentRole !== 'admin' || Date.now() - lastProductsFetchAt < 15000) return;
+    const editing = ['editProductModal', 'editPriceModal'].some(id => {
+        const display = document.getElementById(id)?.style.display;
+        return display && display !== 'none';
+    }) || document.getElementById('addProductPanel')?.hidden === false;
+    if (!editing) loadProductsFromStorage();
+}
+
+// The server can briefly answer from an older copy of the saved orders (Netlify
+// Blobs takes up to a minute to update everywhere). Orders are never deleted,
+// so an order already on screen stays even if one answer misses it, and an
+// older copy of an order never replaces a newer one.
+function mergeLoadedOrders(previousOrders, incomingOrders) {
+    const merged = new Map();
+    (previousOrders || []).forEach(order => { if (order?.id !== undefined) merged.set(String(order.id), order); });
+    (incomingOrders || []).forEach(order => {
+        if (order?.id === undefined) return;
+        const current = merged.get(String(order.id));
+        const currentTime = Date.parse(current?.updatedAt || '') || 0;
+        const incomingTime = Date.parse(order.updatedAt || '') || 0;
+        if (!current || !currentTime || incomingTime >= currentTime) merged.set(String(order.id), order);
+    });
+    return Array.from(merged.values());
 }
 
 function loadAdminOrders() {
@@ -6630,12 +6557,16 @@ function loadAdminOrders() {
     adminOrdersRequest = (async () => {
         try {
             // All orders, so the Completed and Cancelled counts and filters work.
-            const sharedOrders = await fetchSharedOrders({ activeOnly: false });
+            const sharedOrders = mergeLoadedOrders(appData.orders, await fetchSharedOrders({ activeOnly: false }));
             if (appData.currentRole !== 'admin') return;
             appData.orders = sharedOrders;
             appData.reportOrders = sharedOrders;
             const added = syncProductionNotifications(sharedOrders, 'admin');
-            if (adminOrdersSynced && added.length) announceAdminOrderUpdates(added);
+            applyAdminReadState();
+            updateNotificationBadges();
+            // Pop up only what is new and not read yet (on this or another device).
+            const addedUnread = added.filter(notification => !notification.read);
+            if (adminOrdersSynced && addedUnread.length) announceAdminOrderUpdates(addedUnread);
             adminOrdersSynced = true;
             if (isAdminOrdersTabOpen() && document.visibilityState !== 'hidden') markAdminOrderNotificationsRead();
             renderAdminOrders();
@@ -7157,7 +7088,75 @@ function buildAdminPaymentPanel(order) {
         </form>` : ''}
         <h4>Payments received</h4>
         ${buildPaymentLedgerHtml(order)}
+        ${buildPriceAdjustmentHtml(order, summary)}
     </section>`;
+}
+
+// Admin: change the price of an order (team discount, quote for a custom
+// design). For a team order the price is entered per player.
+function buildPriceAdjustmentHtml(order, summary) {
+    const id = Number(order.id) || 0;
+    const players = getOrderPlayerCount(order);
+    const stage = getOrderProductionStatus(order);
+    const canAdjust = !['cancelled', 'completed'].includes(stage) && summary.standing !== 'cancelled';
+    const history = (Array.isArray(order.priceAdjustments) ? order.priceAdjustments : []).slice().reverse();
+    const historyHtml = history.length
+        ? `<ul class="price-adjust-history">${history.map(entry => `<li>
+            <span>${escapeProductionHtml(formatAdminDate(entry.at))}</span>
+            <strong>${pesoText(entry.totalBefore)} → ${pesoText(entry.totalAfter)}</strong>
+            <small>${escapeProductionHtml(entry.reason || (entry.type === 'manual' ? 'Price changed by the shop' : 'Recomputed with current product prices'))}${entry.pricePerPlayer ? ` · ${pesoText(entry.pricePerPlayer)} per player × ${entry.players}` : ''}</small>
+        </li>`).join('')}</ul>`
+        : '';
+    if (!canAdjust && !historyHtml) return '';
+    const perPlayerNow = players > 1 ? summary.total / players : summary.total;
+    return `<details class="price-adjust"${history.length ? ' open' : ''}>
+        <summary>Price adjustment${players > 1 ? ' (team order)' : ''}</summary>
+        ${players > 1 ? `<p class="payment-checklist">Current price: ${pesoText(perPlayerNow)} per player × ${players} players = <strong>${pesoText(summary.total)}</strong>.</p>` : ''}
+        ${canAdjust ? `<form id="priceAdjustForm-${id}" class="payment-form" onsubmit="event.preventDefault(); adjustAdminOrderPrice(${id})">
+            <div class="form-grid-2">
+                ${players > 1
+                    ? `<label>New price per player (PHP)<input id="priceAdjustPerPlayer-${id}" type="number" min="0.01" step="0.01" value="${perPlayerNow.toFixed(2)}" oninput="previewTeamPriceAdjustment(${id}, ${players})" required></label>`
+                    : `<label>New order total (PHP)<input id="priceAdjustTotal-${id}" type="number" min="0.01" step="0.01" value="${summary.total.toFixed(2)}" required></label>`}
+                <label>Reason<input id="priceAdjustReason-${id}" type="text" maxlength="500" placeholder="e.g., Team discount for 15 players" required></label>
+            </div>
+            ${players > 1 ? `<p class="price-adjust-preview" id="priceAdjustPreview-${id}">New total: <strong>${pesoText(summary.total)}</strong></p>` : ''}
+            <p class="payment-checklist">The customer is notified. The downpayment becomes 50% of the new total${summary.amountPaid > 0 ? '; payments already received stay recorded' : ''}.</p>
+            <button type="submit" class="btn btn-secondary btn-small">Save New Price</button>
+        </form>` : ''}
+        ${historyHtml}
+    </details>`;
+}
+
+function formatAdminDate(value) {
+    const date = new Date(value || '');
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function previewTeamPriceAdjustment(orderId, players) {
+    const perPlayer = Number(document.getElementById(`priceAdjustPerPlayer-${orderId}`)?.value) || 0;
+    const preview = document.getElementById(`priceAdjustPreview-${orderId}`);
+    if (preview) preview.innerHTML = `New total: <strong>${pesoText(perPlayer * players)}</strong> (${pesoText(perPlayer)} × ${players} players)`;
+}
+
+async function adjustAdminOrderPrice(orderId) {
+    const perPlayerField = document.getElementById(`priceAdjustPerPlayer-${orderId}`);
+    const totalField = document.getElementById(`priceAdjustTotal-${orderId}`);
+    const reason = (document.getElementById(`priceAdjustReason-${orderId}`)?.value || '').trim();
+    const value = Number((perPlayerField || totalField)?.value);
+    if (!(value > 0)) {
+        showStatusUpdateToast('Enter a new price greater than zero.');
+        return;
+    }
+    if (!reason) {
+        showStatusUpdateToast('Enter the reason for the new price.');
+        document.getElementById(`priceAdjustReason-${orderId}`)?.focus();
+        return;
+    }
+    const fields = perPlayerField ? { pricePerPlayer: value, reason } : { totalAmount: value, reason };
+    await runAdminPaymentAction(orderId, 'adjust-price', fields, order => {
+        const summary = getOrderPaymentSummary(order);
+        return `New total for order #${orderId}: ${pesoText(summary.total)}. The customer was notified.`;
+    }, `priceAdjustForm-${orderId}`);
 }
 
 function viewOrderDetails(orderStr) {
@@ -7183,13 +7182,15 @@ function viewOrderDetails(orderStr) {
         // Build the order details HTML
         let itemsHtml = '';
         if (order.items && order.items.length > 0) {
-            itemsHtml = order.items.map(item => {
+            const players = getOrderPlayerCount(order);
+            itemsHtml = order.items.map((item, itemIndex) => {
                 let customStr = '';
-                const product = (appData.products || []).find(savedProduct =>
+                const isDesignItem = item.type === 'custom-design' || Boolean(item.designType);
+                const product = isDesignItem ? null : (appData.products || []).find(savedProduct =>
                     (item.id && Number(savedProduct.id) === Number(item.id)) || savedProduct.name === item.name
                 );
                 const productImages = Array.isArray(product?.images) ? product.images : product?.image ? [product.image] : [];
-                const productImage = item.designType === 'uploaded'
+                const productImage = isDesignItem
                     ? ''
                     : item.image || item.productImage || item.images?.[0] || productImages[0] || '';
                 const productImageHtml = productImage
@@ -7208,41 +7209,15 @@ function viewOrderDetails(orderStr) {
                     customStr += '</small>';
                 }
 
-                let uploadedDesignHtml = '';
-                if (item.designType === 'uploaded' && item.details) {
-                    const details = item.details;
-                    const files = Array.isArray(details.uploadedFiles) && details.uploadedFiles.length
-                        ? details.uploadedFiles
-                        : [{ uploadedFile: details.uploadedFile || details.uploadedFileUrl, fileName: details.fileName, fileType: details.fileType }];
-                    const attachments = files.map(file => {
-                        const fileName = String(file.fileName || 'customer-design').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-                        const uploadedFile = String(file.uploadedFile || file.uploadedFileUrl || '');
-                        const isStoredAttachment = uploadedFile.startsWith('/.netlify/functions/order-design?');
-                        const isImage = /^data:image\/(png|jpeg|gif|webp);base64,/i.test(uploadedFile)
-                            || (isStoredAttachment && String(file.fileType || '').startsWith('image/'));
-                        const isPdf = /^data:application\/pdf;base64,/i.test(uploadedFile)
-                            || (isStoredAttachment && file.fileType === 'application/pdf');
-                        const fileLink = isImage || isPdf
-                            ? `<a href="${uploadedFile}" download="${fileName}" style="display: inline-block; margin: 8px 8px 0 0; color: #1769aa; font-weight: 700;">Download ${isPdf ? 'PDF' : 'image'}: ${fileName}</a>`
-                            : '';
-                        const preview = isImage
-                            ? `<img src="${uploadedFile}" alt="Customer design: ${fileName}" style="display: inline-block; max-width: 100%; max-height: 260px; object-fit: contain; margin: 10px 8px 0 0; border: 1px solid #ccc; border-radius: 4px;">`
-                            : '';
-                        return fileLink + preview;
-                    }).join('');
-
-                    uploadedDesignHtml = `<div class="admin-order-uploaded-design">
-                        <strong>📤 Customer uploaded design</strong><br>
-                        Item: ${details.itemDescription || 'N/A'} | Type: ${getUploadedDesignTypeLabel(details.clothingType)}<br>
-                        ${attachments}
-                    </div>`;
-                }
-                return `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #eee;">
-                    <strong>${item.name}</strong> (Qty: ${item.quantity})<br>
-                    Price: ₱${(item.price).toFixed(2)} each = ₱${(item.price * item.quantity * (order.teamOrder?.isTeamOrder ? Number(order.teamOrder.totalPlayers) || 0 : 1)).toFixed(2)}
+                const pricing = describeItemPricing(item, players);
+                return `<div class="admin-order-item">
+                    <div class="admin-order-item-head">
+                        <strong>${escapeProductionHtml(item.name)}</strong>
+                        <span>${escapeProductionHtml(pricing.text)} = <b>₱${pricing.total.toFixed(2)}</b></span>
+                    </div>
                     ${customStr}
                     ${productImageHtml}
-                    ${uploadedDesignHtml}
+                    ${renderDesignDetailsHtml(item, { orderId: order.id, itemIndex })}
                 </div>`;
             }).join('');
         }
@@ -8534,7 +8509,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function loadSharedGcashQRCode() {
     try {
-        for (const endpoint of ['/.netlify/functions/gcash-qr', 'api/gcash-qr.php', 'api/gcash-qr']) {
+        for (const endpoint of ['/.netlify/functions/gcash-qr']) {
             try {
                 const response = await fetch(endpoint, { cache: 'no-store' });
                 if (!response.ok) continue;

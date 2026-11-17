@@ -10,16 +10,29 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>KingPin Custom Ph® CamSur - Jersey Management System</title>
-    <link rel="stylesheet" href="css/style.css?v=20261112-google-button-1">
-    <link rel="stylesheet" href="css/storefront.css">
-    <link rel="stylesheet" href="css/admin-layout.css?v=20261112-admin-layout-1">
-    <link rel="stylesheet" href="css/customer-layout.css?v=20261113-balance-proof-1">
+    <link rel="stylesheet" href="css/style.css?v=20261117-studio-1">
+    <link rel="stylesheet" href="css/storefront.css?v=20261117-studio-1">
+    <link rel="stylesheet" href="css/admin-layout.css?v=20261117-studio-1">
+    <link rel="stylesheet" href="css/customer-layout.css?v=20261117-studio-1">
+    <link rel="stylesheet" href="css/design-studio.css?v=20261117-studio-1">
+    <link rel="stylesheet" href="css/chat.css?v=20261117-studio-1">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <script>
+        // Apply the saved theme before anything is drawn, so a light-mode page never flashes black while app.js loads.
+        (function () {
+            try {
+                var light = localStorage.getItem('kingpinTheme') === 'light';
+                document.body.classList.toggle('light-mode', light);
+                var meta = document.querySelector('meta[name="theme-color"]');
+                if (meta) meta.setAttribute('content', light ? '#f5f3ee' : '#111416');
+            } catch (error) { /* storage blocked: keep the default dark theme */ }
+        })();
+    </script>
     <div id="sessionRestoreNotice" class="session-restore-notice" role="status" hidden><span class="session-restore-spinner" aria-hidden="true"></span>Opening your page...</div>
     <!-- Login/Authentication Page -->
    <div id="loginPage" class="page" style="display: none;">
@@ -142,7 +155,7 @@
             <button type="button" data-account-view="cart"><span class="customer-nav-icon" aria-hidden="true">▣</span><span class="customer-nav-text">Cart</span><span class="customer-nav-count" data-account-count="cart" hidden></span></button>
             <button type="button" data-account-view="design"><span class="customer-nav-icon" aria-hidden="true">✎</span><span class="customer-nav-text">Design Studio</span></button>
             <p class="customer-sidebar-label customer-sidebar-label-gap">Help &amp; account</p>
-            <button type="button" data-account-view="support"><span class="customer-nav-icon" aria-hidden="true">✉</span><span class="customer-nav-text">Support</span></button>
+            <button type="button" data-account-view="support"><span class="customer-nav-icon" aria-hidden="true">✉</span><span class="customer-nav-text">Support</span><span class="customer-nav-count" data-account-count="support" hidden></span></button>
             <button type="button" data-account-view="settings"><span class="customer-nav-icon" aria-hidden="true">⚙</span><span class="customer-nav-text">Settings</span></button>
         </nav>
 
@@ -184,200 +197,244 @@
                 </div>
             </div>
 
-            <!-- Design Interface Section -->
-            <div id="designSection" class="design-section" style="display: none;">
+            <!-- Design Studio: customize a top, bottom or set, or upload a finished design -->
+            <div id="designSection" class="design-section design-studio" style="display: none;">
                 <div class="customer-page-head">
                     <div>
                         <h2>Design Studio</h2>
-                        <p class="customer-page-subtitle">Describe a custom top or bottom, or upload your own design files.</p>
-                    </div>
-                </div>
-                
-                <!-- Design Mode Selector -->
-                <div class="design-mode-selector">
-                    <h3>Choose Your Design Option:</h3>
-                    <div class="design-mode-buttons">
-                        <button class="design-mode-btn active" onclick="setDesignMode('customize')" data-mode="customize">
-                            Customize Design
-                        </button>
-                        <button class="design-mode-btn" onclick="setDesignMode('upload')" data-mode="upload">
-                            Upload Design
-                        </button>
+                        <p class="customer-page-subtitle">Build your own top, bottom or full set. Add photos of your design so the shop sees exactly what you want.</p>
                     </div>
                 </div>
 
-                <!-- Customize Design Mode -->
-                <div id="customizeDesignMode" class="design-mode-content active">
-                    <h3>Customize Your Design</h3>
-                    <p style="color: #a0a0a0; margin-bottom: 20px;">Select the clothing item type and customize the design details</p>
-                    
-                    <!-- Clothing Item Type Selector -->
-                    <div class="form-group">
-                        <label for="clothingItemType" style="font-weight: 600; color: #d4af37;">Clothing Item Type:</label>
-                        <div class="clothing-type-selector">
-                            <button type="button" class="clothing-type-btn active" onclick="setClothingType('tops')" data-type="tops">
-                                👕 Top Only
-                            </button>
-                            <button type="button" class="clothing-type-btn" onclick="setClothingType('bottoms')" data-type="bottoms">
-                                👖 Bottom Only
-                            </button>
-                            <button type="button" class="clothing-type-btn" onclick="setClothingType('both')" data-type="both">
-                                🧥 Top & Bottom
-                            </button>
-                        </div>
-                    </div>
+                <div class="ds-mode-switch" role="tablist" aria-label="Design option">
+                    <button type="button" class="ds-mode-btn is-active" role="tab" aria-selected="true" aria-controls="customizeDesignMode" data-mode="customize" onclick="setDesignMode('customize')">
+                        <span class="ds-mode-icon" aria-hidden="true">✎</span>
+                        <span class="ds-mode-text"><strong>Customize your design</strong><small>Pick colors and fabric, add front and back photos</small></span>
+                    </button>
+                    <button type="button" class="ds-mode-btn" role="tab" aria-selected="false" aria-controls="uploadDesignMode" data-mode="upload" onclick="setDesignMode('upload')">
+                        <span class="ds-mode-icon" aria-hidden="true">⇪</span>
+                        <span class="ds-mode-text"><strong>Upload a finished design</strong><small>Already have a complete layout? Send the files</small></span>
+                    </button>
+                </div>
 
-                    <!-- Tops Form -->
-                    <div id="topsDesignForm" class="clothing-design-form active">
-                        <h4>👕 Top Design Specifications</h4>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="topColor">Base Color:</label>
-                                <select id="topColor" required>
-                                    <option value="">-- Select Color --</option>
-                                    <option value="Red">Red</option>
-                                    <option value="Blue">Blue</option>
-                                    <option value="Black">Black</option>
-                                    <option value="White">White</option>
-                                    <option value="Yellow">Yellow</option>
-                                    <option value="Green">Green</option>
-                                    <option value="Navy">Navy Blue</option>
-                                    <option value="Maroon">Maroon</option>
-                                    <option value="Gray">Gray</option>
-                                    <option value="Purple">Purple</option>
-                                </select>
+                <!-- Customize -->
+                <div id="customizeDesignMode" class="ds-panel" role="tabpanel">
+                    <div class="ds-layout">
+                        <div class="ds-form">
+                            <section class="ds-step" aria-labelledby="dsStepTypeTitle">
+                                <header class="ds-step-head">
+                                    <span class="ds-step-no" aria-hidden="true">1</span>
+                                    <div>
+                                        <h3 id="dsStepTypeTitle">What are you ordering?</h3>
+                                        <p>A top and bottom set goes into your cart as one item.</p>
+                                    </div>
+                                </header>
+                                <div class="ds-type-grid" role="radiogroup" aria-labelledby="dsStepTypeTitle">
+                                    <button type="button" class="ds-type-card is-active" role="radio" aria-checked="true" data-type="tops" onclick="setClothingType('tops')">
+                                        <span class="ds-type-icon" aria-hidden="true">👕</span>
+                                        <strong>Top only</strong>
+                                        <small>Jersey, shirt or warmer</small>
+                                        <span class="ds-type-price" data-type-price="tops"></span>
+                                    </button>
+                                    <button type="button" class="ds-type-card" role="radio" aria-checked="false" data-type="bottoms" onclick="setClothingType('bottoms')">
+                                        <span class="ds-type-icon" aria-hidden="true">🩳</span>
+                                        <strong>Bottom only</strong>
+                                        <small>Shorts or pants</small>
+                                        <span class="ds-type-price" data-type-price="bottoms"></span>
+                                    </button>
+                                    <button type="button" class="ds-type-card" role="radio" aria-checked="false" data-type="both" onclick="setClothingType('both')">
+                                        <span class="ds-type-icon" aria-hidden="true">👕🩳</span>
+                                        <strong>Top &amp; bottom set</strong>
+                                        <small>Matching uniform</small>
+                                        <span class="ds-type-price" data-type-price="both"></span>
+                                    </button>
+                                </div>
+                            </section>
+
+                            <section id="topsDesignForm" class="ds-step ds-part" data-part="top" aria-labelledby="dsTopTitle">
+                                <header class="ds-step-head">
+                                    <span class="ds-step-no" aria-hidden="true">2</span>
+                                    <div>
+                                        <h3 id="dsTopTitle">Top details</h3>
+                                        <p>Type the colors in your own words.</p>
+                                    </div>
+                                </header>
+                                <div class="ds-field-grid">
+                                    <div class="form-group">
+                                        <label for="topColor">Base color <span class="ds-req">required</span></label>
+                                        <input type="text" id="topColor" maxlength="60" placeholder="e.g., Royal blue" autocomplete="off" data-ds-field>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="topAccentColor">Accent / trim color <span class="ds-optional">optional</span></label>
+                                        <input type="text" id="topAccentColor" maxlength="60" placeholder="e.g., Gold with white piping" autocomplete="off" data-ds-field>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="topSize">Size <span class="ds-optional">optional</span></label>
+                                        <input type="text" id="topSize" maxlength="12" placeholder="e.g., M" autocomplete="off" data-ds-field>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <span class="ds-label" id="topFabricLabel">Fabric type <span class="ds-req">required</span></span>
+                                    <div id="topFabricOptions" class="ds-fabric-grid" data-part="top" role="radiogroup" aria-labelledby="topFabricLabel"></div>
+                                </div>
+                                <div class="form-group">
+                                    <span class="ds-label">Design photos <span class="ds-optional">front and back</span></span>
+                                    <div class="ds-photo-grid">
+                                        <label class="ds-photo-slot" data-part="top" data-side="front">
+                                            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="ds-photo-input" aria-label="Top front design photo">
+                                            <span class="ds-photo-empty"><span aria-hidden="true">＋</span><strong>Front</strong><small>Add a photo</small></span>
+                                        </label>
+                                        <label class="ds-photo-slot" data-part="top" data-side="back">
+                                            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="ds-photo-input" aria-label="Top back design photo">
+                                            <span class="ds-photo-empty"><span aria-hidden="true">＋</span><strong>Back</strong><small>Add a photo</small></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section id="bottomsDesignForm" class="ds-step ds-part" data-part="bottom" aria-labelledby="dsBottomTitle" hidden>
+                                <header class="ds-step-head">
+                                    <span class="ds-step-no" aria-hidden="true">2</span>
+                                    <div>
+                                        <h3 id="dsBottomTitle">Bottom details</h3>
+                                        <p>Type the colors in your own words.</p>
+                                    </div>
+                                </header>
+                                <div class="ds-field-grid">
+                                    <div class="form-group">
+                                        <label for="bottomColor">Base color <span class="ds-req">required</span></label>
+                                        <input type="text" id="bottomColor" maxlength="60" placeholder="e.g., Black" autocomplete="off" data-ds-field>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="bottomAccentColor">Accent / trim color <span class="ds-optional">optional</span></label>
+                                        <input type="text" id="bottomAccentColor" maxlength="60" placeholder="e.g., Gold side panel" autocomplete="off" data-ds-field>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="bottomSize">Size <span class="ds-optional">optional</span></label>
+                                        <input type="text" id="bottomSize" maxlength="12" placeholder="e.g., M" autocomplete="off" data-ds-field>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="bottomSideStripe">Side stripe <span class="ds-optional">optional</span></label>
+                                    <select id="bottomSideStripe" data-ds-field>
+                                        <option value="">None</option>
+                                        <option value="Single Stripe">Single stripe</option>
+                                        <option value="Double Stripe">Double stripe</option>
+                                        <option value="Full Design">Full design</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <span class="ds-label" id="bottomFabricLabel">Fabric type <span class="ds-req">required</span></span>
+                                    <div id="bottomFabricOptions" class="ds-fabric-grid" data-part="bottom" role="radiogroup" aria-labelledby="bottomFabricLabel"></div>
+                                </div>
+                                <div class="form-group">
+                                    <span class="ds-label">Design photos <span class="ds-optional">front and back</span></span>
+                                    <div class="ds-photo-grid">
+                                        <label class="ds-photo-slot" data-part="bottom" data-side="front">
+                                            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="ds-photo-input" aria-label="Bottom front design photo">
+                                            <span class="ds-photo-empty"><span aria-hidden="true">＋</span><strong>Front</strong><small>Add a photo</small></span>
+                                        </label>
+                                        <label class="ds-photo-slot" data-part="bottom" data-side="back">
+                                            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="ds-photo-input" aria-label="Bottom back design photo">
+                                            <span class="ds-photo-empty"><span aria-hidden="true">＋</span><strong>Back</strong><small>Add a photo</small></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="ds-step" aria-labelledby="dsNotesTitle">
+                                <header class="ds-step-head">
+                                    <span class="ds-step-no" aria-hidden="true">3</span>
+                                    <div>
+                                        <h3 id="dsNotesTitle">Notes for the shop</h3>
+                                        <p>Names, numbers, logo placement or anything else. Optional.</p>
+                                    </div>
+                                </header>
+                                <div class="form-group">
+                                    <label for="designNotes" class="storefront-sr-only">Notes for the shop</label>
+                                    <textarea id="designNotes" rows="3" maxlength="1000" placeholder="e.g., Team name on the chest, numbers at the back" data-ds-field></textarea>
+                                </div>
+                            </section>
+                        </div>
+
+                        <aside class="ds-summary" aria-labelledby="dsSummaryTitle">
+                            <h3 id="dsSummaryTitle">Your design</h3>
+                            <dl id="designSummaryList" class="ds-summary-list"></dl>
+                            <div id="designSummaryPhotos" class="ds-summary-photos"></div>
+                            <div class="ds-qty">
+                                <label for="designQuantity">Quantity</label>
+                                <div class="ds-qty-control">
+                                    <button type="button" aria-label="Fewer" onclick="changeDesignQuantity(-1)">−</button>
+                                    <input type="number" id="designQuantity" min="1" max="99" value="1" inputmode="numeric" data-ds-field>
+                                    <button type="button" aria-label="More" onclick="changeDesignQuantity(1)">+</button>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label for="topFabric">Fabric Type:</label>
-                                <select id="topFabric" required>
-                                    <option value="">-- Select Fabric --</option>
-                                    <option value="Polyester">Polyester Mesh</option>
-                                    <option value="Cotton Blend">Cotton Blend</option>
-                                    <option value="100% Polyester">100% Polyester</option>
-                                    <option value="Performance">Performance Material</option>
-                                    <option value="Dri-Fit">Dri-Fit</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="topAccentColor">Accent/Trim Color (Optional):</label>
-                            <select id="topAccentColor">
-                                <option value="">-- None --</option>
-                                <option value="Red">Red</option>
-                                <option value="Blue">Blue</option>
-                                <option value="Black">Black</option>
-                                <option value="White">White</option>
-                                <option value="Yellow">Yellow</option>
-                                <option value="Green">Green</option>
-                                <option value="Gold">Gold</option>
-                                <option value="Silver">Silver</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="topPrintDesign">🖼️ Print/Design (Front):</label>
-                            <textarea id="topPrintDesign" rows="3" placeholder="Describe your design, text, logo, or pattern for the front..."></textarea>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="topBackDesign">🖼️ Back Design (Optional):</label>
-                            <textarea id="topBackDesign" rows="3" placeholder="Describe any back design or text..."></textarea>
-                        </div>
-
-                        <button type="button" class="btn btn-secondary" onclick="addTopsToCart()">Add Top to Cart</button>
-                    </div>
-
-                    <!-- Bottoms Form -->
-                    <div id="bottomsDesignForm" class="clothing-design-form" style="display: none;">
-                        <h4>👖 Bottoms Design Specifications</h4>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="bottomColor">Base Color:</label>
-                                <select id="bottomColor" required>
-                                    <option value="">-- Select Color --</option>
-                                    <option value="Red">Red</option>
-                                    <option value="Blue">Blue</option>
-                                    <option value="Black">Black</option>
-                                    <option value="White">White</option>
-                                    <option value="Yellow">Yellow</option>
-                                    <option value="Green">Green</option>
-                                    <option value="Navy">Navy Blue</option>
-                                    <option value="Maroon">Maroon</option>
-                                    <option value="Gray">Gray</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="bottomFabric">Fabric Type:</label>
-                                <select id="bottomFabric" required>
-                                    <option value="">-- Select Fabric --</option>
-                                    <option value="Polyester">Polyester</option>
-                                    <option value="Cotton Blend">Cotton Blend</option>
-                                    <option value="Performance">Performance Material</option>
-                                    <option value="Mesh">Mesh Lining</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="bottomSideStripe">Side Stripe/Design:</label>
-                            <select id="bottomSideStripe">
-                                <option value="">-- None --</option>
-                                <option value="Single Stripe">Single Stripe</option>
-                                <option value="Double Stripe">Double Stripe</option>
-                                <option value="Full Design">Full Design</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="bottomDesign">🖼️ Design Details:</label>
-                            <textarea id="bottomDesign" rows="3" placeholder="Describe your design, text, logo, or pattern for the bottoms..."></textarea>
-                        </div>
-
-                        <button type="button" class="btn btn-secondary" onclick="addBottomsToCart()">Add Bottoms to Cart</button>
+                            <p class="ds-summary-total"><span>Price</span><strong id="designSummaryPrice">₱0.00</strong></p>
+                            <p class="ds-summary-note">For a team order, choose "Team order" at checkout and enter each player's name, number and sizes there.</p>
+                            <p id="designFormError" class="ds-error" role="alert" hidden></p>
+                            <button type="button" id="designAddToCart" class="btn btn-primary ds-add-btn" onclick="addCustomDesignToCart()">Add to Cart</button>
+                        </aside>
                     </div>
                 </div>
 
-                <!-- Upload Design Mode -->
-                <div id="uploadDesignMode" class="design-mode-content" style="display: none;">
-                    <h3>Upload Your Design</h3>
-                    <p style="color: #a0a0a0; margin-bottom: 20px;">Upload your own design files (images, PDFs)</p>
-                    
-                    <div class="upload-design-container">
-                        <div class="form-group">
-                            <label for="uploadDesignFile" style="font-weight: 600; color: #d4af37;">📁 Design Photos / Files:</label>
-                            <input type="file" id="uploadDesignFile" accept="image/*,.pdf" multiple required>
-                            <div id="uploadDesignDropZone" class="upload-design-drop-zone" role="button" tabindex="0" aria-label="Choose or drop design photos">
-                                <span>Add photos: drop here or click to choose more</span>
-                            </div>
-                            <small id="uploadDesignFileCount" class="upload-design-file-count" aria-live="polite"></small>
-                            <div id="uploadDesignFilesPreview" class="upload-design-files-preview"></div>
-                            <small style="color: #a0a0a0; display: block; margin-top: 5px;">Select several at once or add more in later selections. Supported: JPG, PNG, PDF (Max 10MB each).</small>
+                <!-- Upload a finished design -->
+                <div id="uploadDesignMode" class="ds-panel" role="tabpanel" hidden>
+                    <div class="ds-layout ds-layout-upload">
+                        <div class="ds-form">
+                            <section class="ds-step">
+                                <header class="ds-step-head">
+                                    <span class="ds-step-no" aria-hidden="true">1</span>
+                                    <div>
+                                        <h3>Your design files</h3>
+                                        <p>JPG, PNG, WEBP or PDF, up to 10 MB each. Add several at once or one at a time.</p>
+                                    </div>
+                                </header>
+                                <input type="file" id="uploadDesignFile" class="ds-hidden-input" accept="image/*,.pdf" multiple>
+                                <div id="uploadDesignDropZone" class="ds-drop-zone" role="button" tabindex="0" aria-label="Choose or drop design files">
+                                    <span class="ds-drop-icon" aria-hidden="true">⇪</span>
+                                    <strong>Drop files here or click to choose</strong>
+                                    <small>Front, back and any close-ups of your layout</small>
+                                </div>
+                                <small id="uploadDesignFileCount" class="ds-file-count" aria-live="polite"></small>
+                                <div id="uploadDesignFilesPreview" class="ds-file-grid"></div>
+                            </section>
+                            <section class="ds-step">
+                                <header class="ds-step-head">
+                                    <span class="ds-step-no" aria-hidden="true">2</span>
+                                    <div>
+                                        <h3>About this item</h3>
+                                        <p>Tell the shop what the design is for.</p>
+                                    </div>
+                                </header>
+                                <div class="ds-field-grid ds-field-grid-2">
+                                    <div class="form-group">
+                                        <label for="uploadClothingType">Item type <span class="ds-req">required</span></label>
+                                        <select id="uploadClothingType">
+                                            <option value="">Choose one</option>
+                                            <option value="tops">Top / shirt (upper)</option>
+                                            <option value="bottoms">Bottom / shorts (lower)</option>
+                                            <option value="both">Top and bottom set</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="uploadItemDescription">Item description <span class="ds-req">required</span></label>
+                                        <input type="text" id="uploadItemDescription" maxlength="80" placeholder="e.g., Basketball jersey">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="uploadDesignNotes">Notes for the shop <span class="ds-optional">optional</span></label>
+                                    <textarea id="uploadDesignNotes" rows="3" maxlength="1000" placeholder="Fabric, colors, names, numbers or anything else"></textarea>
+                                </div>
+                            </section>
                         </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="uploadClothingType">Item Type:</label>
-                                <select id="uploadClothingType" required>
-                                    <option value="">-- Select Type --</option>
-                                    <option value="tops">Top/Shirt (Upper)</option>
-                                    <option value="bottoms">Bottoms/Shorts (Lower)</option>
-                                    <option value="both">Top + Bottom Set (Upper + Lower)</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="uploadItemDescription">Item Description:</label>
-                                <input type="text" id="uploadItemDescription" placeholder="e.g., Basketball Jersey" required>
-                            </div>
-                        </div>
-
-                        <button type="button" class="btn btn-secondary" onclick="addUploadedDesignToCart()">Add Uploaded Design to Cart</button>
+                        <aside class="ds-summary">
+                            <h3>Uploaded design</h3>
+                            <p class="ds-summary-note">The shop checks your files and contacts you if anything is unclear.</p>
+                            <p class="ds-summary-total"><span>Price</span><strong id="uploadDesignPrice">₱0.00</strong></p>
+                            <button type="button" class="btn btn-primary ds-add-btn" onclick="addUploadedDesignToCart()">Add to Cart</button>
+                        </aside>
                     </div>
                 </div>
-
-                <button class="btn btn-secondary" onclick="goBackToShop()" style="margin-top: 20px;">Back to Shop</button>
             </div>
 
             <!-- Shopping Cart Section -->
@@ -394,6 +451,7 @@
                     </div>
                     <aside class="cart-summary" aria-label="Cart total">
                         <h3>Order summary</h3>
+                        <p class="checkout-team-breakdown" data-team-breakdown hidden></p>
                         <p>Total: <strong>₱<span id="cartTotal">0.00</span></strong></p>
                         <small class="cart-summary-note">Pay a 50% downpayment when you place the order. The balance is paid on pickup or delivery.</small>
                         <button class="btn btn-primary" onclick="checkout()">Proceed to Checkout</button>
@@ -483,40 +541,60 @@
                 </form>
             </div>
 
-            <!-- Customer Service Section -->
+            <!-- Customer Service: chat with the shop -->
             <div id="customerServiceSection" class="customer-service-section" style="display: none;">
                 <div class="customer-page-head">
                     <div>
-                        <h2>Customer Service</h2>
-                        <p class="customer-page-subtitle">Send a message to the seller about your order or any concern.</p>
+                        <h2>Support</h2>
+                        <p class="customer-page-subtitle">Chat with the shop about an order or any concern. Replies appear here.</p>
                     </div>
+                    <button type="button" class="btn btn-primary" onclick="openCustomerChatComposer()">+ New message</button>
                 </div>
-                <form id="customerServiceForm" class="customer-panel" onsubmit="sendCustomerServiceMessage(event)">
-                    <div class="form-group">
-                        <label for="serviceOrderId">Order (optional):</label>
-                        <select id="serviceOrderId">
-                            <option value="">General concern</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="serviceSubject">Subject:</label>
-                        <select id="serviceSubject" required>
-                            <option value="">Select a subject</option>
-                            <option value="Order status">Order status</option>
-                            <option value="Payment concern">Payment concern</option>
-                            <option value="Change order details">Change order details</option>
-                            <option value="Other concern">Other concern</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="serviceMessage">Message:</label>
-                        <textarea id="serviceMessage" rows="6" required placeholder="Write your message to the seller..."></textarea>
-                    </div>
-                    <div class="customer-form-actions">
-                        <button type="submit" class="btn btn-primary">Send Message to Seller</button>
-                    </div>
-                    <div id="customerServiceStatus" class="status-message"></div>
-                </form>
+                <div id="customerChatShell" class="chat-shell is-customer">
+                    <aside class="chat-sidebar" aria-label="Your conversations">
+                        <div class="chat-toolbar">
+                            <div id="customerChatFilters" class="chat-filters" role="group" aria-label="Filter conversations"></div>
+                        </div>
+                        <div id="customerChatList" class="chat-list"></div>
+                    </aside>
+                    <section class="chat-thread" aria-live="polite">
+                        <div id="customerChatThread" class="chat-thread-body" hidden></div>
+                        <form id="customerServiceForm" class="chat-compose-form" onsubmit="sendCustomerServiceMessage(event)">
+                            <div class="chat-thread-head">
+                                <button type="button" class="chat-back" onclick="closeChatThread('customerChatShell')" aria-label="Back to conversations">‹</button>
+                                <div><h3>New message</h3><p>The shop usually replies within the day.</p></div>
+                            </div>
+                            <div class="chat-compose-fields">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="serviceSubject">Subject</label>
+                                        <select id="serviceSubject" required>
+                                            <option value="">Select a subject</option>
+                                            <option value="Order status">Order status</option>
+                                            <option value="Payment concern">Payment concern</option>
+                                            <option value="Change order details">Change order details</option>
+                                            <option value="Other concern">Other concern</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="serviceOrderId">Order (optional)</label>
+                                        <select id="serviceOrderId">
+                                            <option value="">General concern</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="serviceMessage">Message</label>
+                                    <textarea id="serviceMessage" rows="6" maxlength="5000" required placeholder="Write your message to the shop..."></textarea>
+                                </div>
+                                <div class="customer-form-actions">
+                                    <button type="submit" class="btn btn-primary">Send Message</button>
+                                </div>
+                                <div id="customerServiceStatus" class="status-message" role="status"></div>
+                            </div>
+                        </form>
+                    </section>
+                </div>
             </div>
 
             <!-- Checkout Section -->
@@ -529,8 +607,8 @@
                 </div>
                 <div class="checkout-layout"><form id="checkoutForm" novalidate>
                     <!-- Order Items Review -->
-                    <div style="background: #1f1f1f; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #3a3a3a;">
-                        <h3 style="color: #d4af37; margin-bottom: 15px;">📦 Order Items</h3>
+                    <div class="checkout-items-box">
+                        <h3>📦 Order Items</h3>
                         <div id="checkoutItemsList">
                             <!-- Items will be displayed here -->
                         </div>
@@ -681,11 +759,12 @@
                     </div>
 
                     <div class="order-summary">
+                        <p class="checkout-team-breakdown" data-team-breakdown hidden></p>
                         <p>Total Amount: <strong>₱<span id="checkoutTotal">0.00</span></strong></p>
                     </div>
                     <div class="checkout-action-buttons"><button type="button" id="placeCustomerOrderButton" class="btn btn-primary" onclick="placeCustomerOrder(event)">Place Order</button>
                     <button type="button" class="btn btn-secondary" onclick="toggleCart()">Cancel</button></div>
-                </form><aside class="checkout-desktop-summary" aria-label="Order summary"><h3>Order summary</h3><p>Total: &#8369;<strong id="checkoutDesktopTotal">0.00</strong></p></aside></div>
+                </form><aside class="checkout-desktop-summary" aria-label="Order summary"><h3>Order summary</h3><p class="checkout-team-breakdown" data-team-breakdown hidden></p><p>Total: &#8369;<strong id="checkoutDesktopTotal">0.00</strong></p><p class="checkout-summary-dp">50% downpayment: <strong id="checkoutDesktopDownpayment">₱0.00</strong></p></aside></div>
             </div>
 
             <div class="customer-service-footer">
@@ -742,6 +821,7 @@
         <div id="adminNavMenu" class="admin-sidebar" role="navigation" aria-label="Admin navigation menu">
             <p class="admin-sidebar-label">Manage shop</p>
             <button class="btn btn-secondary" type="button" data-admin-tab="products" onclick="showAdminTab('products')"><span class="admin-nav-icon" aria-hidden="true">▦</span><span class="admin-nav-text">Products</span></button>
+            <button class="btn btn-secondary" type="button" data-admin-tab="fabrics" onclick="showAdminTab('fabrics')"><span class="admin-nav-icon" aria-hidden="true">◫</span><span class="admin-nav-text">Fabric Types</span></button>
             <button class="btn btn-secondary notification-btn" type="button" data-admin-tab="orders" onclick="showAdminTab('orders')"><span class="admin-nav-icon" aria-hidden="true">◧</span><span class="admin-nav-text">Orders</span> <span class="notification-badge" data-notification-badge="admin-orders" style="display:none;">0</span></button>
             <button class="btn btn-secondary notification-btn" type="button" data-admin-tab="messages" onclick="showAdminTab('messages')"><span class="admin-nav-icon" aria-hidden="true">✉</span><span class="admin-nav-text">Messages</span> <span class="notification-badge" data-notification-badge="admin-messages" style="display:none;">0</span></button>
             <button class="btn btn-secondary" type="button" data-admin-tab="customers" onclick="showAdminTab('customers')"><span class="admin-nav-icon" aria-hidden="true">☺</span><span class="admin-nav-text">Customers</span></button>
@@ -1063,6 +1143,62 @@
                 </div>
             </div>
 
+            <!-- Fabric Types: the fabrics customers can pick in the Design Studio -->
+            <div id="fabricsTab" class="admin-tab" style="display: none;">
+                <div class="admin-page-head">
+                    <div>
+                        <h2>Fabric Types</h2>
+                        <p class="admin-page-subtitle">The fabrics customers can choose in the Design Studio. Add a clear photo of each so customers see the texture.</p>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="openFabricForm()">+ Add Fabric</button>
+                </div>
+
+                <div class="fabric-admin-layout">
+                    <form id="fabricForm" class="fabric-form admin-panel" onsubmit="saveFabric(event)" hidden>
+                        <h3 id="fabricFormTitle">Add fabric</h3>
+                        <input type="hidden" id="fabricId">
+                        <div class="form-group">
+                            <label for="fabricName">Fabric name</label>
+                            <input type="text" id="fabricName" maxlength="60" required placeholder="e.g., Dri-fit, Polyester mesh">
+                        </div>
+                        <div class="form-group">
+                            <label for="fabricDescription">Short description <small>(optional)</small></label>
+                            <textarea id="fabricDescription" rows="2" maxlength="240" placeholder="e.g., Light and breathable, good for basketball"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="fabricUsedFor">Used for</label>
+                            <select id="fabricUsedFor">
+                                <option value="both">Tops and bottoms</option>
+                                <option value="tops">Tops only</option>
+                                <option value="bottoms">Bottoms only</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <span class="fabric-photo-label">Fabric photo</span>
+                            <label class="fabric-photo-drop" for="fabricImage">
+                                <img id="fabricImagePreview" alt="Fabric photo preview" hidden>
+                                <span id="fabricImageEmpty" class="fabric-photo-empty"><b aria-hidden="true">＋</b>Choose a photo<small>JPG, PNG or WEBP. A close-up of the fabric works best.</small></span>
+                            </label>
+                            <input type="file" id="fabricImage" accept="image/png,image/jpeg,image/webp,image/gif" class="fabric-file-input">
+                            <label class="fabric-check" id="fabricRemoveImageRow" hidden><input type="checkbox" id="fabricRemoveImage"> Remove the current photo</label>
+                        </div>
+                        <label class="fabric-check"><input type="checkbox" id="fabricAvailable" checked> Available to customers</label>
+                        <div id="fabricFormMessage" class="status-message" role="status"></div>
+                        <div class="fabric-form-actions">
+                            <button type="submit" class="btn btn-primary" id="fabricSaveButton">Save Fabric</button>
+                            <button type="button" class="btn btn-secondary" onclick="closeFabricForm()">Cancel</button>
+                        </div>
+                    </form>
+
+                    <section class="admin-panel fabric-list-panel">
+                        <div class="table-toolbar">
+                            <h3>Fabrics <span id="fabricCount" class="fabric-count"></span></h3>
+                        </div>
+                        <div id="adminFabricList" class="fabric-admin-grid"></div>
+                    </section>
+                </div>
+            </div>
+
             <!-- Orders Management -->
             <div id="ordersTab" class="admin-tab" style="display: none;">
                 <div class="admin-page-head">
@@ -1127,16 +1263,26 @@
                 <div id="adminOrdersPager" class="table-pager" hidden></div>
             </div>
 
-            <!-- Customer Messages -->
+            <!-- Customer Messages: chats with customers -->
             <div id="messagesTab" class="admin-tab" style="display: none;">
-                <h2>Customer Messages</h2>
-                <div class="admin-messages-layout">
-                    <div id="adminMessagesList" class="admin-message-list">
-                        <!-- Customer conversations will be listed here -->
+                <div class="admin-page-head">
+                    <div>
+                        <h2>Customer Messages</h2>
+                        <p class="admin-page-subtitle">Chats from customers. Your replies appear in the customer's Support page.</p>
                     </div>
-                    <div id="adminMessageDetails" class="admin-message-details">
-                        <p class="message-empty-state">Select a message to view the conversation.</p>
-                    </div>
+                </div>
+                <div id="adminChatShell" class="chat-shell">
+                    <aside class="chat-sidebar" aria-label="Conversations">
+                        <div class="chat-toolbar">
+                            <label for="adminChatSearch" class="chat-sr-only">Search conversations</label>
+                            <input type="search" id="adminChatSearch" class="chat-search" placeholder="Search name, subject or order no." oninput="renderAdminMessagesList()">
+                            <div id="adminChatFilters" class="chat-filters" role="group" aria-label="Filter conversations"></div>
+                        </div>
+                        <div id="adminMessagesList" class="chat-list"></div>
+                    </aside>
+                    <section id="adminMessageDetails" class="chat-thread" aria-live="polite">
+                        <div class="chat-empty"><span aria-hidden="true">✉</span><strong>Select a conversation</strong><small>Pick a chat on the left to read and reply.</small></div>
+                    </section>
                 </div>
             </div>
 
@@ -1642,11 +1788,13 @@
 
     <script src="js/team-order.js?v=20261104-player-details-1"></script>
     <script src="js/production-tracking.js?v=20261015-production-1"></script>
-    <script src="js/order-media.js?v=20261019-multi-design-1"></script>
+    <script src="js/order-media.js?v=20261117-studio-1"></script>
     <script src="js/payment-summary.js?v=20261112-payments-1"></script>
-    <script src="js/app.js?v=20261113-balance-proof-1"></script>
-    <script src="js/storefront.js?v=20261113-customer-layout-1"></script>
-    <script src="js/design-interface.js?v=20261020-hide-upload-filenames-1"></script>
+    <script src="js/app.js?v=20261117-studio-1"></script>
+    <script src="js/storefront.js?v=20261117-studio-1"></script>
+    <script src="js/design-interface.js?v=20261117-studio-1"></script>
+    <script src="js/chat.js?v=20261117-studio-1"></script>
+    <script src="js/fabrics-admin.js?v=20261117-studio-1"></script>
     <script>
         // Force initialization when page loads
         document.addEventListener('DOMContentLoaded', () => {

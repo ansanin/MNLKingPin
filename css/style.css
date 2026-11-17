@@ -53,7 +53,6 @@ body.light-mode .site-header .btn-secondary:hover {
     background-color: #dfe5ea;
 }
 
-
 body.light-mode .customer-container,
 body.light-mode .admin-container,
 body.light-mode .modal-content,
@@ -435,6 +434,20 @@ body.light-mode [style*="color: #a0a0a0"] {
 .btn-secondary:hover {
     background-color: #4a4a4a;
     border-color: #5a5a5a;
+}
+
+/* Light mode everywhere, including pop-ups that sit outside the admin and customer pages. */
+body.light-mode .btn-secondary {
+    border-color: #aebac3;
+    background-color: #f1f4f6;
+    color: #263238;
+}
+
+body.light-mode .btn-secondary:hover,
+body.light-mode .btn-secondary:focus-visible {
+    border-color: #b78300;
+    background-color: #ffffff;
+    color: #172027;
 }
 
 .btn-danger {
@@ -1258,196 +1271,6 @@ body.light-mode .website-footer-location {
     margin-top: 10px;
 }
 
-.admin-messages-layout {
-    display: grid;
-    grid-template-columns: minmax(280px, 0.78fr) minmax(360px, 1.4fr);
-    gap: 24px;
-    align-items: start;
-}
-
-.admin-message-list,
-.admin-message-details {
-    min-width: 0;
-}
-
-.admin-message-item,
-.admin-message-details {
-    background: linear-gradient(145deg, rgba(38, 40, 43, .98), rgba(25, 27, 29, .98));
-    border: 1px solid rgba(255, 255, 255, .08);
-    border-radius: 12px;
-    box-shadow: 0 14px 34px rgba(0, 0, 0, .18);
-}
-
-.admin-message-item {
-    padding: 17px 18px;
-    margin-bottom: 12px;
-    border-left: 3px solid transparent;
-    cursor: pointer;
-    transition: transform .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease;
-}
-
-.admin-message-item:hover,
-.admin-message-item.read:hover {
-    background: linear-gradient(145deg, rgba(52, 54, 57, 1), rgba(29, 31, 33, 1));
-    border-color: rgba(212, 175, 55, .45);
-    box-shadow: 0 16px 34px rgba(0, 0, 0, .25);
-    transform: translateY(-2px);
-}
-
-.admin-message-item.unread {
-    background: linear-gradient(145deg, rgba(57, 49, 29, .96), rgba(31, 30, 26, .98));
-    border-left-color: #d4af37;
-}
-
-.admin-message-item-top,
-.admin-message-details-header,
-.admin-message-meta {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-}
-
-.admin-message-item-top span,
-.admin-message-details-header p,
-.admin-message-meta,
-.message-empty-state {
-    color: #a0a0a0;
-    font-size: 0.85em;
-}
-
-.admin-message-item-top strong {
-    color: #f4f5f6;
-    font-size: var(--fs-base);
-}
-
-.admin-message-item-top span {
-    font-size: var(--fs-xs);
-    white-space: nowrap;
-}
-
-.admin-message-subject {
-    color: #d4af37;
-    font-weight: 600;
-    margin-top: 10px;
-    font-size: var(--fs-base);
-}
-
-.admin-message-preview {
-    color: #b9bdc2;
-    margin-top: 7px;
-    font-size: var(--fs-sm);
-    line-height: 1.45;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.admin-message-details {
-    padding: 26px;
-    min-height: 290px;
-    position: sticky;
-    top: 24px;
-}
-
-.admin-message-details-header h3 {
-    margin: 0 0 5px;
-    color: #f5f5f5;
-    font-size: var(--fs-lg);
-}
-
-.admin-message-details-header p {
-    margin: 0;
-}
-
-.message-status {
-    align-self: flex-start;
-    background: rgba(123, 216, 143, .12);
-    border: 1px solid rgba(123, 216, 143, .28);
-    border-radius: 999px;
-    color: #8ce6a0;
-    padding: 5px 10px;
-    text-transform: uppercase;
-    font-size: 0.68em;
-    font-weight: 700;
-    letter-spacing: .8px;
-}
-
-.admin-message-meta {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    border-bottom: 1px solid rgba(255, 255, 255, .1);
-    padding: 16px 0;
-    font-size: var(--fs-sm);
-}
-
-.admin-message-body {
-    color: #e7e9ec;
-    line-height: 1.7;
-    padding-top: 20px;
-    white-space: pre-wrap;
-}
-
-.admin-message-replies {
-    margin: 18px 0;
-}
-
-.admin-message-reply {
-    background: rgba(212, 175, 55, .1);
-    border: 1px solid rgba(212, 175, 55, .18);
-    border-radius: 10px;
-    margin-top: 10px;
-    padding: 12px 14px;
-}
-
-.admin-message-reply span {
-    color: #a0a0a0;
-    float: right;
-    font-size: 0.8em;
-}
-
-.admin-message-reply p {
-    color: #f0f0f0;
-    line-height: 1.5;
-    margin: 8px 0 0;
-    white-space: pre-wrap;
-}
-
-.admin-reply-box {
-    margin-top: 12px;
-}
-
-.admin-reply-box textarea {
-    background: rgba(15, 16, 17, .72);
-    border: 1px solid rgba(255, 255, 255, .12);
-    border-radius: 9px;
-    box-sizing: border-box;
-    color: #f4f5f6;
-    display: block;
-    font: inherit;
-    margin-bottom: 10px;
-    min-height: 90px;
-    padding: 12px 14px;
-    resize: vertical;
-    width: 100%;
-}
-
-.admin-reply-box textarea:focus {
-    border-color: #d4af37;
-    box-shadow: 0 0 0 3px rgba(212, 175, 55, .12);
-    outline: none;
-}
-
-@media (max-width: 760px) {
-    .admin-messages-layout {
-        grid-template-columns: 1fr;
-    }
-
-    .admin-message-details {
-        min-height: 240px;
-        position: static;
-    }
-}
-
 .orders-list {
     margin-bottom: 20px;
 }
@@ -2186,7 +2009,21 @@ table td {
 }
 
 table tbody tr:hover {
-    background-color: #1f1f1f;
+    background-color: rgba(212, 175, 55, .07);
+}
+
+body.light-mode table thead {
+    background-color: #f3f4f5;
+    color: #7a5a00;
+}
+
+body.light-mode table td {
+    border-bottom-color: #e2e6e9;
+    color: #263238;
+}
+
+body.light-mode table tbody tr:hover {
+    background-color: #fbf6e6;
 }
 
 .product-thumbnail {
@@ -2414,6 +2251,12 @@ body.light-mode .checkout-payment-options .checkout-payment-option[aria-pressed=
     height: 100%;
     background-color: rgba(0, 0, 0, 0.8);
     animation: fadeIn 0.3s ease-in;
+}
+
+/* Light mode: a soft grey veil behind pop-ups instead of a near-black screen. */
+body.light-mode .modal {
+    background-color: rgba(38, 50, 56, .42);
+    backdrop-filter: blur(2px);
 }
 
 .modal-content {
@@ -2769,6 +2612,10 @@ body.light-mode .checkout-payment-options .checkout-payment-option[aria-pressed=
     background-color: #1f1f1f;
 }
 
+body.light-mode .report-section table tbody tr:nth-child(even) {
+    background-color: #f6f7f9;
+}
+
 .process-intro {
     color: #a0a0a0;
     margin-top: -18px;
@@ -2896,200 +2743,6 @@ body.light-mode .checkout-payment-options .checkout-payment-option[aria-pressed=
     font-size: var(--fs-2xl);
 }
 
-/* Design Mode Selector */
-.design-mode-selector {
-    margin-bottom: 40px;
-}
-
-.design-mode-selector h3 {
-    color: #d4af37;
-    margin-bottom: 15px;
-}
-
-.design-mode-buttons {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-bottom: 30px;
-}
-
-.design-mode-btn {
-    padding: 15px 20px;
-    background: #2a2a2a;
-    border: 2px solid #3a3a3a;
-    color: #e0e0e0;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: 600;
-    font-size: var(--fs-base);
-    white-space: nowrap;
-}
-
-.design-mode-btn:hover {
-    background: #1f1f1f;
-    border-color: #d4af37;
-    color: #d4af37;
-}
-
-.design-mode-btn.active {
-    background: #d4af37;
-    color: #1a1a1a;
-    border-color: #d4af37;
-}
-
-/* Design Mode Content */
-.design-mode-content {
-    background: #2a2a2a;
-    padding: 30px;
-    border-radius: 5px;
-    border: 1px solid #3a3a3a;
-    display: none;
-}
-
-.design-mode-content.active {
-    display: block;
-}
-
-.design-mode-content h3 {
-    color: #d4af37;
-    margin-bottom: 15px;
-    font-size: var(--fs-xl);
-}
-
-.design-mode-content p {
-    color: #a0a0a0;
-    margin-bottom: 20px;
-}
-
-/* Clothing Type Selector */
-.clothing-type-selector {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 15px;
-    margin: 20px 0;
-}
-
-.clothing-type-btn {
-    padding: 15px 20px;
-    background: #1f1f1f;
-    border: 2px solid #3a3a3a;
-    color: #e0e0e0;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: 600;
-    font-size: var(--fs-base);
-}
-
-.clothing-type-btn:hover {
-    background: #2a2a2a;
-    border-color: #d4af37;
-    color: #d4af37;
-}
-
-.clothing-type-btn.active {
-    background: #d4af37;
-    color: #1a1a1a;
-    border-color: #d4af37;
-}
-
-/* Clothing Design Forms */
-.clothing-design-form {
-    background: #1f1f1f;
-    padding: 20px;
-    border-radius: 5px;
-    border: 1px solid #3a3a3a;
-    display: none;
-    margin: 20px 0;
-}
-
-.clothing-design-form.active {
-    display: block;
-}
-
-.clothing-design-form h4 {
-    color: #d4af37;
-    margin-bottom: 20px;
-    font-size: var(--fs-lg);
-    padding-bottom: 10px;
-    border-bottom: 2px solid #3a3a3a;
-}
-
-/* Presets Grid */
-.presets-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 20px;
-    margin: 20px 0;
-}
-
-.preset-card {
-    background: #1f1f1f;
-    border-radius: 5px;
-    overflow: hidden;
-    border: 1px solid #3a3a3a;
-    transition: all 0.3s ease;
-    cursor: pointer;
-}
-
-.preset-card:hover {
-    border-color: #d4af37;
-    box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
-    transform: translateY(-5px);
-}
-
-.preset-color {
-    width: 100%;
-    height: 150px;
-    background: linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 100%);
-}
-
-.preset-info {
-    padding: 15px;
-}
-
-.preset-info h4 {
-    color: #d4af37;
-    margin-bottom: 5px;
-    font-size: var(--fs-base);
-}
-
-.preset-info p {
-    color: #a0a0a0;
-    font-size: 0.9em;
-    margin-bottom: 10px;
-}
-
-/* Upload Design Container */
-.upload-design-container {
-    background: #1f1f1f;
-    padding: 25px;
-    border-radius: 5px;
-    border: 2px dashed #d4af37;
-    margin: 20px 0;
-}
-
-.upload-design-container .form-group {
-    margin-bottom: 20px;
-}
-
-.upload-design-container label {
-    display: block;
-    margin-bottom: 8px;
-    color: #d4af37;
-    font-weight: 600;
-}
-
-.upload-design-container input[type="file"] {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #3a3a3a;
-    border-radius: 5px;
-    background: #2a2a2a;
-    color: #e0e0e0;
-}
-
 /* Form Rows */
 .form-row {
     display: grid;
@@ -3100,18 +2753,6 @@ body.light-mode .checkout-payment-options .checkout-payment-option[aria-pressed=
 
 @media (max-width: 768px) {
     .form-row {
-        grid-template-columns: 1fr;
-    }
-    
-    .design-mode-buttons {
-        grid-template-columns: 1fr;
-    }
-    
-    .clothing-type-selector {
-        grid-template-columns: 1fr;
-    }
-    
-    .presets-grid {
         grid-template-columns: 1fr;
     }
 }
@@ -3860,9 +3501,11 @@ body.light-mode .checkout-payment-options .checkout-payment-option[aria-pressed=
 .gcash-qr-viewer-content img { display: block; width: min(78vw, 520px); max-height: 68vh; margin: 0 auto 16px; object-fit: contain; border: 8px solid #fff; border-radius: 6px; background: #fff; }
 .gcash-qr-viewer-content p { margin: 0; color: #d7dde2; }
 .gcash-qr-viewer-close { position: absolute; top: 8px; right: 12px; border: 0; background: transparent; color: #fff; font-size: var(--fs-2xl); line-height: 1; cursor: pointer; }
-body.light-mode #customerPage .gcash-qr-viewer-content { background: #fff; border-color: #b78300; color: #263238; }
-body.light-mode #customerPage .gcash-qr-viewer-content h2 { color: #765500; }
-body.light-mode #customerPage .gcash-qr-viewer-content p { color: #42515b; }
+body.light-mode .gcash-qr-viewer-modal { background: rgba(38, 50, 56, .42); }
+body.light-mode .gcash-qr-viewer-content { background: #fff; border-color: #b78300; color: #263238; }
+body.light-mode .gcash-qr-viewer-content h2 { color: #765500; }
+body.light-mode .gcash-qr-viewer-content p { color: #42515b; }
+body.light-mode .gcash-qr-viewer-close { color: #263238; }
 body.light-mode #customerPage .gcash-qr-viewer-close { color: #263238; }
 .order-payment-proof { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(212, 175, 55, .35); }
 .order-payment-proof input[type="file"] { max-width: 100%; padding: 8px; border: 1px solid #d4af37; border-radius: 5px; background: #1f1f1f; color: #e0e0e0; }
@@ -4376,8 +4019,6 @@ body.light-mode .floating-back-button button:hover {
     line-height: 1.1;
 }
 
-
-
 #customerPage[style*="display: block"]:has(#productsSection:not([style*="display: none"])) .product-price {
     margin: 2px 0;
     font-size: var(--fs-base);
@@ -4715,12 +4356,6 @@ body.light-mode #customerPage .order-summary,
 body.light-mode #customerPage .order-tracking,
 body.light-mode #customerPage .notification-item,
 body.light-mode #customerPage .order-item,
-body.light-mode #customerPage .design-mode-content,
-body.light-mode #customerPage .clothing-design-form,
-body.light-mode #customerPage .clothing-type-btn,
-body.light-mode #customerPage .design-mode-btn,
-body.light-mode #customerPage .preset-card,
-body.light-mode #customerPage .upload-design-container,
 body.light-mode #customerPage .measurements-section,
 body.light-mode #customerPage .size-chart-helper,
 body.light-mode #adminPage .logo-preview,
@@ -4736,8 +4371,6 @@ body.light-mode #customerPage .checkout-item,
 body.light-mode #customerPage .order-id,
 body.light-mode #customerPage .order-header,
 body.light-mode #customerPage .tracking-circle,
-body.light-mode #customerPage .design-mode-btn,
-body.light-mode #customerPage .clothing-type-btn,
 body.light-mode #customerPage .process-node,
 body.light-mode #adminPage .process-node,
 body.light-mode #adminPage .report-value {
@@ -4747,11 +4380,6 @@ body.light-mode #adminPage .report-value {
 body.light-mode #customerPage .cart-item-price,
 body.light-mode #customerPage .cart-customization,
 body.light-mode #customerPage .customization-section h4,
-body.light-mode #customerPage .design-mode-selector h3,
-body.light-mode #customerPage .design-mode-content h3,
-body.light-mode #customerPage .clothing-design-form h4,
-body.light-mode #customerPage .preset-info h4,
-body.light-mode #customerPage .upload-design-container label,
 body.light-mode #customerPage .tracking-step.active .tracking-label,
 body.light-mode #adminPage .process-arrow,
 body.light-mode #adminPage .process-node {
@@ -4762,8 +4390,6 @@ body.light-mode #customerPage .order-details,
 body.light-mode #customerPage .notification-timestamp,
 body.light-mode #customerPage .empty-cart,
 body.light-mode #customerPage .customization-section small,
-body.light-mode #customerPage .design-mode-content p,
-body.light-mode #customerPage .preset-info p,
 body.light-mode #customerPage .tracking-label,
 body.light-mode #adminPage .process-intro,
 body.light-mode #adminPage .process-node small,
@@ -4840,8 +4466,6 @@ body.light-mode #customerPage .order-gcash-qr a {
     color: #7b5b00 !important;
 }
 
-body.light-mode #customerPage .design-mode-btn.active,
-body.light-mode #customerPage .clothing-type-btn.active,
 body.light-mode #customerPage .tracking-step.active .tracking-circle {
     background: #d7a914;
     border-color: #b78300;
@@ -5745,9 +5369,7 @@ body.light-mode #customerPage #customerSettingsSection .settings-section {
 }
 
 body.light-mode #customerPage #checkoutSection [style*="background: #1f1f1f"],
-body.light-mode #customerPage #checkoutSection [style*="background: #2a2a2a"],
-body.light-mode #customerPage #designSection [style*="background: #1f1f1f"],
-body.light-mode #customerPage #designSection [style*="background: #2a2a2a"] {
+body.light-mode #customerPage #checkoutSection [style*="background: #2a2a2a"] {
     background: #f1f4f6 !important;
     border-color: #d0d7dc !important;
 }
@@ -5795,25 +5417,6 @@ body.light-mode #customerPage .order-tracking,
 body.light-mode #customerPage .order-details {
     background: #f1f4f6 !important;
     border-color: #d0d7dc !important;
-}
-
-body.light-mode #customerPage .design-mode-content,
-body.light-mode #customerPage .clothing-design-form,
-body.light-mode #customerPage .preset-card,
-body.light-mode #customerPage .upload-design-container,
-body.light-mode #customerPage .clothing-type-btn,
-body.light-mode #customerPage .design-mode-btn {
-    background: #f1f4f6 !important;
-    border-color: #d0d7dc !important;
-    color: #35434c !important;
-}
-
-body.light-mode #customerPage .design-mode-content h3,
-body.light-mode #customerPage .clothing-design-form h4,
-body.light-mode #customerPage .preset-info h4,
-body.light-mode #customerPage .upload-design-container label,
-body.light-mode #customerPage .design-mode-selector h3 {
-    color: #765500 !important;
 }
 
 body.light-mode #customerPage .status-message.success,
@@ -5983,9 +5586,7 @@ body.light-mode #editCustomizationModal textarea {
     }
 }
 
-body.light-mode #customerPage .btn-secondary,
-body.light-mode #customerPage .design-mode-btn:not(.active),
-body.light-mode #customerPage .clothing-type-btn:not(.active) {
+body.light-mode #customerPage .btn-secondary {
     background: #f1f4f6 !important;
     border: 1px solid #aebac3 !important;
     color: #263238 !important;
@@ -5994,9 +5595,7 @@ body.light-mode #customerPage .clothing-type-btn:not(.active) {
 }
 
 body.light-mode #customerPage .btn-secondary:hover,
-body.light-mode #customerPage .btn-secondary:focus-visible,
-body.light-mode #customerPage .design-mode-btn:not(.active):hover,
-body.light-mode #customerPage .clothing-type-btn:not(.active):hover {
+body.light-mode #customerPage .btn-secondary:focus-visible {
     background: #ffffff !important;
     border-color: #b78300 !important;
     color: #172027 !important;
@@ -6229,62 +5828,6 @@ body.light-mode #adminPage .modal-footer .btn-secondary,
 body.light-mode #orderDetailsModal .modal-footer .btn-secondary {
     background: #e8edf0 !important;
     border-color: #c3ccd3 !important;
-    color: #263238 !important;
-}
-
-body.light-mode #adminPage .admin-message-item,
-body.light-mode #adminPage .admin-message-details {
-    background: linear-gradient(145deg, #ffffff, #f1f4f6) !important;
-    border-color: #d2d8dd !important;
-    color: #35434c !important;
-    box-shadow: 0 10px 24px rgba(42, 52, 60, .08);
-}
-
-body.light-mode #adminPage .admin-message-item:hover,
-body.light-mode #adminPage .admin-message-item.read:hover {
-    background: #f7f9fa !important;
-}
-
-body.light-mode #adminPage .admin-message-item.unread {
-    background: #fff8df !important;
-    border-left-color: #c99416 !important;
-}
-
-body.light-mode #adminPage .admin-message-item-top strong,
-body.light-mode #adminPage .admin-message-details-header h3,
-body.light-mode #adminPage .admin-message-body,
-body.light-mode #adminPage .admin-message-reply p {
-    color: #263238 !important;
-}
-
-body.light-mode #adminPage .admin-message-item-top span,
-body.light-mode #adminPage .admin-message-details-header p,
-body.light-mode #adminPage .admin-message-meta,
-body.light-mode #adminPage .admin-message-reply span,
-body.light-mode #adminPage .message-empty-state {
-    color: #53616b !important;
-}
-
-body.light-mode #adminPage .admin-message-subject {
-    color: #765500 !important;
-}
-
-body.light-mode #adminPage .admin-message-preview {
-    color: #42515b !important;
-}
-
-body.light-mode #adminPage .admin-message-meta {
-    border-bottom-color: #d2d8dd !important;
-}
-
-body.light-mode #adminPage .admin-message-reply {
-    background: #fff8df !important;
-    border-color: #e0c56d !important;
-}
-
-body.light-mode #adminPage .admin-reply-box textarea {
-    background: #ffffff !important;
-    border-color: #b8c2cc !important;
     color: #263238 !important;
 }
 
@@ -6768,6 +6311,12 @@ body.light-mode #adminPage .message {
     font-weight: 700;
 }
 
+body.light-mode .production-timeline-marker {
+    border-color: #b8c2cc;
+    background: #eef1f3;
+    color: #4a5560;
+}
+
 .production-timeline-step.done .production-timeline-marker,
 .production-timeline-step.current .production-timeline-marker {
     border-color: #d4af37;
@@ -6826,27 +6375,6 @@ body.light-mode #adminPage .message {
 
 .admin-order-team-notes > div {
     white-space: pre-wrap;
-}
-
-.admin-order-uploaded-design {
-    margin-top: 12px;
-    padding: 12px;
-    border: 1px solid #3a3a3a;
-    border-radius: 5px;
-    background: #1f1f1f;
-    color: #f4f4f4;
-}
-
-.admin-order-uploaded-design > strong {
-    color: #d4af37;
-}
-
-.admin-order-uploaded-design a {
-    color: #8ecbff !important;
-}
-
-.admin-order-uploaded-design > span {
-    color: #ffbf85 !important;
 }
 
 @media (max-width: 480px) {
@@ -6943,24 +6471,6 @@ body.light-mode #orderDetailsModal .production-admin-controls textarea {
     .production-admin-controls .production-admin-actions {
         grid-column: auto;
     }
-}
-
-body.light-mode #orderDetailsModal .admin-order-uploaded-design > strong {
-    color: #1b5e35 !important;
-}
-
-body.light-mode #orderDetailsModal .admin-order-uploaded-design {
-    background: #f1f4f6 !important;
-    border-color: #d0d7dc !important;
-    color: #263238 !important;
-}
-
-body.light-mode #orderDetailsModal .admin-order-uploaded-design a {
-    color: #075985 !important;
-}
-
-body.light-mode #orderDetailsModal .admin-order-uploaded-design > span {
-    color: #7c3f20 !important;
 }
 
 body.light-mode #orderDetailsModal .admin-order-customer-info h3,
@@ -7200,26 +6710,6 @@ body.light-mode .footer-social-link:focus-visible {
     }
 }
 
-.upload-design-preview {
-    width: 100%;
-    max-width: 100%;
-    margin: 20px 0;
-    overflow: hidden;
-    text-align: center;
-}
-
-.upload-design-preview-image {
-    display: block;
-    width: auto;
-    max-width: min(100%, 420px);
-    max-height: min(360px, 42vh);
-    margin: 0 auto;
-    object-fit: contain;
-    border: 2px solid #d4af37;
-    padding: 5px;
-    border-radius: 5px;
-}
-
 @media (max-width: 600px) {
     #customerPage .design-section {
         width: 100%;
@@ -7233,125 +6723,12 @@ body.light-mode .footer-social-link:focus-visible {
         line-height: 1.25;
     }
 
-    #customerPage .design-mode-selector {
-        margin-bottom: 22px;
-    }
-
-    #customerPage .design-mode-buttons {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-        margin-bottom: 20px;
-    }
-
-    #customerPage .design-mode-btn {
-        display: flex;
-        width: 100%;
-        min-width: 0;
-        min-height: 44px;
-        align-items: center;
-        justify-content: center;
-        padding: 10px 6px;
-        font-size: var(--fs-sm);
-        line-height: 1.2;
-        text-align: center;
-    }
-
-    #customerPage .design-mode-content {
-        padding: 16px 12px;
-    }
-
-    #customerPage .upload-design-container {
-        max-width: 100%;
-        padding: 14px 10px;
-    }
-
     #customerPage #uploadDesignFile {
         max-width: 100%;
         min-width: 0;
         padding: 8px 6px;
         font-size: var(--fs-sm);
     }
-
-    #customerPage .upload-design-preview {
-        margin: 16px 0;
-    }
-
-    #customerPage .upload-design-preview-image {
-        max-width: 100%;
-        max-height: min(240px, 32dvh);
-        padding: 4px;
-    }
-}
-
-.upload-design-drop-zone {
-    border: 2px dashed #8d793b;
-    border-radius: 4px;
-    color: #d4af37;
-    cursor: pointer;
-    margin-top: 10px;
-    padding: 18px;
-    text-align: center;
-}
-
-.upload-design-drop-zone.drag-over {
-    background: rgba(212, 175, 55, 0.12);
-    border-color: #f0ce68;
-}
-
-.upload-design-files-preview,
-.cart-uploaded-design-images {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
-}
-
-.upload-design-file-preview {
-    align-items: center;
-    border: 1px solid #454545;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    max-width: 150px;
-    padding: 6px;
-}
-
-.upload-design-file-preview img,
-.cart-uploaded-design-images img {
-    height: 96px;
-    object-fit: contain;
-    width: 96px;
-}
-
-.upload-design-file-preview span {
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    text-align: center;
-}
-
-.upload-design-file-type,
-.uploaded-design-pdf-preview {
-    align-items: center;
-    border: 1px solid #8d793b;
-    color: #e5c85c;
-    display: flex;
-    height: 96px;
-    justify-content: center;
-    width: 96px;
-}
-
-.upload-design-file-count {
-    color: #d4af37;
-    display: block;
-    margin-top: 8px;
-}
-
-.upload-design-file-remove {
-    background: transparent;
-    border: 1px solid #8d793b;
-    color: #e5c85c;
-    cursor: pointer;
-    padding: 4px 8px;
 }
 
 .team-size-chart,
@@ -7410,27 +6787,6 @@ body.light-mode .footer-social-link:focus-visible {
     overflow-wrap: anywhere;
 }
 
-.order-design-gallery {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 7px;
-}
-
-.order-design-thumbnail {
-    background: #fff;
-    border: 1px solid #555;
-    border-radius: 3px;
-    height: 64px;
-    object-fit: contain;
-    width: 64px;
-}
-
-.admin-order-design-gallery .order-design-thumbnail {
-    height: 48px;
-    width: 48px;
-}
-
 /* Shared type and contrast adjustments */
 body { font-size: var(--fs-base); }
 button, input, select, textarea { font-family: var(--font-ui); font-size: var(--fs-base); }
@@ -7454,6 +6810,8 @@ body.product-modal-open { overflow: hidden; }
 #productModal .product-size-picker { margin: 0; min-width: 130px; flex: 1; }
 .confirm-dialog { border: 1px solid #d4af37; border-radius: 10px; background: #1b1e20; color: #fff; padding: 24px; max-width: min(90vw, 450px); }
 .confirm-dialog::backdrop { background: rgba(0,0,0,.7); }
+body.light-mode .confirm-dialog { border-color: #c99a17; background: #fff; color: #263238; box-shadow: 0 18px 45px rgba(38, 50, 56, .25); }
+body.light-mode .confirm-dialog::backdrop { background: rgba(38, 50, 56, .42); }
 .confirm-dialog p { white-space: pre-line; }
 .confirm-actions, .checkout-action-buttons { display: flex; gap: 12px; margin-top: 16px; }
 .confirm-actions .btn, .checkout-action-buttons .btn { flex: 1; width: auto; }
@@ -7586,7 +6944,6 @@ body.light-mode #loginPage .brand-description { color: #b6b6b6 !important; }
 body.light-mode #loginPage .form-group input::placeholder { color: #66717a; opacity: 1; }
 
 /* Gold text on a light background: use the darker gold of the light-mode headings. */
-body.light-mode #customerPage .upload-design-drop-zone { border-color: #a8892e; color: #765500; }
 body.light-mode .checkout-info-toggle { color: #765500; }
 body.light-mode #customerPage [style*="color: #d4af37"],
 body.light-mode #customerPage [style*="color:#d4af37"] { color: #765500 !important; }
@@ -7611,8 +6968,6 @@ body.light-mode .order-status.printing { color: #1a1a1a; }
 
 body.light-mode .modal-close { color: #4a555c; }
 
-/* Admin order details: numbers of the upcoming production stages (dark circles). */
-body.light-mode #orderDetailsModal .production-timeline-step.upcoming .production-timeline-marker { color: #f4f4f4 !important; }
 
 /* Admin header on a white bar. */
 body.light-mode #adminPage #adminDisplayName { color: #765500 !important; text-shadow: none; }

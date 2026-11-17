@@ -52,10 +52,11 @@ exports.handler = async function handler(event) {
         const { claims } = authentication;
 
         if (event.httpMethod === 'GET') {
+            // Newest activity first: a conversation moves up when anyone writes in it.
             let visibleMessages = (claims.role === 'admin'
                 ? messages
                 : messages.filter(message => message.ownerSub === claims.sub))
-                .sort((first, second) => String(second.createdAt || '').localeCompare(String(first.createdAt || '')));
+                .sort((first, second) => String(second.updatedAt || second.createdAt || '').localeCompare(String(first.updatedAt || first.createdAt || '')));
             if (claims.role === 'admin') {
                 const accountsStore = getStore('kingpin-auth');
                 const usernames = new Map();
@@ -103,8 +104,10 @@ exports.handler = async function handler(event) {
                 message: messageText,
                 status: 'open',
                 read: false,
+                customerUnread: false,
                 date: new Date().toLocaleString(),
                 createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
                 replies: []
             };
             const account = await getStore('kingpin-auth').get(accountKey(claims.sub), { type: 'json' });
@@ -112,6 +115,30 @@ exports.handler = async function handler(event) {
             message.customerName = message.customerUsername;
             await store.setJSON(`message-${message.id}`, message);
             return jsonResponse(201, { ok: true, message });
+        }
+
+        // The customer writes more in their own conversation, or marks the shop's replies as seen.
+        if (payload.action === 'customer-reply' || payload.action === 'customer-seen') {
+            if (claims.role !== 'customer') return jsonResponse(403, { error: 'Customer access required.' });
+            const ownMessage = messages.find(item => item.id === String(payload.messageId || '') && item.ownerSub === claims.sub);
+            if (!ownMessage) return jsonResponse(404, { error: 'Conversation not found.' });
+            if (payload.action === 'customer-seen') {
+                if (!ownMessage.customerUnread) return jsonResponse(200, { ok: true, message: ownMessage });
+                ownMessage.customerUnread = false;
+            } else {
+                const replyText = String(payload.message || '').trim();
+                if (!replyText || replyText.length > 5000) {
+                    return jsonResponse(400, { error: 'Enter a message of up to 5,000 characters.' });
+                }
+                ownMessage.replies = Array.isArray(ownMessage.replies) ? ownMessage.replies : [];
+                ownMessage.replies.push({ sender: 'customer', message: replyText, date: new Date().toLocaleString(), createdAt: new Date().toISOString() });
+                ownMessage.read = false;
+                ownMessage.status = 'open';
+                ownMessage.customerUnread = false;
+                ownMessage.updatedAt = new Date().toISOString();
+            }
+            await store.setJSON(`message-${ownMessage.id}`, ownMessage);
+            return jsonResponse(200, { ok: true, message: ownMessage });
         }
 
         if (claims.role !== 'admin') return jsonResponse(403, { error: 'Admin access required.' });
@@ -129,9 +156,19 @@ exports.handler = async function handler(event) {
             message.replies.push({
                 sender: 'admin',
                 message: replyText,
-                date: new Date().toLocaleString()
+                date: new Date().toLocaleString(),
+                createdAt: new Date().toISOString()
             });
             message.read = true;
+            message.status = 'replied';
+            message.customerUnread = true;
+            message.updatedAt = new Date().toISOString();
+        } else if (payload.action === 'status') {
+            const status = String(payload.status || '');
+            if (!['open', 'resolved'].includes(status)) return jsonResponse(400, { error: 'Choose open or resolved.' });
+            message.status = status;
+            message.read = true;
+            message.updatedAt = new Date().toISOString();
         } else {
             return jsonResponse(400, { error: 'Unsupported customer-service action.' });
         }

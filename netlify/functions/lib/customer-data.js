@@ -3,6 +3,7 @@
 // to update those records too.
 const { getStore } = require('@netlify/blobs');
 const { accountKey } = require('./auth');
+const { listOrderIds } = require('./order-ids');
 
 function normalizeEmail(email) {
     return String(email || '').trim().toLowerCase();
@@ -28,7 +29,7 @@ async function deleteKey(store, key) {
 }
 
 async function readAllOrderRecords(orderIndexStore, orderStore) {
-    const ids = (await orderIndexStore.get('all-order-ids', { type: 'json' })) || [];
+    const ids = await listOrderIds(orderIndexStore);
     const indexed = await Promise.all(ids.map(id => orderIndexStore.get(`order-${String(id)}`, { type: 'json' })));
     const legacy = [
         ...((await orderStore.get('orders', { type: 'json' })) || []),
